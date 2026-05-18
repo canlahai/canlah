@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanLah.ai — Traffic Plans BQ Reader</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0c0c0a;--paper: #f2efe8;--yellow: #e8c027;--yellow-dk: #c4a01e;
+  --yellow-dim: rgba(232,192,39,0.08);--orange: #d95f2b;--slate: #1e1e1b;
+  --g8: #242420;--g7: #363632;--g6: #4a4a45;--g5: #656560;--g4: #888882;
+  --g3: #aeaba3;--g2: #d0cdc5;--g1: #eae7e0;
+  --green: #2a7a47;--gbg: #152a1e;--glt: #c8e6d4;
+  --red: #c0392b;--rbg: #2e1414;
+  --amber: #c97a12;--abg: #2a1e08;
+  --blue: #1a5fa0;--bbg: #0a1e35;
+  --r: 2px;--rl: 6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--ink);color:var(--paper);font-family:'Syne',sans-serif;font-size:15px;line-height:1.7;min-height:100vh;overflow-x:hidden}
+button{font-family:'Syne',sans-serif;cursor:pointer}
+input,select,textarea{font-family:'Syne',sans-serif}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--g7);border-radius:2px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* TOPBAR */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:100;height:56px;background:var(--ink);border-bottom:1px solid var(--g7);display:flex;align-items:center;padding:0 2rem;gap:16px}
+.topbar::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--yellow) 0%,var(--orange) 100%)}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:34px;height:34px;border-radius:6px;background:var(--slate);border:1px solid var(--g7);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-name{font-size:17px;font-weight:800;color:var(--paper);letter-spacing:-.02em}
+.brand-name span{color:var(--yellow)}
+.brand-name em{color:var(--orange);font-style:normal}
+.topbar-spacer{flex:1}
+.topbar-tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.10em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--g7);border-radius:var(--r)}
+.topbar-step{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.06em;text-transform:uppercase}
+
+/* PAGES */
+.page{display:none;min-height:calc(100vh - 56px);margin-top:56px}
+.page.active{display:block}
+
+/* UPLOAD */
+.upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:3rem 2rem}
+.hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.hero-eyebrow::before,.hero-eyebrow::after{content:'//';opacity:.4}
+.hero-h1{font-size:clamp(40px,7vw,80px);font-weight:800;line-height:.95;letter-spacing:-.03em;text-align:center;max-width:800px;margin-bottom:16px}
+.hero-h1 .yl{color:var(--yellow)}
+.hero-h1 .og{color:var(--orange)}
+.hero-sub{font-size:17px;color:var(--g4);text-align:center;max-width:520px;line-height:1.8;margin-bottom:48px}
+.upload-zone{width:100%;max-width:600px;border:2px dashed var(--g6);border-radius:var(--rl);background:var(--slate);padding:3rem 2rem;text-align:center;cursor:pointer;transition:all .25s ease;position:relative;overflow:hidden}
+.upload-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(232,192,39,.05) 0%,transparent 60%);pointer-events:none}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--yellow);background:rgba(232,192,39,.04)}
+.upload-zone input[type=file]{display:none}
+.uz-icon-wrap{width:64px;height:64px;border-radius:var(--rl);background:var(--g8);border:1px solid var(--g7);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
+.uz-title{font-size:18px;font-weight:700;color:var(--paper);margin-bottom:8px;letter-spacing:-.01em}
+.uz-sub{font-size:14px;color:var(--g4);margin-bottom:20px;line-height:1.7}
+.uz-sub strong{color:var(--yellow);font-weight:600}
+.uz-formats{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
+.fmt-tag{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--g7);color:var(--g4);letter-spacing:.06em}
+.uz-btn{background:var(--yellow);color:var(--ink);border:none;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:11px 28px;border-radius:var(--r);transition:all .15s;letter-spacing:-.01em;position:relative;z-index:1}
+.uz-btn:hover{background:var(--yellow-dk)}
+.file-selected{background:rgba(232,192,39,.06);border-color:var(--yellow);padding:1.5rem 2rem}
+.file-info{display:flex;align-items:center;gap:12px;margin-bottom:16px;text-align:left}
+.file-icon{width:40px;height:40px;background:var(--g8);border:1px solid var(--g7);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.file-name{font-size:14px;font-weight:600;color:var(--paper);margin-bottom:2px}
+.file-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);letter-spacing:.04em}
+.analyse-btn{width:100%;background:var(--yellow);color:var(--ink);border:none;font-family:'Syne',sans-serif;font-weight:700;font-size:16px;letter-spacing:-.01em;padding:14px;border-radius:var(--r);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:10px}
+.analyse-btn:hover{background:var(--yellow-dk);transform:translateY(-1px)}
+.analyse-btn:disabled{background:var(--g7);color:var(--g5);cursor:not-allowed;transform:none}
+
+/* PROCESSING */
+.processing-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:3rem 2rem;gap:32px}
+.proc-title{font-size:30px;font-weight:800;letter-spacing:-.02em;text-align:center}
+.proc-steps{width:100%;max-width:500px;display:flex;flex-direction:column;gap:8px}
+.proc-step{display:flex;align-items:center;gap:12px;padding:.75rem 1rem;border-radius:var(--r);border:1px solid var(--g7);background:var(--slate);font-size:14px;font-weight:500;color:var(--g4);transition:all .4s ease}
+.proc-step.active{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-dim)}
+.proc-step.done{border-color:var(--green);color:var(--glt);background:var(--gbg)}
+.proc-step.done .step-icon{color:#6fcf97}
+.proc-step .step-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.proc-bar-wrap{width:100%;max-width:500px;height:3px;background:var(--g7);border-radius:2px;overflow:hidden}
+.proc-bar{height:100%;background:var(--yellow);border-radius:2px;width:0%;transition:width .5s ease}
+.proc-pct{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g4);letter-spacing:.06em}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--yellow);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* REPORT */
+.report-screen{padding:2rem;max-width:1200px;margin:0 auto}
+.report-header{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
+.rh-top{background:var(--ink);padding:1.5rem 2rem;border-bottom:1px solid var(--g7);display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.rh-project{flex:1}
+.rh-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+.rh-title{font-size:24px;font-weight:800;letter-spacing:-.02em;color:var(--paper);margin-bottom:4px;line-height:1.2}
+.rh-ref{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g5);letter-spacing:.06em}
+.rh-actions{display:flex;gap:8px;flex-shrink:0}
+.act-btn{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:8px 16px;border-radius:var(--r);border:1px solid var(--g7);background:transparent;color:var(--g3);transition:all .15s}
+.act-btn:hover{border-color:var(--yellow);color:var(--yellow)}
+.act-btn.primary{background:var(--yellow);border-color:var(--yellow);color:var(--ink)}
+.act-btn.primary:hover{background:var(--yellow-dk)}
+.rh-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--g7)}
+.rh-stat{background:var(--slate);padding:1rem 1.25rem;text-align:center}
+.rh-stat-val{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-bottom:4px}
+.rh-stat-lbl{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.1em;text-transform:uppercase;line-height:1.4}
+
+/* Flags */
+.flags-panel{background:var(--abg);border:1px solid rgba(201,122,18,.25);border-radius:var(--rl);padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;gap:12px;align-items:flex-start}
+.flags-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.flags-title{font-size:14px;font-weight:700;color:#d08a20;margin-bottom:6px}
+.flags-list{display:flex;flex-direction:column;gap:4px}
+.flag-item{font-size:13px;color:#b07820;line-height:1.6;display:flex;gap:6px;align-items:flex-start}
+.flag-item::before{content:'→';flex-shrink:0;margin-top:1px}
+
+/* Section label */
+.sec-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.14em;text-transform:uppercase;margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid var(--g7);display:flex;align-items:center;justify-content:space-between}
+.sec-label span{color:var(--g4);font-size:11px;letter-spacing:.04em;text-transform:none;font-family:'Syne',sans-serif}
+
+/* Category cards — equivalent to girth band cards */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:2px;background:var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
+.cat-card{background:var(--slate);padding:1rem 1.25rem;position:relative;overflow:hidden}
+.cat-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%}
+.cc-sign::before{background:#1a5fa0}
+.cc-cctv::before{background:#7f77dd}
+.cc-tl::before{background:var(--amber)}
+.cc-lamp::before{background:var(--orange)}
+.cc-speed::before{background:var(--red)}
+.cc-other::before{background:var(--g5)}
+.cat-label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
+.cat-count{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-bottom:4px}
+.cat-desc{font-size:13px;color:var(--g4);line-height:1.6}
+.cat-flag{font-family:'JetBrains Mono',monospace;font-size:10px;margin-top:6px;padding:2px 7px;border-radius:var(--r);display:inline-block}
+.cf-lta{background:var(--bbg);color:#93c5fd}
+.cf-sub{background:var(--abg);color:#d08a20}
+
+/* BQ Table */
+.bq-section{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
+.bq-table{width:100%;border-collapse:collapse}
+.bq-table th{background:var(--g8);padding:9px 14px;text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--g7);white-space:nowrap}
+.bq-table td{padding:11px 14px;border-bottom:1px solid var(--g7);font-size:13px;vertical-align:middle}
+.bq-table tr:last-child td{border-bottom:none}
+.bq-table tr:hover td{background:rgba(255,255,255,.02)}
+.bq-item-code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);letter-spacing:.04em}
+.bq-item-desc{color:var(--g2);line-height:1.5}
+.bq-item-desc strong{color:var(--paper);font-weight:600}
+.bq-item-desc small{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.04em;display:block;margin-top:2px}
+.bq-qty{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--paper);text-align:right;white-space:nowrap}
+.bq-unit{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);text-align:center;letter-spacing:.04em}
+.bq-rate{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--g3);text-align:right}
+.bq-amt{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--paper);text-align:right}
+.bq-subtotal td{background:var(--g8)!important;border-top:1px solid var(--g7)!important}
+.bq-total td{background:rgba(232,192,39,.06)!important;border-top:2px solid var(--yellow)!important}
+.bq-total .bq-amt{color:var(--yellow);font-size:15px}
+.bq-section-head td{background:var(--ink)!important;font-weight:700;color:var(--g4);font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding:6px 14px;border-top:1px solid var(--g7)!important}
+
+/* Equipment register */
+.reg-section{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
+.reg-toolbar{display:flex;align-items:center;gap:8px;padding:.75rem 1.25rem;border-bottom:1px solid var(--g7);flex-wrap:wrap}
+.reg-search{flex:1;min-width:180px;background:var(--g8);border:1px solid var(--g7);border-radius:var(--r);color:var(--paper);font-size:12px;padding:7px 11px;outline:none;transition:border-color .15s}
+.reg-search:focus{border-color:var(--yellow)}
+.reg-filter{background:var(--g8);border:1px solid var(--g7);border-radius:var(--r);color:var(--g3);font-family:'JetBrains Mono',monospace;font-size:11px;padding:7px 10px;outline:none;cursor:pointer}
+.reg-table{width:100%;border-collapse:collapse;min-width:700px}
+.reg-table th{background:var(--g8);padding:8px 12px;text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--g7);white-space:nowrap;cursor:pointer;user-select:none}
+.reg-table th:hover{color:var(--paper)}
+.reg-table td{padding:7px 12px;border-bottom:1px solid var(--g7);font-size:12px;vertical-align:middle}
+.reg-table tr:last-child td{border-bottom:none}
+.reg-table tr:hover td{background:rgba(255,255,255,.02)}
+.item-id{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.04em}
+.item-cat-pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 7px;border-radius:var(--r);letter-spacing:.04em}
+.cp-sign{background:var(--bbg);color:#93c5fd}
+.cp-cctv{background:rgba(127,119,221,.15);color:#c4b5fd}
+.cp-tl{background:var(--abg);color:#d08a20}
+.cp-lamp{background:rgba(217,95,43,.15);color:var(--orange)}
+.cp-speed{background:var(--rbg);color:#e07070}
+.cp-other{background:var(--g8);color:var(--g5)}
+.flag-pill{font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 7px;border-radius:var(--r);margin-left:4px}
+.fp-miss{background:var(--abg);color:#d08a20}
+.fp-dup{background:var(--rbg);color:#e07070}
+.fp-lta{background:var(--bbg);color:#93c5fd}
+
+/* Disclaimer */
+.disclaimer{background:var(--g8);border:1px solid var(--g7);border-radius:var(--rl);padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;gap:10px;align-items:flex-start}
+.dis-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.dis-text{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.04em;line-height:1.8}
+.dis-text strong{color:var(--g4);font-weight:500}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--g8);border:1px solid var(--g7);border-radius:var(--rl);padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--paper);z-index:999;opacity:0;transform:translateY(6px);transition:all .25s;pointer-events:none;letter-spacing:.04em;max-width:320px}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{border-color:var(--green);color:#70c090}
+.toast.err{border-color:var(--red);color:#e07070}
+.toast.wa{border-color:var(--amber);color:#d08a20}
+
+@media(max-width:900px){.rh-stats{grid-template-columns:repeat(3,1fr)}.cat-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.rh-top{flex-direction:column}.rh-stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="5" fill="#1e1e1b"/>
+        <rect x="1" y="1" width="30" height="30" rx="4.5" stroke="#e8c027" stroke-width=".75" fill="none"/>
+        <path d="M7 17L13 23L25 10" stroke="#e8c027" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="25" cy="25" r="3" fill="#d95f2b"/>
+      </svg>
+    </div>
+    <div class="brand-name">Can<span>Lah</span><em>.ai</em></div>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-tag">Traffic Plans BQ Reader</div>
+  <div class="topbar-step" id="step-indicator">Step 1 of 3 — Upload</div>
+</div>
+
+<!-- PAGE 1: UPLOAD -->
+<div class="page active" id="page-upload">
+  <div class="upload-screen">
+    <div class="hero-eyebrow">Singapore Construction Intelligence</div>
+    <h1 class="hero-h1">
+      Upload your<br>
+      traffic plan.<br>
+      <span class="yl">We count the equipment.</span> <span class="og">Confirm the BQ, lah.</span>
+    </h1>
+    <p class="hero-sub">
+      Drop any LTA traffic management plan PDF. Multi-sheet, any format.
+      We extract every sign, CCTV, traffic light, lamp post, and speed trap — and output a complete BQ in minutes.
+    </p>
+    <div class="upload-zone" id="upload-zone"
+         ondragover="handleDragOver(event)"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" onchange="handleFileSelect(event)">
+      <div id="upload-idle">
+        <div class="uz-icon-wrap">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#686860" stroke-width="1.5" stroke-linecap="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14,2 14,8 20,8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <polyline points="9,15 12,12 15,15"/>
+          </svg>
+        </div>
+        <div class="uz-title">Drop your LTA traffic plan here</div>
+        <div class="uz-sub">Any LTA traffic management plan. Multi-sheet PDFs welcome.<br><strong>We extract signs, CCTV, traffic lights, lamp posts, speed traps.</strong></div>
+        <div class="uz-formats">
+          <span class="fmt-tag">PDF</span>
+          <span class="fmt-tag">Multi-sheet</span>
+          <span class="fmt-tag">LTA format</span>
+          <span class="fmt-tag">JPG / PNG</span>
+        </div>
+        <button class="uz-btn" onclick="document.getElementById('file-input').click();event.stopPropagation()">Choose file to upload</button>
+      </div>
+      <div id="upload-selected" style="display:none">
+        <div class="file-info">
+          <div class="file-icon">📄</div>
+          <div>
+            <div class="file-name" id="selected-name">—</div>
+            <div class="file-meta" id="selected-meta">—</div>
+          </div>
+        </div>
+        <button class="analyse-btn" id="analyse-btn" onclick="event.stopPropagation();startAnalysis()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Analyse Drawing → Generate BQ Report
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: PROCESSING -->
+<div class="page" id="page-processing">
+  <div class="processing-screen">
+    <div>
+      <div class="hero-eyebrow" style="justify-content:center">AI is reading your drawing</div>
+      <div class="proc-title">Analysing traffic plan<span id="proc-dots">...</span></div>
+    </div>
+    <div class="proc-steps" id="proc-steps">
+      <div class="proc-step" id="step-parse"><span class="step-icon">📄</span><span>Reading PDF and extracting text from all sheets</span></div>
+      <div class="proc-step" id="step-extract"><span class="step-icon">🚦</span><span>Identifying all equipment — signs, CCTV, traffic lights, lamp posts, speed traps</span></div>
+      <div class="proc-step" id="step-dedup"><span class="step-icon">🔍</span><span>Deduplicating entries and cross-checking sheet schedules</span></div>
+      <div class="proc-step" id="step-classify"><span class="step-icon">📊</span><span>Classifying by equipment category and LTA contractor scope</span></div>
+      <div class="proc-step" id="step-bq"><span class="step-icon">💰</span><span>Calculating quantities and BQ cost estimates per category</span></div>
+      <div class="proc-step" id="step-report"><span class="step-icon">📋</span><span>Compiling final report with data quality flags</span></div>
+    </div>
+    <div style="width:100%;max-width:500px;display:flex;flex-direction:column;gap:8px;align-items:center">
+      <div class="proc-bar-wrap"><div class="proc-bar" id="proc-bar"></div></div>
+      <div class="proc-pct" id="proc-pct">0%</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3: REPORT -->
+<div class="page" id="page-report">
+  <div class="report-screen">
+
+    <div class="report-header">
+      <div class="rh-top">
+        <div class="rh-project">
+          <div class="rh-eyebrow">Traffic Plans BQ Report · CanLah.ai</div>
+          <div class="rh-title" id="r-title">—</div>
+          <div class="rh-ref" id="r-ref">—</div>
+        </div>
+        <div class="rh-actions">
+          <button class="act-btn" onclick="window.print()">Print</button>
+          <button class="act-btn" onclick="exportCSV()">Export CSV</button>
+          <button class="act-btn primary" onclick="showPage('upload')">New Drawing</button>
+        </div>
+      </div>
+      <div class="rh-stats" id="r-stats"></div>
+    </div>
+
+    <div class="flags-panel" id="flags-panel">
+      <div class="flags-icon">⚠️</div>
+      <div>
+        <div class="flags-title">Data quality flags — verify before LTA submission</div>
+        <div class="flags-list" id="flags-list"></div>
+      </div>
+    </div>
+
+    <div class="sec-label">// Equipment category breakdown <span>LTA contractor scope indicated</span></div>
+    <div class="cat-grid" id="cat-grid"></div>
+
+    <div class="sec-label">// Bill of Quantities <span>Indicative costs — confirm with contractor before submission</span></div>
+    <div class="bq-section">
+      <div style="overflow-x:auto">
+        <table class="bq-table" id="bq-table"></table>
+      </div>
+    </div>
+
+    <div class="sec-label">// Full equipment register <span id="reg-count">—</span></div>
+    <div class="reg-section">
+      <div class="reg-toolbar">
+        <input class="reg-search" type="text" placeholder="Search item ID, description, location..." id="reg-search" oninput="filterRegister(this.value)">
+        <select class="reg-filter" id="reg-filter-cat" onchange="filterRegister()">
+          <option value="">All categories</option>
+          <option value="sign">Signages</option>
+          <option value="cctv">CCTV</option>
+          <option value="traffic_light">Traffic lights</option>
+          <option value="lamp_post">Lamp posts</option>
+          <option value="speed_trap">Speed traps</option>
+          <option value="other">Other</option>
+        </select>
+        <select class="reg-filter" id="reg-filter-flag" onchange="filterRegister()">
+          <option value="">All records</option>
+          <option value="flag">Flagged only</option>
+          <option value="lta_scope">LTA contractor scope</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:480px;overflow-y:auto">
+        <table class="reg-table">
+          <thead>
+            <tr>
+              <th onclick="sortRegister('id')">Item ID ↕</th>
+              <th onclick="sortRegister('category')">Category ↕</th>
+              <th onclick="sortRegister('description')">Description</th>
+              <th onclick="sortRegister('qty')" style="text-align:right">Qty ↕</th>
+              <th>Unit</th>
+              <th onclick="sortRegister('location')">Location / Sheet</th>
+              <th>Flags</th>
+            </tr>
+          </thead>
+          <tbody id="reg-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      <div class="dis-icon">ℹ️</div>
+      <div class="dis-text">
+        <strong>IMPORTANT DISCLAIMER —</strong> This report is generated by CanLah.ai as an administrative productivity tool. Equipment quantities are indicative and extracted from drawing schedules only — site verification is required before LTA submission. <strong>Lamp post relocation and new traffic light installation are typically under LTA term contractor scope</strong> — confirm contractor responsibility before including in project BQ. Cost estimates use published Singapore market rate ranges and are not contractual. All data must be independently verified by a qualified PE or LTA-registered traffic consultant before submission. CanLah.ai accepts no liability for decisions made based on this report.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let uploadedFile = null;
+let uploadedFileB64 = null;
+let allItems = [];
+let filteredItems = [];
+let sortCol = 'id';
+let sortDir = 1;
+
+function handleDragOver(e){e.preventDefault();document.getElementById('upload-zone').classList.add('drag-over')}
+function handleDragLeave(e){document.getElementById('upload-zone').classList.remove('drag-over')}
+function handleDrop(e){e.preventDefault();document.getElementById('upload-zone').classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)processFile(f)}
+function handleFileSelect(e){const f=e.target.files[0];if(f)processFile(f)}
+
+function processFile(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(!['pdf','jpg','jpeg','png'].includes(ext)){showToast('Please upload a PDF or image file','err');return}
+  if(file.size>30*1024*1024){showToast('File too large — maximum 30MB','err');return}
+  uploadedFile=file;
+  const reader=new FileReader();
+  reader.onload=e=>{uploadedFileB64=e.target.result.split(',')[1]};
+  reader.readAsDataURL(file);
+  document.getElementById('upload-idle').style.display='none';
+  document.getElementById('upload-selected').style.display='block';
+  document.getElementById('selected-name').textContent=file.name;
+  document.getElementById('selected-meta').textContent=ext.toUpperCase()+' · '+formatBytes(file.size)+' · Ready to analyse';
+  document.getElementById('upload-zone').classList.add('file-selected');
+}
+
+function formatBytes(b){
+  if(b<1024)return b+'B';
+  if(b<1024*1024)return(b/1024).toFixed(1)+'KB';
+  return(b/1024/1024).toFixed(1)+'MB';
+}
+
+async function startAnalysis(){
+  if(!uploadedFileB64){showToast('Please select a file first','err');return}
+  showPage('processing');
+  const STEPS=['step-parse','step-extract','step-dedup','step-classify','step-bq','step-report'];
+  const PCTS=[10,30,50,65,80,95];
+  let si=0;
+  const stepTimer=setInterval(()=>{
+    if(si>0){const prev=document.getElementById(STEPS[si-1]);prev.classList.remove('active');prev.classList.add('done');prev.querySelector('.step-icon').textContent='✓'}
+    if(si<STEPS.length){
+      document.getElementById(STEPS[si]).classList.add('active');
+      const spin=document.createElement('div');spin.className='spin';spin.style.marginLeft='auto';
+      document.getElementById(STEPS[si]).appendChild(spin);
+      document.getElementById('proc-bar').style.width=PCTS[si]+'%';
+      document.getElementById('proc-pct').textContent=PCTS[si]+'%';
+      si++;
+    }
+  },1800);
+
+  const ext=uploadedFile.name.split('.').pop().toLowerCase();
+  const isPDF=ext==='pdf';
+  const mimeMap={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',pdf:'application/pdf'};
+  const mime=mimeMap[ext]||'application/pdf';
+  const contentBlocks=[
+    isPDF?{type:'document',source:{type:'base64',media_type:mime,data:uploadedFileB64}}
+         :{type:'image',source:{type:'base64',media_type:mime,data:uploadedFileB64}},
+    {type:'text',text:buildExtractionPrompt()}
+  ];
+
+  try {
+    const resp=await fetch('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:contentBlocks}]})});
+    clearInterval(stepTimer);
+    if(!resp.ok)throw new Error('API error '+resp.status);
+    const data=await resp.json();
+    const rawText=data.content.map(c=>c.text||'').join('');
+    const jsonMatch=rawText.match(/```json\s*([\s\S]*?)\s*```/)||rawText.match(/(\{[\s\S]*\})/);
+    if(!jsonMatch)throw new Error('No JSON found in response');
+    const parsed=JSON.parse(jsonMatch[1]);
+    STEPS.forEach(s=>{const el=document.getElementById(s);el.classList.remove('active');el.classList.add('done');el.querySelector('.step-icon').textContent='✓'});
+    document.getElementById('proc-bar').style.width='100%';
+    document.getElementById('proc-pct').textContent='100%';
+    setTimeout(()=>{buildReport(parsed);showPage('report')},600);
+  } catch(err){
+    clearInterval(stepTimer);
+    showPage('upload');
+    document.getElementById('upload-zone').classList.remove('file-selected');
+    document.getElementById('upload-idle').style.display='block';
+    document.getElementById('upload-selected').style.display='none';
+    showToast('Error: '+err.message,'err');
+  }
+}
+
+function buildExtractionPrompt(){
+  return `You are an expert Singapore construction document analyst specialising in LTA traffic management plans. Analyse this LTA traffic plan drawing and extract ALL equipment data.
+
+Extract every piece of equipment from every schedule, table, and legend on every sheet. Return ONLY valid JSON in this exact structure:
+
+\`\`\`json
+{
+  "projectName": "project name from drawing title block",
+  "drawingRef": "drawing reference number",
+  "authority": "LTA",
+  "contractRef": "LTA contract reference if shown",
+  "sheets": [
+    {
+      "sheetNo": "sheet number e.g. TP-001",
+      "description": "sheet description"
+    }
+  ],
+  "items": [
+    {
+      "id": "item identifier e.g. S-001 or sequence number",
+      "category": "sign | cctv | traffic_light | lamp_post | speed_trap | other",
+      "description": "full description of item",
+      "qty": 1,
+      "unit": "no. | set | m | m2",
+      "location": "location description or sheet reference",
+      "ltaScope": true,
+      "flags": []
+    }
+  ],
+  "dataIssues": [
+    "Description of any data quality issues found"
+  ],
+  "totals": {
+    "signs": 0,
+    "cctv": 0,
+    "trafficLights": 0,
+    "lampPosts": 0,
+    "speedTraps": 0,
+    "other": 0,
+    "grandTotal": 0
+  }
+}
+\`\`\`
+
+EQUIPMENT CATEGORIES — classify each item exactly:
+- "sign": All traffic signs, directional signs, warning signs, temporary signs, advance warning signs, variable message signs (VMS), road markings that are equipment items
+- "cctv": All CCTV cameras, monitoring cameras, surveillance equipment, camera poles
+- "traffic_light": Traffic signal heads, signal controllers, pedestrian signals, temporary traffic lights
+- "lamp_post": Street lamp posts, lighting columns, existing lamp posts to be relocated, new lamp posts, amenity lighting
+- "speed_trap": Speed cameras, speed enforcement equipment, mobile speed traps, radar equipment
+- "other": Barriers, cones, bollards, guard rails, any equipment not fitting above categories
+
+LTA SCOPE FLAG:
+- Set ltaScope: true for: lamp post relocation, new lamp post installation, traffic signal works, CCTV installation — these are typically LTA term contractor scope
+- Set ltaScope: false for: temporary signs, cones, barriers, markings — these are typically project contractor scope
+
+FLAGS per item:
+- ["missing_data"] if description or qty is unclear or missing
+- ["duplicate"] if same item appears multiple times across sheets
+- ["lta_scope"] if ltaScope is true (always add this flag when ltaScope: true)
+- ["verify_qty"] if quantity seems unusually high or unclear from drawing
+
+CRITICAL RULES:
+- Extract EVERY item from EVERY schedule — do not truncate
+- If qty is unclear → use null and add ["missing_data"] flag
+- Group similar items where drawing shows quantities (e.g. "15 No. Type A signs" = one record with qty 15)
+- Cross-check totals across sheets — flag discrepancies
+
+Return ONLY the JSON object. No preamble, no explanation.`;
+}
+
+function buildReport(data){
+  allItems=data.items||[];
+  filteredItems=[...allItems];
+
+  document.getElementById('r-title').textContent=data.projectName||'Traffic Management Plan';
+  document.getElementById('r-ref').textContent=
+    'Drawing Ref: '+(data.drawingRef||'—')+
+    (data.contractRef?' · Contract: '+data.contractRef:'')+
+    ' · Generated '+new Date().toLocaleString('en-SG',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('r-date','');
+
+  const totals=data.totals||{};
+  const grandTotal=totals.grandTotal||allItems.reduce((s,i)=>s+(i.qty||0),0);
+  const ltaItems=allItems.filter(i=>i.ltaScope).reduce((s,i)=>s+(i.qty||0),0);
+  const flagged=allItems.filter(i=>i.flags&&i.flags.length>0).length;
+  const issues=data.dataIssues||[];
+
+  const stats=[
+    {val:grandTotal,lbl:'Total items',color:'var(--yellow)'},
+    {val:totals.signs||0,lbl:'Signages',color:'#93c5fd'},
+    {val:(totals.cctv||0)+(totals.trafficLights||0),lbl:'CCTV + Signals',color:'#c4b5fd'},
+    {val:totals.lampPosts||0,lbl:'Lamp posts',color:var_orange()},
+    {val:totals.speedTraps||0,lbl:'Speed traps',color:'#e07070'},
+    {val:flagged,lbl:'Items flagged',color:'#d08a20'},
+  ];
+  document.getElementById('r-stats').innerHTML=stats.map(s=>`
+    <div class="rh-stat">
+      <div class="rh-stat-val" style="color:${s.color}">${s.val}</div>
+      <div class="rh-stat-lbl">${s.lbl}</div>
+    </div>`).join('');
+
+  const fp=document.getElementById('flags-panel');
+  const fl=document.getElementById('flags-list');
+  if(issues.length===0&&flagged===0){fp.style.display='none'}
+  else{
+    fl.innerHTML=issues.map(i=>`<div class="flag-item">${i}</div>`).join('');
+    if(ltaItems>0)fl.innerHTML+=`<div class="flag-item">LTA term contractor scope: ${ltaItems} items (lamp posts, traffic signals, CCTV) — confirm responsibility before including in project BQ</div>`;
+  }
+
+  buildCategoryCards(data);
+  buildBQTable(data);
+  renderRegister();
+  document.getElementById('reg-count').textContent=allItems.length+' items';
+}
+
+function var_orange(){return'var(--orange)'}
+
+function buildCategoryCards(data){
+  const t=data.totals||{};
+  const cats=[
+    {key:'cc-sign',label:'Signages',count:t.signs||0,desc:'Traffic, directional, warning signs',flag:'Project contractor scope',flagClass:'cf-sub'},
+    {key:'cc-cctv',label:'CCTV',count:t.cctv||0,desc:'Cameras, monitoring equipment',flag:'LTA contractor scope',flagClass:'cf-lta'},
+    {key:'cc-tl',label:'Traffic lights',count:t.trafficLights||0,desc:'Signal heads, controllers, pedestrian signals',flag:'LTA contractor scope',flagClass:'cf-lta'},
+    {key:'cc-lamp',label:'Lamp posts',count:t.lampPosts||0,desc:'Street lighting, relocation, new posts',flag:'LTA contractor scope',flagClass:'cf-lta'},
+    {key:'cc-speed',label:'Speed traps',count:t.speedTraps||0,desc:'Speed cameras, enforcement equipment',flag:'LTA contractor scope',flagClass:'cf-lta'},
+    {key:'cc-other',label:'Other',count:t.other||0,desc:'Barriers, cones, bollards, markings',flag:'Project contractor scope',flagClass:'cf-sub'},
+  ];
+  document.getElementById('cat-grid').innerHTML=cats.map(c=>`
+    <div class="cat-card ${c.key}">
+      <div class="cat-label">${c.label}</div>
+      <div class="cat-count">${c.count}</div>
+      <div class="cat-desc">${c.desc}</div>
+      <div class="cat-flag ${c.flagClass}">${c.flag}</div>
+    </div>`).join('');
+}
+
+const BQ_RATES={
+  sign:{min:150,max:600,unit:'no.',desc:'Supply and install — per sign'},
+  cctv:{min:3500,max:8000,unit:'set',desc:'Supply, install, and connect to LTA network'},
+  traffic_light:{min:8000,max:25000,unit:'set',desc:'Signal head, controller, foundation, cabling'},
+  lamp_post:{min:2500,max:6000,unit:'no.',desc:'Supply and install including foundation and cabling'},
+  speed_trap:{min:15000,max:40000,unit:'set',desc:'Supply, install, and calibrate'},
+  other:{min:50,max:500,unit:'no.',desc:'Supply and install — per item'},
+};
+
+function buildBQTable(data){
+  const byCategory={};
+  allItems.forEach(item=>{
+    const cat=item.category||'other';
+    if(!byCategory[cat])byCategory[cat]=[];
+    byCategory[cat].push(item);
+  });
+
+  const catLabels={sign:'A — Signages',cctv:'B — CCTV equipment',traffic_light:'C — Traffic light signals',lamp_post:'D — Lamp posts',speed_trap:'E — Speed enforcement equipment',other:'F — Other equipment'};
+  const catOrder=['sign','cctv','traffic_light','lamp_post','speed_trap','other'];
+
+  let html=`<thead><tr>
+    <th style="width:60px">Item</th>
+    <th>Description</th>
+    <th style="width:60px;text-align:right">Qty</th>
+    <th style="width:50px;text-align:center">Unit</th>
+    <th style="width:120px;text-align:right">Rate (S$)</th>
+    <th style="width:130px;text-align:right">Amount (S$)</th>
+  </tr></thead><tbody>`;
+
+  let grandMin=0,grandMax=0;
+  catOrder.forEach((cat,ci)=>{
+    const items=byCategory[cat]||[];
+    if(items.length===0)return;
+    const rates=BQ_RATES[cat]||BQ_RATES.other;
+    const totalQty=items.reduce((s,i)=>s+(i.qty||0),0);
+    if(totalQty===0)return;
+    const subMin=totalQty*rates.min;
+    const subMax=totalQty*rates.max;
+    grandMin+=subMin;grandMax+=subMax;
+    const letter=String.fromCharCode(65+ci);
+
+    html+=`<tr class="bq-section-head"><td colspan="6">${catLabels[cat]||cat}</td></tr>`;
+    items.forEach((item,idx)=>{
+      const qty=item.qty||0;
+      const imin=qty*rates.min,imax=qty*rates.max;
+      html+=`<tr>
+        <td class="bq-item-code">${letter}.${String(idx+1).padStart(2,'0')}</td>
+        <td><div class="bq-item-desc"><strong>${item.description||'—'}</strong><small>${item.location||''}</small></div></td>
+        <td class="bq-qty">${qty||'?'}</td>
+        <td class="bq-unit">${item.unit||'no.'}</td>
+        <td class="bq-rate">S$${rates.min.toLocaleString()}–${rates.max.toLocaleString()}</td>
+        <td class="bq-amt">S$${imin.toLocaleString()}–${imax.toLocaleString()}</td>
+      </tr>`;
+    });
+    html+=`<tr class="bq-subtotal">
+      <td colspan="4" style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.06em">SECTION ${letter} SUBTOTAL</td>
+      <td></td>
+      <td class="bq-amt">S$${subMin.toLocaleString()}–${subMax.toLocaleString()}</td>
+    </tr>`;
+  });
+
+  html+=`<tr class="bq-total">
+    <td colspan="4" style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--yellow);letter-spacing:.06em;font-weight:700">TOTAL ESTIMATED COST</td>
+    <td></td>
+    <td class="bq-amt">S$${grandMin.toLocaleString()}–${grandMax.toLocaleString()}</td>
+  </tr></tbody>`;
+
+  document.getElementById('bq-table').innerHTML=html;
+}
+
+function renderRegister(){
+  const tbody=document.getElementById('reg-tbody');
+  if(filteredItems.length===0){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--g5);padding:24px;font-size:13px">No items match the current filter</td></tr>';return}
+  const catPillClass={sign:'cp-sign',cctv:'cp-cctv',traffic_light:'cp-tl',lamp_post:'cp-lamp',speed_trap:'cp-speed',other:'cp-other'};
+  const catLabel={sign:'Sign',cctv:'CCTV',traffic_light:'Traffic light',lamp_post:'Lamp post',speed_trap:'Speed trap',other:'Other'};
+  tbody.innerHTML=filteredItems.map(item=>{
+    const flags=(item.flags||[]).map(f=>{
+      if(f==='lta_scope')return`<span class="flag-pill fp-lta">LTA scope</span>`;
+      if(f==='missing_data')return`<span class="flag-pill fp-miss">Missing data</span>`;
+      if(f==='duplicate')return`<span class="flag-pill fp-dup">Duplicate</span>`;
+      return`<span class="flag-pill fp-miss">${f}</span>`;
+    }).join('');
+    const pc=catPillClass[item.category]||'cp-other';
+    const cl=catLabel[item.category]||item.category||'—';
+    return`<tr>
+      <td class="item-id">${item.id||'—'}</td>
+      <td><span class="item-cat-pill ${pc}">${cl}</span></td>
+      <td style="color:var(--g2)">${item.description||'—'}</td>
+      <td class="bq-qty">${item.qty!==null&&item.qty!==undefined?item.qty:'?'}</td>
+      <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5)">${item.unit||'no.'}</td>
+      <td style="color:var(--g4);font-size:12px">${item.location||'—'}</td>
+      <td>${flags||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterRegister(searchVal){
+  const search=(searchVal||document.getElementById('reg-search').value||'').toLowerCase();
+  const catFilter=document.getElementById('reg-filter-cat').value;
+  const flagFilter=document.getElementById('reg-filter-flag').value;
+  filteredItems=allItems.filter(item=>{
+    const matchSearch=!search||
+      (item.id||'').toLowerCase().includes(search)||
+      (item.description||'').toLowerCase().includes(search)||
+      (item.location||'').toLowerCase().includes(search);
+    const matchCat=!catFilter||item.category===catFilter;
+    const matchFlag=!flagFilter||
+      (flagFilter==='flag'&&item.flags&&item.flags.length>0)||
+      (flagFilter==='lta_scope'&&item.ltaScope);
+    return matchSearch&&matchCat&&matchFlag;
+  });
+  renderRegister();
+}
+
+function sortRegister(col){
+  if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=1}
+  filteredItems.sort((a,b)=>{
+    let av=a[col],bv=b[col];
+    if(col==='qty'){av=av||0;bv=bv||0;return(av-bv)*sortDir}
+    av=(av||'').toString().toLowerCase();
+    bv=(bv||'').toString().toLowerCase();
+    return av<bv?-sortDir:av>bv?sortDir:0;
+  });
+  renderRegister();
+}
+
+function exportCSV(){
+  const headers=['Item ID','Category','Description','Qty','Unit','Location','LTA Scope','Flags'];
+  const rows=allItems.map(i=>[
+    i.id||'',i.category||'',`"${(i.description||'').replace(/"/g,'""')}"`,
+    i.qty!==null?i.qty:'',i.unit||'no.',
+    `"${(i.location||'').replace(/"/g,'""')}"`,
+    i.ltaScope?'Yes':'No',
+    (i.flags||[]).join('; ')
+  ]);
+  const csv=[headers,...rows].map(r=>r.join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='canlah-traffic-equipment-register.csv';
+  a.click();
+  showToast('CSV exported','ok');
+}
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const steps={'upload':'Step 1 of 3 — Upload','processing':'Step 2 of 3 — Analysing','report':'Step 3 of 3 — Report'};
+  document.getElementById('step-indicator').textContent=steps[id]||'';
+  window.scrollTo(0,0);
+}
+
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show'+(type?' '+type:'');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+</script>
+</body>
+</html>
