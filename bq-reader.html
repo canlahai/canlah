@@ -674,7 +674,7 @@ async function startAnalysis() {
   const mime = mimeMap[ext] || 'application/pdf';
 
   try {
-    // STEP 1: Upload file to Anthropic via server
+    // STEP 1: Upload file to Vercel Blob via server
     const uploadResp = await fetch('/api/process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Action': 'upload' },
@@ -685,14 +685,14 @@ async function startAnalysis() {
       throw new Error('Upload failed: ' + (err.error || uploadResp.status));
     }
     const uploadData = await uploadResp.json();
-    const fileId = uploadData.id;
-    if (!fileId) throw new Error('No file ID: ' + JSON.stringify(uploadData));
+    const blobUrl = uploadData.blobUrl;
+    if (!blobUrl) throw new Error('No blob URL: ' + JSON.stringify(uploadData));
 
-    // STEP 2: Analyse using file_id
+    // STEP 2: Analyse using blob URL
     const analyseResp = await fetch('/api/process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Action': 'analyse' },
-      body: JSON.stringify({ fileId, prompt: buildExtractionPrompt() })
+      body: JSON.stringify({ blobUrl, prompt: buildExtractionPrompt() })
     });
     clearInterval(stepTimer);
     if (!analyseResp.ok) throw new Error('Analysis failed ' + analyseResp.status);
