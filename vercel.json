@@ -1,4 +1,12 @@
 {
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "functions": {
+    "api/process.js": {
+      "maxDuration": 60
+    }
+  },
+  "api": {
+    "bodySizeLimit": "50mb"
+  }
 }
