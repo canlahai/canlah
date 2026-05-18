@@ -1,131 +1,98 @@
 // api/process.js
-// Two actions:
-//   POST multipart/form-data  { action: 'upload', file: <PDF> }
-//     → uploads to Anthropic Files API, returns { fileId }
-//   POST application/json     { action: 'analyse', fileId: '...' }
-//     → runs Claude analysis, returns { data }
+// Edge runtime — no 4.5MB body limit (Vercel's limit only applies to
+// the Node.js serverless runtime with bodyParser).
 //
-// bodyParser is disabled so the raw multipart stream is read directly,
-// bypassing Vercel's 4.5 MB base64 body limit entirely.
+// Actions:
+//   POST with Content-Type: application/pdf   → upload to Anthropic, return { fileId }
+//   POST with Content-Type: application/json  → { action:'analyse', fileId } → { data }
 
-export const config = {
-  api: {
-    bodyParser: false,
-    responseLimit: '10mb',
-  },
-};
+export const config = { runtime: 'edge' };
 
-// ── helpers ────────────────────────────────────────────────────────────────
+export default async function handler(request) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', c => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
+  const ct = request.headers.get('content-type') || '';
 
-function parseMultipart(buffer, boundary) {
-  const sep = Buffer.from('--' + boundary);
-  const fields = {};
-  const files = {};
-  let start = 0;
+  // ── UPLOAD: browser sends raw PDF bytes ──────────────────────────────────
+  if (ct.includes('application/pdf')) {
+    try {
+      const pdfBytes = await request.arrayBuffer();
 
-  while (true) {
-    const idx = buffer.indexOf(sep, start);
-    if (idx === -1) break;
-    const end = buffer.indexOf(sep, idx + sep.length);
-    if (end === -1) break;
-    const part = buffer.slice(idx + sep.length + 2, end - 2);
-    start = end;
+      const form = new FormData();
+      form.append(
+        'file',
+        new Blob([pdfBytes], { type: 'application/pdf' }),
+        'upload.pdf'
+      );
 
-    const headerEnd = part.indexOf('\r\n\r\n');
-    if (headerEnd === -1) continue;
-    const headerStr = part.slice(0, headerEnd).toString();
-    const body = part.slice(headerEnd + 4);
+      const upRes = await fetch('https://api.anthropic.com/v1/files', {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'files-api-2025-04-14',
+        },
+        body: form,
+      });
 
-    const cdMatch = headerStr.match(/Content-Disposition:[^\r\n]*name="([^"]+)"/i);
-    const fnMatch = headerStr.match(/filename="([^"]+)"/i);
-    const ctMatch = headerStr.match(/Content-Type:\s*([^\r\n]+)/i);
-    if (!cdMatch) continue;
-    const name = cdMatch[1];
+      if (!upRes.ok) {
+        const err = await upRes.text();
+        return new Response(JSON.stringify({ error: `Anthropic upload failed: ${err}` }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
 
-    if (fnMatch) {
-      files[name] = {
-        buffer: body,
-        filename: fnMatch[1],
-        contentType: ctMatch ? ctMatch[1].trim() : 'application/octet-stream',
-      };
-    } else {
-      fields[name] = body.toString().trim();
+      const upData = await upRes.json();
+      return new Response(JSON.stringify({ fileId: upData.id }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   }
-  return { fields, files };
-}
 
-// ── main handler ───────────────────────────────────────────────────────────
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const ct = req.headers['content-type'] || '';
-
-  // ── UPLOAD ─────────────────────────────────────────────────────────────
-  if (ct.includes('multipart/form-data')) {
-    const bm = ct.match(/boundary=([^\s;]+)/);
-    if (!bm) return res.status(400).json({ error: 'No multipart boundary' });
-
-    const raw = await readBody(req);
-    const { files } = parseMultipart(raw, bm[1]);
-    const pdf = files.file;
-    if (!pdf) return res.status(400).json({ error: 'No file field found' });
-
-    const form = new FormData();
-    form.append('file', new Blob([pdf.buffer], { type: pdf.contentType }), pdf.filename || 'upload.pdf');
-
-    const up = await fetch('https://api.anthropic.com/v1/files', {
-      method: 'POST',
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'files-api-2025-04-14',
-      },
-      body: form,
-    });
-
-    if (!up.ok) return res.status(500).json({ error: await up.text() });
-    const upData = await up.json();
-    return res.status(200).json({ fileId: upData.id });
-  }
-
-  // ── ANALYSE ────────────────────────────────────────────────────────────
+  // ── ANALYSE: { action: 'analyse', fileId } ───────────────────────────────
   if (ct.includes('application/json')) {
-    const raw = await readBody(req);
     let body;
-    try { body = JSON.parse(raw.toString()); }
-    catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+    }
 
     const { action, fileId } = body;
-    if (action !== 'analyse') return res.status(400).json({ error: `Unknown action: ${action}` });
-    if (!fileId) return res.status(400).json({ error: 'fileId required' });
+    if (action !== 'analyse') {
+      return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400 });
+    }
+    if (!fileId) {
+      return new Response(JSON.stringify({ error: 'fileId required' }), { status: 400 });
+    }
 
-    const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'files-api-2025-04-14',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'document', source: { type: 'file', file_id: fileId } },
-            { type: 'text', text: `You are analysing a Singapore traffic data report (PDF).
+    try {
+      const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'files-api-2025-04-14',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'document', source: { type: 'file', file_id: fileId } },
+              {
+                type: 'text',
+                text: `You are analysing a Singapore traffic data report (PDF).
 Extract ALL traffic count data and return ONLY valid JSON, no markdown, no explanation:
 
 {
@@ -145,18 +112,41 @@ Extract ALL traffic count data and return ONLY valid JSON, no markdown, no expla
   "summary": { "totalLocations": number, "totalVehicles": number, "dataDate": "string", "notes": "string" }
 }
 
-Use null for missing fields. Extract as many locations as possible.` }
-          ]
-        }]
-      }),
-    });
+Use null for missing fields. Extract as many locations as possible.`
+              }
+            ]
+          }]
+        }),
+      });
 
-    if (!msgRes.ok) return res.status(500).json({ error: await msgRes.text() });
-    const msgData = await msgRes.json();
-    const text = msgData.content.filter(b => b.type === 'text').map(b => b.text).join('');
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return res.status(200).json({ data: parsed });
+      if (!msgRes.ok) {
+        const err = await msgRes.text();
+        return new Response(JSON.stringify({ error: `Claude API error: ${err}` }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      const msgData = await msgRes.json();
+      const text = msgData.content
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('');
+
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      return new Response(JSON.stringify({ data: parsed }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
-  return res.status(400).json({ error: 'Unsupported content-type' });
+  return new Response(JSON.stringify({ error: 'Unsupported content-type' }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
