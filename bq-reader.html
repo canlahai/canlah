@@ -699,9 +699,26 @@ async function startAnalysis() {
 
     const data = await analyseResp.json();
     const rawText = data.content.map(c => c.text || '').join('');
-    const jsonMatch = rawText.match(/```json\s*([\s\S]+?)\s*```/) || rawText.match(/(\{[\s\S]+\})/);
-    if (!jsonMatch) throw new Error('Could not parse extraction result');
-    const result = JSON.parse(jsonMatch[1]);
+    console.log('Raw response:', rawText.slice(0, 500));
+    
+    // Try multiple JSON extraction patterns
+    let result = null;
+    const patterns = [
+      /```json\s*([\s\S]+?)\s*```/,
+      /```\s*([\s\S]+?)\s*```/,
+      /(\{[\s\S]+\})/,
+    ];
+    for (const pattern of patterns) {
+      const match = rawText.match(pattern);
+      if (match) {
+        try { result = JSON.parse(match[1]); break; } catch(e) { continue; }
+      }
+    }
+    // Last resort: try parsing the whole response
+    if (!result) {
+      try { result = JSON.parse(rawText); } catch(e) {}
+    }
+    if (!result) throw new Error('Parse failed. Response: ' + rawText.slice(0, 200));
 
     STEPS.forEach(id => {
       const el = document.getElementById(id);
