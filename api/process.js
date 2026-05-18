@@ -1,11 +1,17 @@
-import { handleUpload } from '@vercel/blob/client';
-
-export const config = { maxDuration: 60 };
+export const config = {
+  maxDuration: 60,
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Action');
+
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -14,51 +20,21 @@ export default async function handler(req, res) {
 
   const action = req.headers['x-action'] || 'analyse';
 
-  // ── BLOB CLIENT UPLOAD HANDLER ──
-  if (action === 'blob-upload') {
+  // UPLOAD: receive base64 file, forward to Anthropic Files API
+  if (action === 'upload') {
     try {
-      const body = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', chunk => data += chunk);
-        req.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { reject(e); } });
-      });
-      const jsonResponse = await handleUpload({
-        body,
-        request: req,
-        onBeforeGenerateToken: async (pathname) => ({
-          allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png'],
-          maximumSizeInBytes: 50 * 1024 * 1024,
-        }),
-        onUploadCompleted: async ({ blob }) => {
-          console.log('Upload completed:', blob.url);
-        },
-      });
-      return res.status(200).json(jsonResponse);
-    } catch (err) {
-      return res.status(400).json({ error: err.message });
-    }
-  }
+      const { fileData, fileName, mimeType } = req.body;
+      if (!fileData) return res.status(400).json({ error: 'No file data' });
 
-  // ── ANALYSE ──
-  if (action === 'analyse') {
-    try {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const { blobUrl, prompt } = JSON.parse(Buffer.concat(chunks).toString());
-      if (!blobUrl) return res.status(400).json({ error: 'No blobUrl' });
-
-      const blobResp = await fetch(blobUrl);
-      if (!blobResp.ok) throw new Error('Failed to fetch blob: ' + blobResp.status);
-      const fileBuffer = Buffer.from(await blobResp.arrayBuffer());
-      const mimeType = blobResp.headers.get('content-type') || 'application/pdf';
-      const fileName = blobUrl.split('/').pop().split('?')[0] || 'document.pdf';
-
+      const binary = Buffer.from(fileData, 'base64');
       const boundary = 'X' + Math.random().toString(36).slice(2);
-      const header = Buffer.from('--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + fileName + '"\r\nContent-Type: ' + mimeType + '\r\n\r\n');
+      const header = Buffer.from(
+        '--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + (fileName || 'file.pdf') + '"\r\nContent-Type: ' + (mimeType || 'application/pdf') + '\r\n\r\n'
+      );
       const footer = Buffer.from('\r\n--' + boundary + '--\r\n');
-      const body = Buffer.concat([header, fileBuffer, footer]);
+      const body = Buffer.concat([header, binary, footer]);
 
-      const uploadResp = await fetch('https://api.anthropic.com/v1/files', {
+      const resp = await fetch('https://api.anthropic.com/v1/files', {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
@@ -68,10 +44,20 @@ export default async function handler(req, res) {
         },
         body,
       });
-      const uploadData = await uploadResp.json();
-      if (!uploadData.id) throw new Error('Anthropic upload failed: ' + JSON.stringify(uploadData));
+      const data = await resp.json();
+      return res.status(resp.status).json(data);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
 
-      const analyseResp = await fetch('https://api.anthropic.com/v1/messages', {
+  // ANALYSE: send file_id to Claude
+  if (action === 'analyse') {
+    try {
+      const { fileId, prompt } = req.body;
+      if (!fileId) return res.status(400).json({ error: 'No fileId' });
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -85,20 +71,14 @@ export default async function handler(req, res) {
           messages: [{
             role: 'user',
             content: [
-              { type: 'document', source: { type: 'file', file_id: uploadData.id } },
+              { type: 'document', source: { type: 'file', file_id: fileId } },
               { type: 'text', text: prompt },
             ],
           }],
         }),
       });
-      const result = await analyseResp.json();
-
-      try {
-        const { del } = await import('@vercel/blob');
-        await del(blobUrl);
-      } catch(e) {}
-
-      return res.status(analyseResp.status).json(result);
+      const data = await resp.json();
+      return res.status(resp.status).json(data);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
