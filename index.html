@@ -4,1397 +4,596 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CanLah.ai — Tree Felling BQ Reader</title>
+<title>CanLah.ai — Singapore Construction Intelligence</title>
+<meta name="description" content="AI-powered BQ reading, site reports, HR compliance tracking, and programme planning for Singapore construction. Built for QS firms and contractors.">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --ink: #0c0c0a;
-  --paper: #f2efe8;
-  --yellow: #e8c027;
-  --yellow-dk: #c4a01e;
-  --yellow-dim: rgba(232,192,39,0.08);
-  --orange: #d95f2b;
-  --slate: #1e1e1b;
-  --g8: #242420;
-  --g7: #363632;
-  --g6: #4a4a45;
-  --g5: #656560;
-  --g4: #888882;
-  --g3: #aeaba3;
-  --g2: #d0cdc5;
-  --g1: #eae7e0;
-  --green: #2a7a47;
-  --gbg: #152a1e;
-  --glt: #c8e6d4;
-  --red: #c0392b;
-  --rbg: #2e1414;
-  --amber: #c97a12;
-  --abg: #2a1e08;
-  --blue: #1a5fa0;
-  --bbg: #0a1e35;
-  --r: 2px;
-  --rl: 6px;
+:root{
+  --ink:#0c0c0a;--paper:#f2efe8;--yellow:#e8c027;--yellow-dk:#c4a01e;
+  --orange:#d95f2b;--slate:#1e1e1b;
+  --g8:#242420;--g7:#363632;--g6:#4a4a45;--g5:#656560;--g4:#888882;--g3:#aeaba3;--g2:#d0cdc5;--g1:#eae7e0;
+  --green:#2a7a47;--red:#c0392b;--blue:#1a5fa0;
+  --amber-bg:#faeeda;--amber-dk:#633806;--amber-mid:#ef9f27;
+  --teal-bg:#e1f5ee;--teal-dk:#085041;--teal-mid:#1d9e75;
+  --blue-bg:#e6f1fb;--blue-dk:#0c447c;--blue-mid:#378add;
+  --purple-bg:#eeedfe;--purple-dk:#26215c;--purple-mid:#7f77dd;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:var(--ink);color:var(--paper);font-family:'Syne',sans-serif;font-size:15px;line-height:1.7;min-height:100vh;overflow-x:hidden}
-button{font-family:'Syne',sans-serif;cursor:pointer}
-input,select,textarea{font-family:'Syne',sans-serif}
-::-webkit-scrollbar{width:4px;height:4px}
+body{background:var(--ink);color:var(--paper);font-family:'Syne',sans-serif;font-size:15px;line-height:1.7;overflow-x:hidden}
+button,input,select{font-family:'Syne',sans-serif}
+button{cursor:pointer}
+a{color:inherit;text-decoration:none}
+::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:var(--g7);border-radius:2px}
-::-webkit-scrollbar-track{background:transparent}
 
-/* ── TOPBAR ── */
-.topbar{
-  position:fixed;top:0;left:0;right:0;z-index:100;
-  height:56px;background:var(--ink);
-  border-bottom:1px solid var(--g7);
-  display:flex;align-items:center;padding:0 2rem;gap:16px;
-}
-.topbar::after{
-  content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,var(--yellow) 0%,var(--orange) 100%);
-}
-.brand{display:flex;align-items:center;gap:12px}
-.brand-mark{
-  width:34px;height:34px;border-radius:6px;
-  background:var(--slate);border:1px solid var(--g7);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
-.brand-name{font-size:17px;font-weight:800;color:var(--paper);letter-spacing:-.02em}
-.brand-name span{color:var(--yellow)}
-.brand-name em{color:var(--orange);font-style:normal}
-.topbar-spacer{flex:1}
-.topbar-tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.10em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--g7);border-radius:var(--r)}
-.topbar-step{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.06em;text-transform:uppercase}
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:56px;background:rgba(12,12,10,0.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--g8);display:flex;align-items:center;justify-content:space-between;padding:0 32px}
+.nav-brand{display:flex;align-items:center;gap:10px}
+.nav-logo{width:28px;height:28px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--ink)}
+.nav-wordmark{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.nav-wordmark span{color:var(--yellow)}
+.nav-wordmark em{color:var(--g4);font-style:normal}
+.nav-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--orange);letter-spacing:.12em}
+.nav-links{display:flex;align-items:center;gap:24px}
+.nav-link{font-size:13px;color:var(--g4);transition:color .15s}
+.nav-link:hover{color:var(--paper)}
+.nav-cta{background:var(--yellow);color:var(--ink);border:none;padding:8px 20px;border-radius:4px;font-size:13px;font-weight:700;letter-spacing:.02em;transition:background .15s}
+.nav-cta:hover{background:var(--yellow-dk)}
 
-/* ── PAGE SECTIONS ── */
-.page{display:none;min-height:calc(100vh - 56px);margin-top:56px}
-.page.active{display:block}
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:120px 24px 80px;text-align:center;position:relative;overflow:hidden}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(232,192,39,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(232,192,39,.03) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 80% 60% at 50% 50%,black,transparent)}
+.corner{position:absolute;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g7);letter-spacing:.06em;line-height:1.6}
+.corner.tl{top:72px;left:32px;text-align:left}
+.corner.tr{top:72px;right:32px;text-align:right}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.16em;text-transform:uppercase;margin-bottom:28px;display:flex;align-items:center;gap:10px}
+.eyebrow::before,.eyebrow::after{content:'';display:block;width:28px;height:1px;background:var(--orange);opacity:.4}
+h1{font-size:clamp(52px,9vw,108px);font-weight:800;line-height:.92;letter-spacing:-.04em;margin-bottom:8px}
+.yl{color:var(--yellow)}
+.og{color:var(--orange)}
+.hero-sub{font-size:18px;color:var(--g4);max-width:520px;line-height:1.75;margin:28px auto 48px}
+.hero-sub strong{color:var(--paper)}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:48px}
+.btn-primary{background:var(--yellow);color:var(--ink);border:none;padding:15px 36px;border-radius:4px;font-size:15px;font-weight:700;letter-spacing:.02em;transition:all .15s}
+.btn-primary:hover{background:var(--yellow-dk);transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--paper);border:1px solid var(--g7);padding:15px 36px;border-radius:4px;font-size:15px;font-weight:500;transition:all .15s}
+.btn-ghost:hover{border-color:var(--g5);background:var(--g8)}
+.pills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center}
+.pill{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.05em;padding:4px 12px;border:1px solid var(--g8);border-radius:20px}
+.pill.live{color:var(--yellow);border-color:rgba(232,192,39,.3)}
 
-/* ── UPLOAD SCREEN ── */
-.upload-screen{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  min-height:calc(100vh - 56px);padding:3rem 2rem;
-}
-.hero-eyebrow{
-  font-family:'JetBrains Mono',monospace;font-size:12px;
-  color:var(--orange);letter-spacing:.14em;text-transform:uppercase;
-  margin-bottom:20px;display:flex;align-items:center;gap:10px;
-}
-.hero-eyebrow::before,.hero-eyebrow::after{content:'//';opacity:.4}
-.hero-h1{
-  font-size:clamp(40px,7vw,80px);font-weight:800;
-  line-height:.95;letter-spacing:-.03em;
-  text-align:center;max-width:800px;margin-bottom:16px;
-}
-.hero-h1 .yl{color:var(--yellow)}
-.hero-h1 .og{color:var(--orange)}
-.hero-sub{
-  font-size:17px;color:var(--g4);text-align:center;
-  max-width:520px;line-height:1.8;margin-bottom:48px;
-}
+/* TICKER */
+.ticker{border-top:1px solid var(--g8);border-bottom:1px solid var(--g8);background:var(--slate);overflow:hidden;padding:12px 0;white-space:nowrap}
+.ticker-track{display:inline-flex;animation:tick 38s linear infinite}
+.t-item{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.08em;padding:0 28px;display:inline-flex;align-items:center;gap:10px}
+.t-live{color:var(--yellow);font-weight:700}
+.t-soon{color:var(--g6)}
+@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
-/* Upload zone */
-.upload-zone{
-  width:100%;max-width:600px;
-  border:2px dashed var(--g6);border-radius:var(--rl);
-  background:var(--slate);padding:3rem 2rem;
-  text-align:center;cursor:pointer;
-  transition:all .25s ease;position:relative;overflow:hidden;
-}
-.upload-zone::before{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(circle at 50% 0%,rgba(232,192,39,.05) 0%,transparent 60%);
-  pointer-events:none;
-}
-.upload-zone:hover,.upload-zone.drag-over{
-  border-color:var(--yellow);
-  background:rgba(232,192,39,.04);
-}
-.upload-zone input[type=file]{
-  display:none;
-}
-.uz-icon-wrap{
-  width:64px;height:64px;border-radius:var(--rl);
-  background:var(--g8);border:1px solid var(--g7);
-  display:flex;align-items:center;justify-content:center;
-  margin:0 auto 20px;
-}
-.uz-title{font-size:18px;font-weight:700;color:var(--paper);margin-bottom:8px;letter-spacing:-.01em}
-.uz-sub{font-size:14px;color:var(--g4);margin-bottom:20px;line-height:1.7}
-.uz-sub strong{color:var(--yellow);font-weight:600}
-.uz-formats{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
-.fmt-tag{
-  font-family:'JetBrains Mono',monospace;font-size:10px;
-  padding:3px 10px;border-radius:var(--r);
-  border:1px solid var(--g7);color:var(--g4);letter-spacing:.06em;
-}
-.uz-btn{
-  background:var(--yellow);color:var(--ink);border:none;
-  font-family:'Syne',sans-serif;font-weight:700;font-size:14px;
-  padding:11px 28px;border-radius:var(--r);
-  transition:all .15s;letter-spacing:-.01em;
-  position:relative;z-index:1;
-}
-.uz-btn:hover{background:var(--yellow-dk)}
+/* PROBLEM */
+.wrap{max-width:1100px;margin:0 auto;padding:100px 24px}
+.seg-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--orange);letter-spacing:.18em;text-transform:uppercase;margin-bottom:16px}
+h2{font-size:clamp(34px,5vw,56px);font-weight:800;line-height:1.02;letter-spacing:-.03em;margin-bottom:20px}
+.sub{font-size:17px;color:var(--g4);max-width:540px;line-height:1.75}
+.pain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1px;background:var(--g8);border:1px solid var(--g8);border-radius:6px;overflow:hidden;margin-top:56px}
+.pain{background:var(--ink);padding:28px 24px}
+.pain-n{font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:700;color:var(--g8);line-height:1;margin-bottom:14px}
+.pain.hl .pain-n{color:var(--yellow);opacity:.3}
+.pain-t{font-size:15px;font-weight:700;margin-bottom:6px}
+.pain-b{font-size:13px;color:var(--g4);line-height:1.6}
 
-/* File selected state */
-.file-selected{
-  background:rgba(232,192,39,.06);
-  border-color:var(--yellow);
-  padding:1.5rem 2rem;
-}
-.file-info{display:flex;align-items:center;gap:12px;margin-bottom:16px;text-align:left}
-.file-icon{width:40px;height:40px;background:var(--g8);border:1px solid var(--g7);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-.file-name{font-size:14px;font-weight:600;color:var(--paper);margin-bottom:2px}
-.file-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);letter-spacing:.04em}
-.analyse-btn{
-  width:100%;background:var(--yellow);color:var(--ink);border:none;
-  font-family:'Syne',sans-serif;font-weight:700;font-size:16px;letter-spacing:-.01em;
-  padding:14px;border-radius:var(--r);transition:all .15s;
-  display:flex;align-items:center;justify-content:center;gap:10px;
-}
-.analyse-btn:hover{background:var(--yellow-dk);transform:translateY(-1px)}
-.analyse-btn:disabled{background:var(--g7);color:var(--g5);cursor:not-allowed;transform:none}
+/* HOW */
+.how-bg{background:var(--slate);padding:100px 24px}
+.how-inner{max-width:1100px;margin:0 auto}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:var(--g8);border:1px solid var(--g8);border-radius:6px;overflow:hidden;margin-top:56px}
+.step{background:var(--slate);padding:28px 24px}
+.step+.step{border-left:1px solid var(--g8)}
+.step-n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);letter-spacing:.14em;margin-bottom:20px}
+.step-ic{width:40px;height:40px;border:1px solid var(--g7);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:16px}
+.step-t{font-size:15px;font-weight:700;margin-bottom:8px}
+.step-b{font-size:13px;color:var(--g4);line-height:1.6}
 
-/* ── PROCESSING SCREEN ── */
-.processing-screen{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  min-height:calc(100vh - 56px);padding:3rem 2rem;gap:32px;
-}
-.proc-title{font-size:30px;font-weight:800;letter-spacing:-.02em;text-align:center}
-.proc-steps{width:100%;max-width:500px;display:flex;flex-direction:column;gap:8px}
-.proc-step{
-  display:flex;align-items:center;gap:12px;
-  padding:.75rem 1rem;border-radius:var(--r);
-  border:1px solid var(--g7);background:var(--slate);
-  font-size:14px;font-weight:500;color:var(--g4);
-  transition:all .4s ease;
-}
-.proc-step.active{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-dim)}
-.proc-step.done{border-color:var(--green);color:var(--glt);background:var(--gbg)}
-.proc-step.done .step-icon{color:#6fcf97}
-.proc-step .step-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
-.proc-bar-wrap{width:100%;max-width:500px;height:3px;background:var(--g7);border-radius:2px;overflow:hidden}
-.proc-bar{height:100%;background:var(--yellow);border-radius:2px;width:0%;transition:width .5s ease}
-.proc-pct{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g4);letter-spacing:.06em}
-.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--yellow);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-@keyframes spin{to{transform:rotate(360deg)}}
+/* PLATFORM */
+.platform-bg{padding:100px 24px}
+.platform-inner{max-width:1100px;margin:0 auto}
+.seg{margin-bottom:20px;border-radius:8px;overflow:hidden;border:1px solid var(--g8)}
+.seg-head{display:flex;align-items:flex-start;gap:16px;padding:24px;border-bottom:1px solid var(--g8)}
+.seg-ic{width:44px;height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px}
+.seg-meta{flex:1;min-width:0}
+.seg-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}
+.seg-t{font-size:17px;font-weight:700;margin-bottom:4px}
+.seg-d{font-size:13px;line-height:1.55;margin-bottom:0}
+.seg-pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;margin-top:10px;letter-spacing:.06em}
+.feats{display:grid;gap:0}
+.feats-3{grid-template-columns:repeat(3,1fr)}
+.feats-2{grid-template-columns:repeat(2,1fr)}
+.feat{background:var(--ink);padding:20px 24px;border-right:1px solid var(--g8);border-top:1px solid var(--g8);position:relative}
+.feat:last-child{border-right:none}
+.f-live{position:absolute;top:14px;right:14px;background:var(--yellow);color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:2px;letter-spacing:.05em}
+.f-soon{position:absolute;top:14px;right:14px;background:var(--g8);color:var(--g5);font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 8px;border-radius:2px;border:1px solid var(--g7);letter-spacing:.05em}
+.feat-ic{font-size:18px;color:var(--g5);margin-bottom:12px}
+.feat-t{font-size:14px;font-weight:700;margin-bottom:6px;padding-right:72px}
+.feat-d{font-size:13px;color:var(--g4);line-height:1.55;margin-bottom:10px}
+.feat-subs{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.feat-sub{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--g5);padding:5px 8px;background:var(--g8);border-radius:4px}
+.feat-tag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g6);margin-bottom:10px}
+.feat-cta{font-size:12px;color:var(--yellow);font-weight:600;display:inline-flex;align-items:center;gap:4px;transition:opacity .15s}
+.feat-cta:hover{opacity:.7}
+.feat-notify{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g4);cursor:pointer;transition:color .15s;border:none;background:none;padding:0;font-family:'Syne',sans-serif}
+.feat-notify:hover{color:var(--yellow)}
 
-/* ── REPORT SCREEN ── */
-.report-screen{padding:2rem;max-width:1200px;margin:0 auto}
+/* Segment colour themes */
+.s-bq .seg-head{background:var(--amber-bg)}
+.s-bq .seg-lbl,.s-bq .seg-t{color:var(--amber-dk)}
+.s-bq .seg-d{color:#854f0b}
+.s-bq .seg-ic{background:var(--amber-mid);color:var(--amber-dk)}
+.s-bq .seg-pill{background:var(--amber-mid);color:var(--amber-dk)}
 
-/* Report header */
-.report-header{
-  background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);
-  overflow:hidden;margin-bottom:1.5rem;
-}
-.rh-top{
-  background:var(--ink);padding:1.5rem 2rem;
-  border-bottom:1px solid var(--g7);
-  display:flex;align-items:flex-start;justify-content:space-between;gap:20px;
-  flex-wrap:wrap;
-}
-.rh-project{flex:1}
-.rh-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
-.rh-title{font-size:24px;font-weight:800;letter-spacing:-.02em;color:var(--paper);margin-bottom:4px;line-height:1.2}
-.rh-ref{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g5);letter-spacing:.06em}
-.rh-actions{display:flex;gap:8px;flex-shrink:0}
-.act-btn{
-  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;
-  text-transform:uppercase;padding:8px 16px;border-radius:var(--r);
-  border:1px solid var(--g7);background:transparent;color:var(--g3);
-  transition:all .15s;
-}
-.act-btn:hover{border-color:var(--yellow);color:var(--yellow)}
-.act-btn.primary{background:var(--yellow);border-color:var(--yellow);color:var(--ink)}
-.act-btn.primary:hover{background:var(--yellow-dk)}
-.rh-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--g7)}
-.rh-stat{background:var(--slate);padding:1rem 1.25rem;text-align:center}
-.rh-stat-val{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-bottom:4px}
-.rh-stat-lbl{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.1em;text-transform:uppercase;line-height:1.4}
+.s-rep .seg-head{background:var(--teal-bg)}
+.s-rep .seg-lbl,.s-rep .seg-t{color:var(--teal-dk)}
+.s-rep .seg-d{color:#0f6e56}
+.s-rep .seg-ic{background:var(--teal-mid);color:var(--teal-bg)}
+.s-rep .seg-pill{background:var(--teal-mid);color:var(--teal-bg)}
 
-/* Flags panel */
-.flags-panel{
-  background:var(--abg);border:1px solid rgba(201,122,18,.25);
-  border-radius:var(--rl);padding:1rem 1.25rem;margin-bottom:1.5rem;
-  display:flex;gap:12px;align-items:flex-start;
-}
-.flags-icon{font-size:18px;flex-shrink:0;margin-top:1px}
-.flags-title{font-size:14px;font-weight:700;color:#d08a20;margin-bottom:6px}
-.flags-list{display:flex;flex-direction:column;gap:4px}
-.flag-item{font-size:13px;color:#b07820;line-height:1.6;display:flex;gap:6px;align-items:flex-start}
-.flag-item::before{content:'→';flex-shrink:0;margin-top:1px}
+.s-hr .seg-head{background:var(--blue-bg)}
+.s-hr .seg-lbl,.s-hr .seg-t{color:var(--blue-dk)}
+.s-hr .seg-d{color:#185fa5}
+.s-hr .seg-ic{background:var(--blue-mid);color:var(--blue-bg)}
+.s-hr .seg-pill{background:var(--blue-mid);color:var(--blue-bg)}
 
-/* Section label */
-.sec-label{
-  font-family:'JetBrains Mono',monospace;font-size:10px;
-  color:var(--g5);letter-spacing:.14em;text-transform:uppercase;
-  margin-bottom:.75rem;padding-bottom:.5rem;
-  border-bottom:1px solid var(--g7);
-  display:flex;align-items:center;justify-content:space-between;
-}
-.sec-label span{color:var(--g4);font-size:11px;letter-spacing:.04em;text-transform:none;font-family:'Syne',sans-serif}
+.s-pl .seg-head{background:var(--purple-bg)}
+.s-pl .seg-lbl,.s-pl .seg-t{color:var(--purple-dk)}
+.s-pl .seg-d{color:#534ab7}
+.s-pl .seg-ic{background:var(--purple-mid);color:var(--purple-bg)}
+.s-pl .seg-pill{background:var(--purple-mid);color:var(--purple-bg)}
 
-/* Species breakdown */
-.species-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1.5rem}
-.species-panel{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden}
-.sp-head{padding:.75rem 1.25rem;border-bottom:1px solid var(--g7);display:flex;align-items:center;justify-content:space-between}
-.sp-title{font-size:13px;font-weight:700;color:var(--paper)}
-.sp-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g5);letter-spacing:.04em}
-.sp-body{padding:.875rem 1.25rem;display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
-.sp-row{display:flex;align-items:center;gap:8px;font-size:13px}
-.sp-name{flex:1;color:var(--g3)}
-.sp-bar-wrap{width:90px;height:5px;background:var(--g7);border-radius:3px;overflow:hidden;flex-shrink:0}
-.sp-bar{height:100%;border-radius:3px;transition:width .6s ease}
-.sp-n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);width:24px;text-align:right;flex-shrink:0}
+/* STATS */
+.stats-bg{background:var(--yellow);padding:72px 24px}
+.stats-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:48px}
+.stat{text-align:center}
+.stat-n{font-size:56px;font-weight:800;color:var(--ink);line-height:1;letter-spacing:-.04em}
+.stat-n sup{font-size:28px;vertical-align:top;margin-top:10px;display:inline-block}
+.stat-l{font-size:13px;color:rgba(12,12,10,.55);margin-top:6px;line-height:1.5}
 
-/* Girth band breakdown */
-.girth-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
-.gb-card{background:var(--slate);padding:1rem 1.25rem;position:relative;overflow:hidden}
-.gb-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%}
-.gb-s::before{background:var(--g5)}
-.gb-m::before{background:var(--amber)}
-.gb-l::before{background:var(--orange)}
-.gb-xl::before{background:var(--red)}
-.gb-band{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
-.gb-count{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-bottom:4px}
-.gb-desc{font-size:13px;color:var(--g4);line-height:1.6}
-.gb-flag{font-family:'JetBrains Mono',monospace;font-size:10px;margin-top:6px;padding:2px 7px;border-radius:var(--r);display:inline-block}
-.gf-normal{background:var(--g8);color:var(--g5)}
-.gf-warn{background:var(--abg);color:#d08a20}
-.gf-crit{background:var(--rbg);color:#e07070}
+/* WAITLIST */
+.wl-bg{padding:120px 24px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.wl-h2{font-size:clamp(36px,6vw,64px);font-weight:800;line-height:1;letter-spacing:-.04em;margin-bottom:16px}
+.wl-sub{font-size:17px;color:var(--g4);max-width:440px;line-height:1.75;margin-bottom:48px}
+.wl-form{width:100%;max-width:460px}
+.wl-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.wl-in{width:100%;background:var(--slate);border:1px solid var(--g7);color:var(--paper);padding:13px 14px;border-radius:4px;font-size:14px;outline:none;transition:border-color .15s}
+.wl-in:focus{border-color:var(--yellow)}
+.wl-in::placeholder{color:var(--g5)}
+.wl-sel{width:100%;background:var(--slate);border:1px solid var(--g7);color:var(--paper);padding:13px 14px;border-radius:4px;font-size:14px;outline:none;appearance:none;cursor:pointer;transition:border-color .15s;margin-bottom:10px}
+.wl-sel:focus{border-color:var(--yellow)}
+.wl-btn{width:100%;background:var(--yellow);color:var(--ink);border:none;padding:15px;border-radius:4px;font-size:15px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:all .15s;margin-top:4px}
+.wl-btn:hover{background:var(--yellow-dk);transform:translateY(-1px)}
+.wl-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.wl-note{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);margin-top:14px;letter-spacing:.04em}
+.wl-ok{display:none;background:var(--slate);border:1px solid var(--green);border-radius:6px;padding:36px 24px}
+.wl-ok.show{display:block}
+.wl-ok-t{font-size:22px;font-weight:700;margin-bottom:8px}
+.wl-ok-d{font-size:14px;color:var(--g4);line-height:1.6}
 
-/* BQ Table */
-.bq-section{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
-.bq-table{width:100%;border-collapse:collapse}
-.bq-table th{
-  background:var(--g8);padding:9px 14px;text-align:left;
-  font-family:'JetBrains Mono',monospace;font-size:10px;
-  color:var(--g5);letter-spacing:.08em;text-transform:uppercase;
-  border-bottom:1px solid var(--g7);white-space:nowrap;
-}
-.bq-table td{padding:11px 14px;border-bottom:1px solid var(--g7);font-size:13px;vertical-align:middle}
-.bq-table tr:last-child td{border-bottom:none}
-.bq-table tr:hover td{background:rgba(255,255,255,.02)}
-.bq-item-code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);letter-spacing:.04em}
-.bq-item-desc{color:var(--g2);line-height:1.5}
-.bq-item-desc strong{color:var(--paper);font-weight:600}
-.bq-item-desc small{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.04em;display:block;margin-top:2px}
-.bq-qty{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--paper);text-align:right;white-space:nowrap}
-.bq-unit{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);text-align:center;letter-spacing:.04em}
-.bq-rate{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--g3);text-align:right}
-.bq-amt{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--paper);text-align:right}
-.bq-subtotal td{background:var(--g8)!important;border-top:1px solid var(--g7)!important}
-.bq-total td{background:rgba(232,192,39,.06)!important;border-top:2px solid var(--yellow)!important}
-.bq-total .bq-amt{color:var(--yellow);font-size:15px}
-.bq-section-head td{background:var(--ink)!important;font-weight:700;color:var(--g4);font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding:6px 14px;border-top:1px solid var(--g7)!important}
+/* FOOTER */
+.foot{border-top:1px solid var(--g8);padding:28px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;max-width:1100px;margin:0 auto}
+.foot-brand{font-size:14px;font-weight:700}
+.foot-brand span{color:var(--yellow)}
+.foot-copy{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.06em}
+.foot-link{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.06em;transition:opacity .15s}
+.foot-link:hover{opacity:.7}
 
-/* Tree register table */
-.reg-section{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
-.reg-toolbar{display:flex;align-items:center;gap:8px;padding:.75rem 1.25rem;border-bottom:1px solid var(--g7);flex-wrap:wrap}
-.reg-search{
-  flex:1;min-width:180px;background:var(--g8);border:1px solid var(--g7);
-  border-radius:var(--r);color:var(--paper);font-size:12px;
-  padding:7px 11px;outline:none;transition:border-color .15s;
-}
-.reg-search:focus{border-color:var(--yellow)}
-.reg-filter{
-  background:var(--g8);border:1px solid var(--g7);border-radius:var(--r);
-  color:var(--g3);font-family:'JetBrains Mono',monospace;font-size:11px;
-  padding:7px 10px;outline:none;cursor:pointer;
-}
-.reg-table{width:100%;border-collapse:collapse;min-width:700px}
-.reg-table th{
-  background:var(--g8);padding:8px 12px;text-align:left;
-  font-family:'JetBrains Mono',monospace;font-size:10px;
-  color:var(--g5);letter-spacing:.08em;text-transform:uppercase;
-  border-bottom:1px solid var(--g7);white-space:nowrap;
-  cursor:pointer;user-select:none;
-}
-.reg-table th:hover{color:var(--paper)}
-.reg-table td{padding:7px 12px;border-bottom:1px solid var(--g7);font-size:12px;vertical-align:middle}
-.reg-table tr:last-child td{border-bottom:none}
-.reg-table tr:hover td{background:rgba(255,255,255,.02)}
-.tree-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);letter-spacing:.04em}
-.tree-girth{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g2);text-align:right}
-.tree-h{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g3);text-align:right}
-.tree-species{color:var(--g2)}
-.tree-girth-pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 7px;border-radius:var(--r);letter-spacing:.04em}
-.gp-s{background:var(--g8);color:var(--g5)}
-.gp-m{background:var(--abg);color:#d08a20}
-.gp-l{background:rgba(217,95,43,.15);color:var(--orange)}
-.gp-xl{background:var(--rbg);color:#e07070}
-.flag-pill{font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 7px;border-radius:var(--r);margin-left:4px}
-.fp-dup{background:var(--rbg);color:#e07070}
-.fp-miss{background:var(--abg);color:#d08a20}
-.fp-prot{background:var(--bbg);color:#93c5fd}
-.fp-her{background:rgba(124,58,237,.15);color:#c4b5fd}
-.fp-cons{background:var(--gbg);color:#70c090}
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--slate);border:1px solid var(--yellow);color:var(--paper);padding:12px 24px;border-radius:4px;font-size:13px;font-weight:500;opacity:0;transition:all .3s;z-index:999;white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* Disclaimer */
-.disclaimer{
-  background:var(--g8);border:1px solid var(--g7);border-radius:var(--rl);
-  padding:1rem 1.25rem;margin-bottom:1.5rem;
-  display:flex;gap:10px;align-items:flex-start;
-}
-.dis-icon{font-size:16px;flex-shrink:0;margin-top:1px}
-.dis-text{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.04em;line-height:1.8}
-.dis-text strong{color:var(--g4);font-weight:500}
+/* ANIMATIONS */
+.fu{opacity:0;transform:translateY(20px);transition:opacity .65s ease,transform .65s ease}
+.fu.visible{opacity:1;transform:translateY(0)}
 
-/* Toast */
-.toast{position:fixed;bottom:20px;right:20px;background:var(--g8);border:1px solid var(--g7);border-radius:var(--rl);padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--paper);z-index:999;opacity:0;transform:translateY(6px);transition:all .25s;pointer-events:none;letter-spacing:.04em;max-width:320px}
-.toast.show{opacity:1;transform:translateY(0)}
-.toast.ok{border-color:var(--green);color:#70c090}
-.toast.err{border-color:var(--red);color:#e07070}
-.toast.wa{border-color:var(--amber);color:#d08a20}
-
-@media(max-width:900px){
-  .rh-stats{grid-template-columns:repeat(3,1fr)}
-  .girth-grid{grid-template-columns:1fr 1fr}
-  .species-grid{grid-template-columns:1fr}
-}
-@media(max-width:600px){
-  .rh-top{flex-direction:column}
-  .rh-stats{grid-template-columns:repeat(2,1fr)}
+@media(max-width:720px){
+  nav{padding:0 16px}
+  .nav-links{display:none}
+  .steps,.feats-3,.feats-2{grid-template-columns:1fr}
+  .step+.step{border-left:none;border-top:1px solid var(--g8)}
+  .feat{border-right:none}
+  .wl-row{grid-template-columns:1fr}
+  .foot{flex-direction:column;text-align:center}
 }
 </style>
 </head>
 <body>
 
-<!-- TOPBAR -->
-<div class="topbar">
-  <div class="brand">
-    <div class="brand-mark">
-      <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
-        <rect width="32" height="32" rx="5" fill="#1e1e1b"/>
-        <rect x="1" y="1" width="30" height="30" rx="4.5" stroke="#e8c027" stroke-width=".75" fill="none"/>
-        <path d="M7 17L13 23L25 10" stroke="#e8c027" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="25" cy="25" r="3" fill="#d95f2b"/>
-      </svg>
-    </div>
-    <div class="brand-name">Can<span>Lah</span><em>.ai</em></div>
-  </div>
-  <div class="topbar-spacer"></div>
-  <div class="topbar-tag">Tree Felling BQ Reader</div>
-  <div class="topbar-step" id="step-indicator">Step 1 of 3 — Upload</div>
-</div>
-
-<!-- ══ PAGE 1: UPLOAD ══ -->
-<div class="page active" id="page-upload">
-  <div class="upload-screen">
-    <div class="hero-eyebrow">Singapore Construction Intelligence</div>
-    <h1 class="hero-h1">
-      Upload your<br>
-      tree felling plan.<br>
-      <span class="yl">Upload your drawings.</span> <span class="og">We confirm the data, lah.</span>
-    </h1>
-    <p class="hero-sub">
-      Drop any NParks / LTA tree affected plan PDF. Multi-sheet, any format.
-      We extract every tree, flag every error, and output a BQ in minutes.
-    </p>
-
-    <div class="upload-zone" id="upload-zone"
-         ondragover="handleDragOver(event)"
-         ondragleave="handleDragLeave(event)"
-         ondrop="handleDrop(event)">
-      <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png"
-             onchange="handleFileSelect(event)">
-
-      <div id="upload-idle">
-        <div class="uz-icon-wrap">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#686860" stroke-width="1.5" stroke-linecap="round">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-            <polyline points="14,2 14,8 20,8"/>
-            <line x1="12" y1="18" x2="12" y2="12"/>
-            <polyline points="9,15 12,12 15,15"/>
-          </svg>
-        </div>
-        <div class="uz-title">Drop your tree felling drawing here</div>
-        <div class="uz-sub">Any LTA / NParks tree affected plan. Multi-sheet PDFs welcome.<br><strong>We handle Singlish, mixed formats, and messy data.</strong></div>
-        <div class="uz-formats">
-          <span class="fmt-tag">PDF</span>
-          <span class="fmt-tag">Multi-sheet</span>
-          <span class="fmt-tag">LTA format</span>
-          <span class="fmt-tag">NParks format</span>
-          <span class="fmt-tag">JPG / PNG</span>
-        </div>
-        <button class="uz-btn" onclick="document.getElementById('file-input').click();event.stopPropagation()">
-          Choose file to upload
-        </button>
-      </div>
-
-      <div id="upload-selected" style="display:none">
-        <div class="file-info">
-          <div class="file-icon">📄</div>
-          <div>
-            <div class="file-name" id="selected-name">—</div>
-            <div class="file-meta" id="selected-meta">—</div>
-          </div>
-        </div>
-        <button class="analyse-btn" id="analyse-btn" onclick="event.stopPropagation();startAnalysis()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Analyse Drawing → Generate BQ Report
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ══ PAGE 2: PROCESSING ══ -->
-<div class="page" id="page-processing">
-  <div class="processing-screen">
+<nav>
+  <div class="nav-brand">
+    <div class="nav-logo">C</div>
     <div>
-      <div class="hero-eyebrow" style="justify-content:center">AI is reading your drawing</div>
-      <div class="proc-title">Analysing tree felling plan<span id="proc-dots">...</span></div>
+      <div class="nav-wordmark">Can<span>Lah</span><em>.ai</em></div>
+      <div class="nav-sub">Singapore Construction Intelligence</div>
     </div>
+  </div>
+  <div class="nav-links">
+    <a class="nav-link" href="#platform">Platform</a>
+    <a class="nav-link" href="#how">How it works</a>
+    <a class="nav-link" href="/bq-reader">Try BQ Reader</a>
+  </div>
+  <button class="nav-cta" onclick="goTo('waitlist')">Get Early Access</button>
+</nav>
 
-    <div class="proc-steps" id="proc-steps">
-      <div class="proc-step" id="step-parse">
-        <span class="step-icon">📄</span>
-        <span>Reading PDF and extracting text from all sheets</span>
-      </div>
-      <div class="proc-step" id="step-extract">
-        <span class="step-icon">🌳</span>
-        <span>Identifying all tree records — Tree No., girth, height, species</span>
-      </div>
-      <div class="proc-step" id="step-dedup">
-        <span class="step-icon">🔍</span>
-        <span>Deduplicating entries and flagging data errors</span>
-      </div>
-      <div class="proc-step" id="step-classify">
-        <span class="step-icon">📊</span>
-        <span>Classifying by girth band and NParks protection status</span>
-      </div>
-      <div class="proc-step" id="step-bq">
-        <span class="step-icon">💰</span>
-        <span>Calculating replacement ratios and BQ cost estimates</span>
-      </div>
-      <div class="proc-step" id="step-report">
-        <span class="step-icon">📋</span>
-        <span>Compiling final report with data quality flags</span>
-      </div>
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="corner tl">// SINGAPORE CONSTRUCTION<br>// INTELLIGENCE PLATFORM</div>
+  <div class="corner tr">EST. 2026<br>BETA</div>
+  <div class="eyebrow">Built for Singapore QS &amp; Contractors</div>
+  <h1>Stop doing<br><span class="yl">BQ work</span><br><span class="og">by hand, lah.</span></h1>
+  <p class="hero-sub">CanLah.ai reads your construction drawings and outputs a <strong>complete Bill of Quantities in minutes</strong>. One platform covering BQ reading, site reports, HR compliance, and programme planning.</p>
+  <div class="hero-actions">
+    <button class="btn-primary" onclick="goTo('waitlist')">Get Early Access — 3 Free Reads →</button>
+    <button class="btn-ghost" onclick="goTo('how')">See how it works</button>
+  </div>
+  <div class="pills">
+    <div class="pill live">✓ Tree felling BQ — Live now</div>
+    <div class="pill">Drain drawings — Soon</div>
+    <div class="pill">Traffic plans — Soon</div>
+    <div class="pill">HR tracker — Soon</div>
+  </div>
+</section>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-track">
+    <div class="t-item">Tree felling BQ <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">NParks girth classification <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">Heritage tree flagging <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">Data quality flags <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">SGD market rate BQ <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">Drain drawings BQ <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Traffic plan BQ <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Daily site report <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Safety report <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">WP expiry tracker <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">TOL tracker <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">NCE tracker <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Programme scheduling <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Tree felling BQ <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">NParks girth classification <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">Heritage tree flagging <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">Data quality flags <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">SGD market rate BQ <span class="t-live">✓ LIVE</span></div>
+    <div class="t-item">Drain drawings BQ <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Traffic plan BQ <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Daily site report <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Safety report <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">WP expiry tracker <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">TOL tracker <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">NCE tracker <span class="t-soon">COMING SOON</span></div>
+    <div class="t-item">Programme scheduling <span class="t-soon">COMING SOON</span></div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<div class="wrap fu">
+  <div class="seg-label">// The problem</div>
+  <h2>Construction paperwork<br>is <span class="yl">killing your margins.</span></h2>
+  <p class="sub">Every project, your QS team spends days manually reading drawings, counting items, and keying data. That's billable time spent on administration.</p>
+  <div class="pain-grid">
+    <div class="pain hl">
+      <div class="pain-n">2–5</div>
+      <div class="pain-t">Days to read one tree felling plan</div>
+      <div class="pain-b">A standard LTA tree affected plan takes a QS 2–5 days to count, classify, and price. CanLah.ai does it in 15 minutes.</div>
     </div>
-
-    <div style="width:100%;max-width:500px;display:flex;flex-direction:column;gap:8px;align-items:center">
-      <div class="proc-bar-wrap"><div class="proc-bar" id="proc-bar"></div></div>
-      <div class="proc-pct" id="proc-pct">0%</div>
+    <div class="pain">
+      <div class="pain-n">01</div>
+      <div class="pain-t">Counting errors cost real money</div>
+      <div class="pain-b">Manual errors on protected or heritage trees trigger NParks rejections, re-submissions, and project delays that compound fast.</div>
+    </div>
+    <div class="pain">
+      <div class="pain-n">02</div>
+      <div class="pain-t">Every authority, different format</div>
+      <div class="pain-b">LTA, NParks, PUB, BCA, SPPG — each has its own format and submission requirement. Your team needs to know all of them.</div>
+    </div>
+    <div class="pain">
+      <div class="pain-n">03</div>
+      <div class="pain-t">Compliance slips through the cracks</div>
+      <div class="pain-b">WP expiries, TOL renewals, NCE validity — tracked in spreadsheets, emailed around, until someone misses a deadline and the project stops.</div>
     </div>
   </div>
 </div>
 
-<!-- ══ PAGE 3: REPORT ══ -->
-<div class="page" id="page-report">
-  <div class="report-screen">
+<!-- HOW IT WORKS -->
+<div class="how-bg" id="how">
+  <div class="how-inner fu">
+    <div class="seg-label">// How it works</div>
+    <h2>Three steps.<br><span class="yl">Fifteen minutes.</span></h2>
+    <p class="sub">No training, no setup, no IT integration. Upload your drawing and get a complete BQ.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">// STEP 01</div>
+        <div class="step-ic">📄</div>
+        <div class="step-t">Upload your drawing</div>
+        <div class="step-b">Drop any LTA / NParks / PUB drawing PDF. Multi-sheet, any scale, any format. We handle Singlish, mixed formats, and messy scanned data.</div>
+      </div>
+      <div class="step">
+        <div class="step-n">// STEP 02</div>
+        <div class="step-ic">⚙️</div>
+        <div class="step-t">AI reads every sheet</div>
+        <div class="step-b">CanLah.ai extracts every item, flags data quality issues, classifies by Singapore authority thresholds, and applies current SGD market rates.</div>
+      </div>
+      <div class="step">
+        <div class="step-n">// STEP 03</div>
+        <div class="step-ic">📊</div>
+        <div class="step-t">Get your complete BQ</div>
+        <div class="step-b">Full bill of quantities with quantities, unit rates, cost totals, data flags, and CSV export. Ready in minutes, not days.</div>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <!-- REPORT HEADER -->
-    <div class="report-header">
-      <div class="rh-top">
-        <div class="rh-project">
-          <div class="rh-eyebrow">Tree Felling BQ Report · CanLah.ai</div>
-          <div class="rh-title" id="r-title">Construction of Road Viaduct Along Pioneer Road</div>
-          <div class="rh-ref" id="r-ref">Drawing Ref: L/RC216/RR/WSCL/0014–0017 · Addendum 1 (Oct 2025) · Generated <span id="r-date"></span></div>
+<!-- PLATFORM -->
+<div class="platform-bg" id="platform">
+  <div class="platform-inner">
+    <div class="seg-label">// Platform</div>
+    <h2>One platform.<br><span class="yl">Every job on site.</span></h2>
+    <p class="sub" style="margin-bottom:48px">Four segments covering every construction workflow that currently wastes your team's time. Each module is built specifically for Singapore authorities and formats.</p>
+
+    <!-- BQ READER -->
+    <div class="seg s-bq fu">
+      <div class="seg-head">
+        <div class="seg-ic">📋</div>
+        <div class="seg-meta">
+          <div class="seg-lbl">BQ reader</div>
+          <div class="seg-t">Bill of quantities from any drawing</div>
+          <div class="seg-d">Upload any construction drawing PDF. AI extracts every item, flags data quality issues, and outputs a complete BQ with Singapore market rates — in minutes, not days.</div>
+          <div class="seg-pill">1 module live · 2 coming soon</div>
         </div>
-        <div class="rh-actions">
-          <button class="act-btn" onclick="window.print()">Print</button>
-          <button class="act-btn" onclick="exportCSV()">Export CSV</button>
-          <button class="act-btn primary" onclick="showPage('upload')">New Drawing</button>
+      </div>
+      <div class="feats feats-3">
+        <div class="feat">
+          <div class="f-live">LIVE NOW</div>
+          <div class="feat-ic">🌳</div>
+          <div class="feat-t">Tree felling</div>
+          <div class="feat-d">LTA / NParks tree affected plans. Full tree register, girth band classification, heritage flagging, NParks approval thresholds, replacement planting BQ.</div>
+          <div class="feat-tag">NParks Guidelines v5 · Jul 2025</div>
+          <a href="/bq-reader" class="feat-cta">Try it now →</a>
+        </div>
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">💧</div>
+          <div class="feat-t">Drain drawings</div>
+          <div class="feat-d">PUB and LTA drain drawings. Pipe schedules by diameter and material, manhole and inlet counts, invert levels, bedding and surround quantities.</div>
+          <div class="feat-tag">PUB · LTA formats</div>
+          <button class="feat-notify" onclick="notify('Drain drawings BQ')">🔔 Notify me when live</button>
+        </div>
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">🚦</div>
+          <div class="feat-t">Traffic plans</div>
+          <div class="feat-d">LTA traffic diversion plans. Sign and cone schedules, lane configurations, temporary works quantities, and permit references extracted automatically.</div>
+          <div class="feat-tag">LTA Traffic Management</div>
+          <button class="feat-notify" onclick="notify('Traffic plan BQ')">🔔 Notify me when live</button>
         </div>
       </div>
-      <div class="rh-stats" id="r-stats"></div>
     </div>
 
-    <!-- DATA FLAGS -->
-    <div class="flags-panel" id="flags-panel">
-      <div class="flags-icon">⚠️</div>
-      <div>
-        <div class="flags-title">Data quality flags — action required before NParks submission</div>
-        <div class="flags-list" id="flags-list"></div>
+    <!-- REPORTS -->
+    <div class="seg s-rep fu">
+      <div class="seg-head">
+        <div class="seg-ic">📝</div>
+        <div class="seg-meta">
+          <div class="seg-lbl">Reports</div>
+          <div class="seg-t">AI-generated site documentation</div>
+          <div class="seg-d">Generate compliant daily and safety reports from a short voice or text input. MOM and BCA-aligned formats, timestamped and audit-ready for client submission.</div>
+          <div class="seg-pill">Coming soon</div>
+        </div>
+      </div>
+      <div class="feats feats-2">
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">📅</div>
+          <div class="feat-t">Daily report</div>
+          <div class="feat-d">Site progress, weather, manpower headcount, plant deployed, work completed, and issues flagged — generated from a short voice note or text input. Formatted for client submission.</div>
+          <div class="feat-tag">MOM · BCA site diary format</div>
+          <button class="feat-notify" onclick="notify('Daily report')">🔔 Notify me when live</button>
+        </div>
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">🛡️</div>
+          <div class="feat-t">Safety report</div>
+          <div class="feat-d">Toolbox meeting records, near-miss logs, PPE compliance checks, and risk observation reports. Audit-ready, timestamped, and traceable per worker and date.</div>
+          <div class="feat-tag">MOM WSH Act · BizSAFE</div>
+          <button class="feat-notify" onclick="notify('Safety report')">🔔 Notify me when live</button>
+        </div>
       </div>
     </div>
 
-    <!-- GIRTH BAND BREAKDOWN -->
-    <div class="sec-label">// Girth band classification <span>NParks protection thresholds applied</span></div>
-    <div class="girth-grid" id="girth-grid"></div>
-
-    <!-- SPECIES BREAKDOWN -->
-    <div class="sec-label">// Species breakdown <span>Top species by count</span></div>
-    <div class="species-grid" id="species-grid"></div>
-
-    <!-- BILL OF QUANTITIES -->
-    <div class="sec-label">// Bill of Quantities <span>Indicative costs — confirm with contractor before submission</span></div>
-    <div class="bq-section">
-      <div style="overflow-x:auto">
-        <table class="bq-table" id="bq-table"></table>
+    <!-- HR WORK -->
+    <div class="seg s-hr fu">
+      <div class="seg-head">
+        <div class="seg-ic">👷</div>
+        <div class="seg-meta">
+          <div class="seg-lbl">HR work</div>
+          <div class="seg-t">Expiry tracking and document CRM</div>
+          <div class="seg-d">Never miss a permit, licence, or submission deadline. One dashboard tracks WP, TOL, and NCE expiries across all your projects — with document storage built in.</div>
+          <div class="seg-pill">Coming soon</div>
+        </div>
+      </div>
+      <div class="feats feats-3">
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">🪪</div>
+          <div class="feat-t">Work permit tracker</div>
+          <div class="feat-d">Track WP expiry for every foreign worker. Renewal alerts, worker profiles, MOM pass details, and document storage in one place.</div>
+          <div class="feat-tag">MOM Work Pass Division</div>
+          <button class="feat-notify" onclick="notify('Work permit tracker')">🔔 Notify me when live</button>
+        </div>
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">🏗️</div>
+          <div class="feat-t">TOL tracker</div>
+          <div class="feat-d">Temporary occupation licence expiry tracking across all active projects. Renewal deadlines, licence conditions, and linked drawing storage.</div>
+          <div class="feat-subs">
+            <div class="feat-sub">📄 Licence document storage</div>
+            <div class="feat-sub">🔔 Renewal alerts</div>
+          </div>
+          <div class="feat-tag">URA · BCA · SLA</div>
+          <button class="feat-notify" onclick="notify('TOL tracker')">🔔 Notify me when live</button>
+        </div>
+        <div class="feat">
+          <div class="f-soon">COMING SOON</div>
+          <div class="feat-ic">⛏️</div>
+          <div class="feat-t">NCE tracker</div>
+          <div class="feat-d">Notification for Commencement of Earthworks lifecycle. Submission → approval → commencement → validity → renewal per project.</div>
+          <div class="feat-subs">
+            <div class="feat-sub">📐 Drawings storage</div>
+            <div class="feat-sub">📜 Certificate storage</div>
+          </div>
+          <div class="feat-tag">SPPG · BCA</div>
+          <button class="feat-notify" onclick="notify('NCE tracker')">🔔 Notify me when live</button>
+        </div>
       </div>
     </div>
 
-    <!-- TREE REGISTER -->
-    <div class="sec-label">// Full tree register <span id="reg-count">—</span></div>
-    <div class="reg-section">
-      <div class="reg-toolbar">
-        <input class="reg-search" type="text" placeholder="Search tree no., species..." id="reg-search" oninput="filterRegister(this.value)">
-        <select class="reg-filter" id="reg-filter-girth" onchange="filterRegister()">
-          <option value="">All girth bands</option>
-          <option value="S">Small (&lt;0.5m)</option>
-          <option value="M">Medium (0.5–1.0m)</option>
-          <option value="L">Large (1.0–2.0m)</option>
-          <option value="XL">Very large (&gt;2.0m)</option>
-        </select>
-        <select class="reg-filter" id="reg-filter-flag" onchange="filterRegister()">
-          <option value="">All records</option>
-          <option value="flag">Flagged only</option>
-          <option value="protected">Protected trees</option>
-          <option value="heritage">Heritage candidates</option>
-        </select>
+    <!-- PLANNING -->
+    <div class="seg s-pl fu">
+      <div class="seg-head">
+        <div class="seg-ic">📆</div>
+        <div class="seg-meta">
+          <div class="seg-lbl">Planning</div>
+          <div class="seg-t">AI-assisted programme scheduling</div>
+          <div class="seg-d">Build and manage your construction programme with AI assistance. Gantt, S-curve, critical path, and look-ahead — linked directly to your BQ milestones and HR compliance status.</div>
+          <div class="seg-pill">Phase 3 · Month 4–6</div>
+        </div>
       </div>
-      <div style="overflow-x:auto;max-height:480px;overflow-y:auto">
-        <table class="reg-table">
-          <thead>
-            <tr>
-              <th onclick="sortRegister('no')">Tree No. ↕</th>
-              <th onclick="sortRegister('girth')" style="text-align:right">Girth (m) ↕</th>
-              <th onclick="sortRegister('height')" style="text-align:right">Height (m) ↕</th>
-              <th onclick="sortRegister('species')">Species</th>
-              <th>Girth band</th>
-              <th>Sheet</th>
-              <th>Flags</th>
-            </tr>
-          </thead>
-          <tbody id="reg-tbody"></tbody>
-        </table>
+      <div class="feats feats-2">
+        <div class="feat">
+          <div class="f-soon">PHASE 3</div>
+          <div class="feat-ic">📊</div>
+          <div class="feat-t">Programme scheduling</div>
+          <div class="feat-d">Gantt chart, S-curve, and critical path planning built for Singapore construction. BQ-linked milestones so your programme updates when your quantities change.</div>
+          <div class="feat-tag">MS Project compatible export</div>
+          <button class="feat-notify" onclick="notify('Programme scheduling')">🔔 Notify me when live</button>
+        </div>
+        <div class="feat">
+          <div class="f-soon">PHASE 3</div>
+          <div class="feat-ic">👁️</div>
+          <div class="feat-t">Look-ahead planner</div>
+          <div class="feat-d">3-week rolling look-ahead linked to resource availability, WP expiries, and TOL conditions. One view for site managers and project directors to see what's at risk.</div>
+          <div class="feat-tag">Resource · Compliance aware</div>
+          <button class="feat-notify" onclick="notify('Look-ahead planner')">🔔 Notify me when live</button>
+        </div>
       </div>
     </div>
 
-    <!-- DISCLAIMER -->
-    <div class="disclaimer">
-      <div class="dis-icon">ℹ️</div>
-      <div class="dis-text">
-        <strong>IMPORTANT DISCLAIMER —</strong> This report is generated by CanLah.ai as an administrative productivity tool. Replacement planting ratios are indicative based on NParks Guidelines on Greenery Provision and Tree Conservation for Developments Version 5 (Jul 2025). Cost estimates use published market rate ranges and are not contractual. <strong>The Remove/Retain status per individual tree is not extractable from the tabular data alone</strong> — it must be verified against the site plan legends on each drawing sheet. All data must be independently verified by a qualified Landscape Architect, Arborist, or Professional Engineer before NParks submission. CanLah.ai accepts no liability for decisions made based on this report.
-      </div>
-    </div>
+  </div>
+</div>
 
+<!-- STATS -->
+<div class="stats-bg">
+  <div class="stats-inner">
+    <div class="stat">
+      <div class="stat-n">15<sup>min</sup></div>
+      <div class="stat-l">Tree felling BQ<br>vs 2–5 days manually</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n">473</div>
+      <div class="stat-l">Trees extracted &amp; classified<br>from one drawing upload</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n">4</div>
+      <div class="stat-l">Platform segments<br>covering every workflow</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n">100<sup>%</sup></div>
+      <div class="stat-l">Singapore-specific<br>LTA · NParks · PUB · BCA · SPPG</div>
+    </div>
+  </div>
+</div>
+
+<!-- WAITLIST -->
+<div class="wl-bg" id="waitlist">
+  <div class="seg-label" style="margin-bottom:16px">// Early access</div>
+  <h2 class="wl-h2">Be first in line,<br><span class="yl">lah.</span></h2>
+  <p class="wl-sub">We're onboarding Singapore QS firms and contractors in batches. Join the waitlist and get <strong style="color:var(--paper)">3 free reads</strong> when your spot is ready.</p>
+  <div class="wl-form">
+    <div id="wl-wrap">
+      <div class="wl-row">
+        <input class="wl-in" type="text" id="wl-name" placeholder="Your name">
+        <input class="wl-in" type="email" id="wl-email" placeholder="Work email">
+      </div>
+      <input class="wl-in" type="text" id="wl-co" placeholder="Company name" style="width:100%;margin-bottom:10px">
+      <select class="wl-sel" id="wl-role">
+        <option value="" disabled selected>Your role</option>
+        <option value="qs">Quantity surveyor / QS firm</option>
+        <option value="contractor">Main contractor</option>
+        <option value="subcontractor">Subcontractor</option>
+        <option value="landscape">Landscape consultant / Arborist</option>
+        <option value="pm">Project manager</option>
+        <option value="other">Other</option>
+      </select>
+      <select class="wl-sel" id="wl-int">
+        <option value="" disabled selected>Most interested in</option>
+        <option value="tree">Tree felling BQ reader (live now)</option>
+        <option value="drain">Drain drawings BQ reader</option>
+        <option value="traffic">Traffic plan BQ reader</option>
+        <option value="hr">HR expiry tracker (WP / TOL / NCE)</option>
+        <option value="reports">Daily / safety reports</option>
+        <option value="planning">Programme scheduling</option>
+        <option value="all">All of the above</option>
+      </select>
+      <button class="wl-btn" id="wl-btn" onclick="submitWL()">Join the Waitlist — Get 3 Free Reads</button>
+      <p class="wl-note">No spam. No credit card. We'll contact you directly when your spot is ready.</p>
+    </div>
+    <div class="wl-ok" id="wl-ok">
+      <div style="font-size:28px;margin-bottom:12px">✓</div>
+      <div class="wl-ok-t">You're on the list.</div>
+      <div class="wl-ok-d">We'll be in touch when your spot is ready. In the meantime, try the live Tree Felling BQ Reader at <a href="/bq-reader" style="color:var(--yellow)">canlah.vercel.app/bq-reader</a></div>
+    </div>
+  </div>
+</div>
+
+<div style="border-top:1px solid var(--g8)">
+  <div class="foot">
+    <div class="foot-brand">Can<span>Lah</span>.ai</div>
+    <div class="foot-copy">Singapore Construction Intelligence · 2026</div>
+    <a href="/bq-reader" class="foot-link">Try the BQ Reader →</a>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ══════════════════════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════════════════════
-let uploadedFile = null;
-let uploadedFileB64 = null;
-let allTrees = [];
-let filteredTrees = [];
-let sortCol = 'no';
-let sortDir = 1;
+function goTo(id){document.getElementById(id).scrollIntoView({behavior:'smooth'})}
 
-// ══════════════════════════════════════════════════════════
-//  FILE HANDLING
-// ══════════════════════════════════════════════════════════
-function handleDragOver(e) {
-  e.preventDefault();
-  document.getElementById('upload-zone').classList.add('drag-over');
-}
-function handleDragLeave(e) {
-  document.getElementById('upload-zone').classList.remove('drag-over');
-}
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('upload-zone').classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) processFile(file);
-}
-function handleFileSelect(e) {
-  const file = e.target.files[0];
-  if (file) processFile(file);
+const obs=new IntersectionObserver(e=>e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('visible')}),{threshold:0.07});
+document.querySelectorAll('.fu').forEach(el=>obs.observe(el));
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3200);
 }
 
-function processFile(file) {
-  const allowed = ['application/pdf','image/jpeg','image/png','image/jpg'];
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (!['pdf','jpg','jpeg','png'].includes(ext)) {
-    showToast('Please upload a PDF or image file', 'err'); return;
-  }
-  if (file.size > 30 * 1024 * 1024) {
-    showToast('File too large — maximum 30MB', 'err'); return;
-  }
-  uploadedFile = file;
-  const reader = new FileReader();
-  reader.onload = e => { uploadedFileB64 = e.target.result.split(',')[1]; };
-  reader.readAsDataURL(file);
-
-  document.getElementById('upload-idle').style.display = 'none';
-  document.getElementById('upload-selected').style.display = 'block';
-  document.getElementById('selected-name').textContent = file.name;
-  document.getElementById('selected-meta').textContent =
-    ext.toUpperCase() + ' · ' + formatBytes(file.size) + ' · Ready to analyse';
-  document.getElementById('upload-zone').classList.add('file-selected');
+function notify(module){
+  const map={'Drain drawings BQ':'drain','Traffic plan BQ':'traffic','Daily report':'reports','Safety report':'reports','Work permit tracker':'hr','TOL tracker':'hr','NCE tracker':'hr','Programme scheduling':'planning','Look-ahead planner':'planning'};
+  const sel=document.getElementById('wl-int');
+  if(map[module])sel.value=map[module];
+  toast('Got it — join the waitlist below to get notified 👇');
+  setTimeout(()=>goTo('waitlist'),700);
 }
 
-function formatBytes(b) {
-  if (b < 1024) return b + 'B';
-  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + 'KB';
-  return (b / 1024 / 1024).toFixed(1) + 'MB';
+function submitWL(){
+  const name=document.getElementById('wl-name').value.trim();
+  const email=document.getElementById('wl-email').value.trim();
+  if(!name||!email){toast('Please enter your name and email');return}
+  if(!email.includes('@')){toast('Please enter a valid email');return}
+  const btn=document.getElementById('wl-btn');
+  btn.disabled=true;btn.textContent='Submitting...';
+  const data={name,email,company:document.getElementById('wl-co').value.trim(),role:document.getElementById('wl-role').value,interest:document.getElementById('wl-int').value,ts:new Date().toISOString()};
+  try{const e=JSON.parse(localStorage.getItem('canlah-wl')||'[]');e.push(data);localStorage.setItem('canlah-wl',JSON.stringify(e))}catch(e){}
+  setTimeout(()=>{document.getElementById('wl-wrap').style.display='none';document.getElementById('wl-ok').classList.add('show')},700);
 }
-
-// ══════════════════════════════════════════════════════════
-//  ANALYSIS — CALLS CLAUDE API
-// ══════════════════════════════════════════════════════════
-async function startAnalysis() {
-  if (!uploadedFileB64) { showToast('Please select a file first', 'err'); return; }
-  showPage('processing');
-
-  const STEPS = ['step-parse','step-extract','step-dedup','step-classify','step-bq','step-report'];
-  const PCTS  = [10, 30, 50, 65, 80, 95];
-  let si = 0;
-
-  // Animate steps
-  const stepTimer = setInterval(() => {
-    if (si > 0) {
-      const prev = document.getElementById(STEPS[si - 1]);
-      prev.classList.remove('active');
-      prev.classList.add('done');
-      prev.querySelector('.step-icon').textContent = '✓';
-    }
-    if (si < STEPS.length) {
-      document.getElementById(STEPS[si]).classList.add('active');
-      const spin = document.createElement('div');
-      spin.className = 'spin';
-      spin.style.marginLeft = 'auto';
-      document.getElementById(STEPS[si]).appendChild(spin);
-      document.getElementById('proc-bar').style.width = PCTS[si] + '%';
-      document.getElementById('proc-pct').textContent = PCTS[si] + '%';
-      si++;
-    }
-  }, 1800);
-
-  // Build prompt
-  const ext = uploadedFile.name.split('.').pop().toLowerCase();
-  const isPDF = ext === 'pdf';
-  const mimeMap = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', pdf:'application/pdf' };
-  const mime = mimeMap[ext] || 'application/pdf';
-
-  const contentBlocks = [
-    isPDF
-      ? { type:'document', source:{ type:'base64', media_type:mime, data:uploadedFileB64 } }
-      : { type:'image',    source:{ type:'base64', media_type:mime, data:uploadedFileB64 } },
-    { type:'text', text: buildExtractionPrompt() }
-  ];
-
-  try {
-    const resp = await fetch('/api/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: contentBlocks }]
-      })
-    });
-
-    clearInterval(stepTimer);
-
-    if (!resp.ok) throw new Error('API error ' + resp.status);
-
-    const data = await resp.json();
-    const rawText = data.content.map(c => c.text || '').join('');
-
-    // Parse JSON from response
-    const jsonMatch = rawText.match(/```json\s*([\s\S]+?)\s*```/) ||
-                      rawText.match(/(\{[\s\S]+\})/);
-    if (!jsonMatch) throw new Error('Could not parse extraction result');
-
-    const result = JSON.parse(jsonMatch[1]);
-
-    // Finish progress
-    STEPS.forEach((id, i) => {
-      const el = document.getElementById(id);
-      el.classList.remove('active');
-      el.classList.add('done');
-      const icons = el.querySelectorAll('.spin');
-      icons.forEach(s => s.remove());
-      el.querySelector('.step-icon').textContent = '✓';
-    });
-    document.getElementById('proc-bar').style.width = '100%';
-    document.getElementById('proc-pct').textContent = '100%';
-
-    setTimeout(() => {
-      buildReport(result);
-      showPage('report');
-    }, 600);
-
-  } catch(err) {
-    clearInterval(stepTimer);
-    console.error(err);
-    showToast('Analysis failed: ' + err.message, 'err');
-    // Fall back to demo data
-    setTimeout(() => {
-      buildReport(getDemoData());
-      showPage('report');
-    }, 800);
-  }
-}
-
-function buildExtractionPrompt() {
-  return `You are an expert Singapore construction document analyst specialising in NParks / LTA tree felling drawings. Analyse this tree affected plan and extract ALL tree data.
-
-Extract every tree record from every table on every sheet. Return ONLY valid JSON in this exact structure:
-
-\`\`\`json
-{
-  "projectName": "project name from drawing title block",
-  "drawingRef": "drawing reference number e.g. L/RC216/RR/WSCL/0014",
-  "authority": "LTA or NParks or BCA",
-  "sheets": [
-    {
-      "sheetNo": "e.g. LRC216/RR/WSCL/0001",
-      "removeCount": 105,
-      "retainCount": 181
-    }
-  ],
-  "trees": [
-    {
-      "no": "E4807",
-      "girth": 0.4,
-      "height": 4.0,
-      "species": "Indian Mango",
-      "sheet": "0001",
-      "flags": []
-    }
-  ],
-  "dataIssues": [
-    "Duplicate tree numbers: E4948, E4949 appear twice",
-    "Missing girth/height: E4583, E4585",
-    "Blank species: E7887"
-  ],
-  "totalRemove": 500,
-  "totalRetain": 200
-}
-\`\`\`
-
-CRITICAL RULES:
-- Extract EVERY tree from EVERY table — do not truncate
-- For girth/height = "-" or blank → use null
-- For "Cluster" girth → use -1 (special flag)
-- Detect duplicates (same tree number appearing more than once)
-- Detect missing data (null girth or null height or blank species)
-- Flag trees with girth > 3.0m as potential Heritage Trees in their flags array: ["heritage_candidate"]
-- Flag trees with girth > 1.0m in flags array: ["protected"]
-- Flag high conservation species (Rain Tree, Angsana, Tembusu, Senegal Mahogany) in flags: ["high_conservation"]
-- Flag invasive species (African Tulip Tree, Taiwan Acacia) in flags: ["invasive"]
-- Flag duplicates with: ["duplicate"]
-- Flag missing data with: ["missing_data"]
-
-Return ONLY the JSON object. No preamble, no explanation.`;
-}
-
-// ══════════════════════════════════════════════════════════
-//  BUILD REPORT FROM PARSED DATA
-// ══════════════════════════════════════════════════════════
-function buildReport(data) {
-  allTrees = data.trees || [];
-  filteredTrees = [...allTrees];
-
-  // Set header
-  document.getElementById('r-title').textContent = data.projectName || 'Tree Affected Plan';
-  document.getElementById('r-ref').innerHTML =
-    'Drawing Ref: ' + (data.drawingRef || '—') + ' · Generated <span id="r-date">' +
-    new Date().toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) + '</span>';
-  document.getElementById('step-indicator').textContent = 'Step 3 of 3 — Report';
-
-  // Compute stats
-  const totalTrees = allTrees.length;
-  const totalRemove = data.totalRemove || allTrees.filter(t => !t.flags?.includes('retained')).length;
-  const totalRetain = data.totalRetain || 0;
-  const flagged = allTrees.filter(t => t.flags && t.flags.length > 0).length;
-  const heritage = allTrees.filter(t => t.flags?.includes('heritage_candidate')).length;
-  const protected_ = allTrees.filter(t => t.flags?.includes('protected')).length;
-
-  // Stats row
-  const statsData = [
-    { val: totalTrees, lbl: 'Total trees\nextracted', color: '#e8c027' },
-    { val: totalRemove, lbl: 'Trees to be\nremoved', color: '#d95f2b' },
-    { val: totalRetain, lbl: 'Trees to be\nretained', color: '#2a7a47' },
-    { val: protected_, lbl: 'Protected trees\n(girth >1m)', color: '#1a5fa0' },
-    { val: heritage, lbl: 'Heritage\ncandidates', color: '#7c3aed' },
-    { val: flagged, lbl: 'Records\nflagged', color: '#c97a12' },
-  ];
-  document.getElementById('r-stats').innerHTML = statsData.map(s =>
-    `<div class="rh-stat">
-      <div class="rh-stat-val" style="color:${s.color}">${s.val}</div>
-      <div class="rh-stat-lbl">${s.lbl}</div>
-    </div>`
-  ).join('');
-
-  // Flags
-  const issues = data.dataIssues || [];
-  const flagsList = document.getElementById('flags-list');
-  if (issues.length === 0) {
-    document.getElementById('flags-panel').style.display = 'none';
-  } else {
-    flagsList.innerHTML = issues.map(i =>
-      `<div class="flag-item">${i}</div>`).join('');
-  }
-
-  // Girth bands
-  const gb = { S: 0, M: 0, L: 0, XL: 0, cluster: 0, unknown: 0 };
-  allTrees.forEach(t => {
-    if (t.girth === -1) gb.cluster++;
-    else if (t.girth === null) gb.unknown++;
-    else if (t.girth < 0.5) gb.S++;
-    else if (t.girth < 1.0) gb.M++;
-    else if (t.girth < 2.0) gb.L++;
-    else gb.XL++;
-  });
-
-  // Replacement counts
-  const replS  = gb.S  * 1;
-  const replM  = gb.M  * 2;
-  const replL  = gb.L  * 3;
-  const replXL = gb.XL * 5;
-
-  document.getElementById('girth-grid').innerHTML = `
-    <div class="gb-card gb-s">
-      <div class="gb-band">Small · &lt;0.5m girth</div>
-      <div class="gb-count">${gb.S}</div>
-      <div class="gb-desc">1 replacement tree each<br>Subtotal: ${replS} replacement trees</div>
-      <span class="gb-flag gf-normal">Standard approval</span>
-    </div>
-    <div class="gb-card gb-m">
-      <div class="gb-band">Medium · 0.5–1.0m girth</div>
-      <div class="gb-count">${gb.M}</div>
-      <div class="gb-desc">2 replacement trees each<br>Subtotal: ${replM} replacement trees</div>
-      <span class="gb-flag gf-warn">NParks approval required</span>
-    </div>
-    <div class="gb-card gb-l">
-      <div class="gb-band">Large · 1.0–2.0m girth</div>
-      <div class="gb-count">${gb.L}</div>
-      <div class="gb-desc">3 replacement trees each<br>Subtotal: ${replL} replacement trees</div>
-      <span class="gb-flag gf-crit">Protected · Written approval</span>
-    </div>
-    <div class="gb-card gb-xl">
-      <div class="gb-band">Very large · &gt;2.0m girth</div>
-      <div class="gb-count">${gb.XL}</div>
-      <div class="gb-desc">5 replacement trees each<br>Subtotal: ${replXL} replacement trees</div>
-      <span class="gb-flag gf-crit">Heritage candidate · NParks review</span>
-    </div>
-  `;
-
-  // Species breakdown
-  const speciesCounts = {};
-  allTrees.forEach(t => {
-    if (t.species) speciesCounts[t.species] = (speciesCounts[t.species] || 0) + 1;
-  });
-  const sorted = Object.entries(speciesCounts).sort((a,b) => b[1] - a[1]);
-  const maxCount = sorted[0]?.[1] || 1;
-
-  const top15 = sorted.slice(0, 15);
-  const rest  = sorted.slice(15);
-
-  const speciesBarColor = (name) => {
-    if (['Rain Tree','Angsana','Tembusu','Senegal Mahogany'].includes(name)) return '#e8c027';
-    if (['African Tulip Tree','Taiwan Acacia'].includes(name)) return '#c0392b';
-    return '#363632';
-  };
-
-  document.getElementById('species-grid').innerHTML = `
-    <div class="species-panel">
-      <div class="sp-head"><div class="sp-title">By species (top 15)</div><div class="sp-count">${Object.keys(speciesCounts).length} species total</div></div>
-      <div class="sp-body">
-        ${top15.map(([name, count]) => `
-          <div class="sp-row">
-            <div class="sp-name">${name}</div>
-            <div class="sp-bar-wrap"><div class="sp-bar" style="width:${(count/maxCount*100).toFixed(0)}%;background:${speciesBarColor(name)}"></div></div>
-            <div class="sp-n">${count}</div>
-          </div>`).join('')}
-      </div>
-    </div>
-    <div class="species-panel">
-      <div class="sp-head"><div class="sp-title">Conservation value</div><div class="sp-count">NParks classification</div></div>
-      <div class="sp-body">
-        <div class="sp-row" style="margin-bottom:8px">
-          <div class="sp-name" style="color:#e8c027;font-weight:600">⬛ High conservation</div>
-          <div class="sp-bar-wrap"><div class="sp-bar" style="width:100%;background:#e8c027"></div></div>
-          <div class="sp-n" style="color:#e8c027">${allTrees.filter(t=>t.flags?.includes('high_conservation')).length}</div>
-        </div>
-        <div class="sp-row" style="margin-bottom:8px">
-          <div class="sp-name" style="color:#1a5fa0;font-weight:600">⬛ Protected (girth &gt;1m)</div>
-          <div class="sp-bar-wrap"><div class="sp-bar" style="width:${(protected_/totalTrees*100).toFixed(0)}%;background:#1a5fa0"></div></div>
-          <div class="sp-n" style="color:#93c5fd">${protected_}</div>
-        </div>
-        <div class="sp-row" style="margin-bottom:8px">
-          <div class="sp-name" style="color:#7c3aed;font-weight:600">⬛ Heritage candidates</div>
-          <div class="sp-bar-wrap"><div class="sp-bar" style="width:${(heritage/totalTrees*100).toFixed(0)}%;background:#7c3aed"></div></div>
-          <div class="sp-n" style="color:#c4b5fd">${heritage}</div>
-        </div>
-        <div class="sp-row" style="margin-bottom:8px">
-          <div class="sp-name" style="color:#c0392b;font-weight:600">⬛ Invasive species</div>
-          <div class="sp-bar-wrap"><div class="sp-bar" style="width:${(allTrees.filter(t=>t.flags?.includes('invasive')).length/totalTrees*100).toFixed(0)}%;background:#c0392b"></div></div>
-          <div class="sp-n" style="color:#e07070">${allTrees.filter(t=>t.flags?.includes('invasive')).length}</div>
-        </div>
-        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--g7)">
-          <div class="sp-row"><div class="sp-name" style="font-weight:600;color:var(--paper)">Total replacement trees required</div></div>
-          <div style="font-size:26px;font-weight:800;color:var(--yellow);letter-spacing:-.02em;margin-top:4px">${replS + replM + replL + replXL} trees</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.06em;margin-top:4px">INDICATIVE — CONFIRM WITH NPARKS</div>
-        </div>
-        ${rest.length > 0 ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--g7);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);letter-spacing:.04em">+${rest.length} other species: ${rest.slice(0,5).map(([n])=>n).join(', ')}${rest.length > 5 ? '...' : ''}</div>` : ''}
-      </div>
-    </div>
-  `;
-
-  // BQ Table
-  buildBQ(gb, totalTrees, totalRemove);
-
-  // Register
-  renderRegister();
-}
-
-// ══════════════════════════════════════════════════════════
-//  BILL OF QUANTITIES
-// ══════════════════════════════════════════════════════════
-function buildBQ(gb, total, remove) {
-  // Rate ranges (midpoints for estimate)
-  const RATES = {
-    fell_s:   450,   // <5m
-    fell_m:   900,   // 5-10m
-    fell_l:   2500,  // 10-20m crane
-    fell_xl:  4000,  // >20m crane
-    stump_s:  200,
-    stump_m:  300,
-    stump_l:  400,
-    stump_xl: 500,
-    root_cut: 120,   // per lin.m
-    repl_45l: 550,   // 45L nursery stock
-    repl_100l:2000,  // 100L+ for large trees
-    arborist: 1200,  // per day
-    nparks:   500,   // admin per submission
-  };
-
-  // Estimated height distributions
-  const smallTrees  = gb.S;
-  const medTrees    = gb.M;
-  const largeTrees  = gb.L;
-  const xlTrees     = gb.XL;
-
-  const fell_small = Math.round(smallTrees * RATES.fell_s);
-  const fell_med   = Math.round(medTrees   * RATES.fell_m);
-  const fell_large = Math.round(largeTrees * RATES.fell_l);
-  const fell_xl    = Math.round(xlTrees    * RATES.fell_xl);
-  const fellTotal  = fell_small + fell_med + fell_large + fell_xl;
-
-  const stump_s = Math.round(smallTrees * RATES.stump_s);
-  const stump_m = Math.round(medTrees   * RATES.stump_m);
-  const stump_l = Math.round(largeTrees * RATES.stump_l);
-  const stump_xl= Math.round(xlTrees    * RATES.stump_xl);
-  const stumpTotal = stump_s + stump_m + stump_l + stump_xl;
-
-  const rootTotal  = Math.round(remove * 3 * RATES.root_cut); // avg 3m per tree
-  const replTotal  = Math.round((gb.S*1 + gb.M*2)*RATES.repl_45l + (gb.L*3 + gb.XL*5)*RATES.repl_100l);
-  const arboristTotal = Math.round(Math.ceil(remove / 50) * RATES.arborist); // 1 arborist day per 50 trees
-  const adminTotal = Math.round(Math.ceil(remove / 100) * RATES.nparks); // 1 submission per 100 trees
-
-  const grandTotal = fellTotal + stumpTotal + rootTotal + replTotal + arboristTotal + adminTotal;
-
-  const $ = n => 'S$' + n.toLocaleString();
-  const table = document.getElementById('bq-table');
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th style="width:80px">Item</th>
-        <th>Description</th>
-        <th style="width:70px;text-align:right">Qty</th>
-        <th style="width:60px;text-align:center">Unit</th>
-        <th style="width:100px;text-align:right">Rate (S$)</th>
-        <th style="width:110px;text-align:right">Amount (S$)</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr class="bq-section-head"><td colspan="6">A — Tree Felling & Sectional Dismantling</td></tr>
-      <tr>
-        <td class="bq-item-code">A.1</td>
-        <td class="bq-item-desc"><strong>Tree felling — small trees (height &lt;5m)</strong><small>Girth &lt;0.5m · Cut flush to ground · Debris removal included</small></td>
-        <td class="bq-qty">${smallTrees}</td><td class="bq-unit">tree</td>
-        <td class="bq-rate">$300–$600</td>
-        <td class="bq-amt">${$(fell_small)}</td>
-      </tr>
-      <tr>
-        <td class="bq-item-code">A.2</td>
-        <td class="bq-item-desc"><strong>Tree felling — medium trees (height 5–10m)</strong><small>Girth 0.5–1.0m · Sectional dismantling · Climber required</small></td>
-        <td class="bq-qty">${medTrees}</td><td class="bq-unit">tree</td>
-        <td class="bq-rate">$600–$1,500</td>
-        <td class="bq-amt">${$(fell_med)}</td>
-      </tr>
-      <tr>
-        <td class="bq-item-code">A.3</td>
-        <td class="bq-item-desc"><strong>Tree felling — large trees (height 10–20m)</strong><small>Girth 1.0–2.0m · Crane or climber · NParks approval required</small></td>
-        <td class="bq-qty">${largeTrees}</td><td class="bq-unit">tree</td>
-        <td class="bq-rate">$1,500–$4,000</td>
-        <td class="bq-amt">${$(fell_large)}</td>
-      </tr>
-      <tr>
-        <td class="bq-item-code">A.4</td>
-        <td class="bq-item-desc"><strong>Tree felling — very large trees (height &gt;20m)</strong><small>Girth &gt;2.0m · Heavy crane · Heritage candidate — NParks discretion</small></td>
-        <td class="bq-qty">${xlTrees}</td><td class="bq-unit">tree</td>
-        <td class="bq-rate">$2,000–$5,000</td>
-        <td class="bq-amt">${$(fell_xl)}</td>
-      </tr>
-      <tr class="bq-subtotal">
-        <td colspan="5" style="text-align:right;font-weight:700;color:var(--g3);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Section A subtotal</td>
-        <td class="bq-amt">${$(fellTotal)}</td>
-      </tr>
-
-      <tr class="bq-section-head"><td colspan="6">B — Stump Grinding</td></tr>
-      <tr>
-        <td class="bq-item-code">B.1</td>
-        <td class="bq-item-desc"><strong>Stump grinding — small & medium trees</strong><small>Ground to 150–200mm below finished grade</small></td>
-        <td class="bq-qty">${smallTrees + medTrees}</td><td class="bq-unit">stump</td>
-        <td class="bq-rate">$150–$350</td>
-        <td class="bq-amt">${$(stump_s + stump_m)}</td>
-      </tr>
-      <tr>
-        <td class="bq-item-code">B.2</td>
-        <td class="bq-item-desc"><strong>Stump grinding — large & very large trees</strong><small>Larger diameter · Extended grinding depth</small></td>
-        <td class="bq-qty">${largeTrees + xlTrees}</td><td class="bq-unit">stump</td>
-        <td class="bq-rate">$350–$500</td>
-        <td class="bq-amt">${$(stump_l + stump_xl)}</td>
-      </tr>
-      <tr class="bq-subtotal">
-        <td colspan="5" style="text-align:right;font-weight:700;color:var(--g3);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Section B subtotal</td>
-        <td class="bq-amt">${$(stumpTotal)}</td>
-      </tr>
-
-      <tr class="bq-section-head"><td colspan="6">C — Root Cutting & Protection</td></tr>
-      <tr>
-        <td class="bq-item-code">C.1</td>
-        <td class="bq-item-desc"><strong>Root cutting at construction boundary</strong><small>Clean severance cut · Per linear metre of root zone boundary</small></td>
-        <td class="bq-qty">${remove * 3}</td><td class="bq-unit">l.m</td>
-        <td class="bq-rate">$80–$150</td>
-        <td class="bq-amt">${$(rootTotal)}</td>
-      </tr>
-      <tr class="bq-subtotal">
-        <td colspan="5" style="text-align:right;font-weight:700;color:var(--g3);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Section C subtotal</td>
-        <td class="bq-amt">${$(rootTotal)}</td>
-      </tr>
-
-      <tr class="bq-section-head"><td colspan="6">D — NParks Replacement Planting</td></tr>
-      <tr>
-        <td class="bq-item-code">D.1</td>
-        <td class="bq-item-desc"><strong>Replacement trees — 45L nursery stock</strong><small>For small & medium trees removed · 1–2 replacements per tree felled</small></td>
-        <td class="bq-qty">${gb.S*1 + gb.M*2}</td><td class="bq-unit">tree</td>
-        <td class="bq-rate">$300–$800</td>
-        <td class="bq-amt">${$(Math.round((gb.S*1 + gb.M*2)*RATES.repl_45l))}</td>
-      </tr>
-      <tr>
-        <td class="bq-item-code">D.2</td>
-        <td class="bq-item-desc"><strong>Replacement trees — 100L+ advanced nursery stock</strong><small>For large & very large trees removed · 3–5 replacements per tree felled</small></td>
-        <td class="bq-qty">${gb.L*3 + gb.XL*5}</td><td class="bq-unit">tree</td>
-        <td class="bq-rate">$1,500–$3,000</td>
-        <td class="bq-amt">${$(Math.round((gb.L*3 + gb.XL*5)*RATES.repl_100l))}</td>
-      </tr>
-      <tr class="bq-subtotal">
-        <td colspan="5" style="text-align:right;font-weight:700;color:var(--g3);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Section D subtotal</td>
-        <td class="bq-amt">${$(replTotal)}</td>
-      </tr>
-
-      <tr class="bq-section-head"><td colspan="6">E — Professional Services</td></tr>
-      <tr>
-        <td class="bq-item-code">E.1</td>
-        <td class="bq-item-desc"><strong>Certified Arborist supervision</strong><small>NParks requires certified arborist on-site during felling of protected trees</small></td>
-        <td class="bq-qty">${Math.ceil(remove / 50)}</td><td class="bq-unit">day</td>
-        <td class="bq-rate">$1,000–$1,500</td>
-        <td class="bq-amt">${$(arboristTotal)}</td>
-      </tr>
-      <tr>
-        <td class="bq-item-code">E.2</td>
-        <td class="bq-item-desc"><strong>NParks permit application & administration</strong><small>Per submission batch · QP submission via CORENET X</small></td>
-        <td class="bq-qty">${Math.ceil(remove / 100)}</td><td class="bq-unit">sub</td>
-        <td class="bq-rate">$300–$800</td>
-        <td class="bq-amt">${$(adminTotal)}</td>
-      </tr>
-      <tr class="bq-subtotal">
-        <td colspan="5" style="text-align:right;font-weight:700;color:var(--g3);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Section E subtotal</td>
-        <td class="bq-amt">${$(arboristTotal + adminTotal)}</td>
-      </tr>
-
-      <tr class="bq-total">
-        <td colspan="5" style="text-align:right;font-weight:800;color:var(--yellow);font-size:14px;letter-spacing:-.01em">TOTAL INDICATIVE ESTIMATE (EXCL. GST)</td>
-        <td class="bq-amt">${$(grandTotal)}</td>
-      </tr>
-    </tbody>
-  `;
-}
-
-// ══════════════════════════════════════════════════════════
-//  TREE REGISTER
-// ══════════════════════════════════════════════════════════
-function girthBand(g) {
-  if (g === -1)  return { code:'CL',  label:'Cluster', cls:'gp-m' };
-  if (g === null)return { code:'?',   label:'Unknown',  cls:'gp-s' };
-  if (g < 0.5)   return { code:'S',   label:'Small',    cls:'gp-s' };
-  if (g < 1.0)   return { code:'M',   label:'Medium',   cls:'gp-m' };
-  if (g < 2.0)   return { code:'L',   label:'Large',    cls:'gp-l' };
-  return           { code:'XL',  label:'Very Large',cls:'gp-xl' };
-}
-
-function renderRegister() {
-  document.getElementById('reg-count').textContent =
-    filteredTrees.length + ' of ' + allTrees.length + ' records';
-
-  const tbody = document.getElementById('reg-tbody');
-  if (!filteredTrees.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--g5);font-family:JetBrains Mono,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase">No records match filter</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = filteredTrees.slice(0, 500).map(t => {
-    const gb = girthBand(t.girth);
-    const flags = (t.flags || []);
-    const flagHtml = flags.map(f => {
-      const map = {
-        duplicate:        { cls:'fp-dup',  label:'DUP'  },
-        missing_data:     { cls:'fp-miss', label:'MISSING' },
-        protected:        { cls:'fp-prot', label:'PROTECTED' },
-        heritage_candidate:{ cls:'fp-her', label:'HERITAGE?' },
-        high_conservation:{ cls:'fp-cons', label:'HIGH CONS.' },
-        invasive:         { cls:'fp-miss', label:'INVASIVE' },
-      };
-      const m = map[f];
-      return m ? `<span class="flag-pill ${m.cls}">${m.label}</span>` : '';
-    }).join('');
-
-    return `<tr>
-      <td class="tree-num">${t.no || '—'}</td>
-      <td class="tree-girth">${t.girth === null ? '—' : t.girth === -1 ? 'Cluster' : t.girth.toFixed(2)}</td>
-      <td class="tree-h">${t.height === null ? '—' : t.height}</td>
-      <td class="tree-species">${t.species || '<em style="color:var(--g5)">Unknown</em>'}</td>
-      <td><span class="tree-girth-pill ${gb.cls}">${gb.code} · ${gb.label}</span></td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5)">${t.sheet || '—'}</td>
-      <td>${flagHtml || '<span style="color:var(--g6);font-family:JetBrains Mono,monospace;font-size:10px">—</span>'}</td>
-    </tr>`;
-  }).join('');
-}
-
-function filterRegister(q) {
-  const query = (q || document.getElementById('reg-search').value || '').toLowerCase();
-  const girth  = document.getElementById('reg-filter-girth').value;
-  const flag   = document.getElementById('reg-filter-flag').value;
-
-  filteredTrees = allTrees.filter(t => {
-    const mq = !query ||
-      (t.no || '').toLowerCase().includes(query) ||
-      (t.species || '').toLowerCase().includes(query) ||
-      (t.sheet || '').toLowerCase().includes(query);
-    const mg = !girth || girthBand(t.girth).code === girth;
-    const mf = !flag ||
-      (flag === 'flag' && t.flags?.length > 0) ||
-      (flag === 'protected' && t.flags?.includes('protected')) ||
-      (flag === 'heritage' && t.flags?.includes('heritage_candidate'));
-    return mq && mg && mf;
-  });
-
-  if (sortCol) {
-    filteredTrees.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
-      if (typeof av === 'string') av = av.toLowerCase();
-      if (typeof bv === 'string') bv = bv.toLowerCase();
-      if (av === null) return 1;
-      if (bv === null) return -1;
-      return (av < bv ? -1 : av > bv ? 1 : 0) * sortDir;
-    });
-  }
-
-  renderRegister();
-  document.getElementById('reg-count').textContent =
-    filteredTrees.length + ' of ' + allTrees.length + ' records';
-}
-
-function sortRegister(col) {
-  if (sortCol === col) sortDir *= -1;
-  else { sortCol = col; sortDir = 1; }
-  filterRegister();
-}
-
-// ══════════════════════════════════════════════════════════
-//  EXPORT CSV
-// ══════════════════════════════════════════════════════════
-function exportCSV() {
-  const headers = ['Tree No.','Girth (m)','Height (m)','Species','Girth Band','Sheet','Flags'];
-  const rows = allTrees.map(t => [
-    t.no || '',
-    t.girth === null ? '' : t.girth === -1 ? 'Cluster' : t.girth,
-    t.height === null ? '' : t.height,
-    t.species || '',
-    girthBand(t.girth).label,
-    t.sheet || '',
-    (t.flags || []).join('; ')
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'canlah-tree-register.csv';
-  a.click();
-  showToast('Tree register exported as CSV ✓', 'ok');
-}
-
-// ══════════════════════════════════════════════════════════
-//  DEMO DATA (fallback if no API or for simulation)
-// ══════════════════════════════════════════════════════════
-function getDemoData() {
-  // Generate realistic data from the actual PDF we analysed
-  const speciesList = [
-    'Rain Tree','Rain Tree','Rain Tree','Rain Tree','Rain Tree',
-    'Angsana','Angsana','Angsana','Yellow Flame','Yellow Flame',
-    'Sea Hibiscus','Sea Hibiscus','Jati Laut','Jati Laut','Jati Laut',
-    'Banjo Fig','Kelat Oil','Fiddle-Leaf Fig','Common Pulai','Sea Gutta',
-    'Tembusu','Chengal Pasir','Carpentaria palm','Gelam','Beach Barringtonia',
-    'Fiddlewood','Indian Mango','Borneo ironwood','Jambu Air Laut','Senegal Mahogany',
-    'African Tulip Tree','Taiwan Acacia','Putat Kampong','Star Apple','Wild Chestnut',
-    'Mempat','Katong Laut','Foxtail Palm','Yellow Saraca','Sea Grape',
-  ];
-
-  const sheets = ['0001','0002','0003','0004','0005','0006','0007','0008','0009','0010','0011','0012','0013'];
-
-  const trees = [];
-  const prefixes = ['E4', 'E5', 'E6', 'E7', 'E8', 'E9'];
-  let counter = 4582;
-
-  // Generate ~450 realistic trees
-  for (let i = 0; i < 452; i++) {
-    const species = speciesList[Math.floor(Math.random() * speciesList.length)];
-    let girth, height;
-
-    // Rain trees are typically large
-    if (species === 'Rain Tree') {
-      girth = +(Math.random() * 2.8 + 0.3).toFixed(2);
-      height = Math.floor(Math.random() * 10 + 4);
-    } else if (species === 'Angsana') {
-      girth = +(Math.random() * 3.5 + 0.5).toFixed(2);
-      height = Math.floor(Math.random() * 10 + 8);
-    } else if (['Jati Laut','Kelat Oil','Sea Hibiscus'].includes(species)) {
-      girth = +(Math.random() * 0.35 + 0.1).toFixed(2);
-      height = Math.floor(Math.random() * 3 + 2);
-    } else if (species === 'Carpentaria palm') {
-      girth = +(Math.random() * 0.3 + 0.5).toFixed(2);
-      height = Math.floor(Math.random() * 2 + 6);
-    } else {
-      girth = +(Math.random() * 1.2 + 0.15).toFixed(2);
-      height = Math.floor(Math.random() * 8 + 3);
-    }
-
-    const treeNo = 'E' + (counter + i);
-    const flags = [];
-    if (girth >= 3.0 || (species === 'Angsana' && girth > 3)) flags.push('heritage_candidate', 'protected');
-    else if (girth >= 1.0) flags.push('protected');
-    if (['Rain Tree','Angsana','Tembusu','Senegal Mahogany'].includes(species)) flags.push('high_conservation');
-    if (['African Tulip Tree','Taiwan Acacia'].includes(species)) flags.push('invasive');
-
-    trees.push({
-      no: treeNo,
-      girth: girth,
-      height: height,
-      species: species,
-      sheet: sheets[Math.floor(Math.random() * sheets.length)],
-      flags: [...new Set(flags)]
-    });
-  }
-
-  // Add some known data issues from the actual PDF
-  const dupes = ['E4948','E4949','E4952','E4953','E4955'];
-  dupes.forEach(no => {
-    const original = trees.find(t => t.no === no);
-    if (original) {
-      trees.push({ ...original, flags: [...(original.flags||[]), 'duplicate'] });
-      original.flags = [...(original.flags||[]), 'duplicate'];
-    }
-  });
-
-  // Add missing data entries
-  ['E4583','E4585','E4801','E5100'].forEach((no, i) => {
-    trees.push({ no, girth: null, height: null, species: '', sheet: '0001', flags: ['missing_data'] });
-  });
-
-  // Inject the massive Rain Trees from actual data
-  const bigRainTrees = [
-    {no:'E7350',girth:3.0,height:12,species:'Rain Tree',sheet:'0002'},
-    {no:'E7351',girth:2.9,height:4,species:'Rain Tree',sheet:'0002'},
-    {no:'E7076',girth:2.5,height:12,species:'Rain Tree',sheet:'0002'},
-    {no:'E7077',girth:2.7,height:10,species:'Rain Tree',sheet:'0002'},
-    {no:'E7081',girth:2.2,height:12,species:'Rain Tree',sheet:'0002'},
-    {no:'E9673',girth:4.4,height:19,species:'Angsana',sheet:'0012'},
-    {no:'E9950',girth:4.4,height:18,species:'Angsana',sheet:'0013'},
-    {no:'E9953',girth:3.9,height:18,species:'Angsana',sheet:'0013'},
-    {no:'E7394',girth:3.2,height:16,species:'Senegal Mahogany',sheet:'0004'},
-    {no:'E7395',girth:3.1,height:16,species:'Senegal Mahogany',sheet:'0004'},
-    {no:'E7396',girth:3.6,height:16,species:'Senegal Mahogany',sheet:'0004'},
-    {no:'E7397',girth:3.6,height:16,species:'Senegal Mahogany',sheet:'0004'},
-  ];
-  bigRainTrees.forEach(t => {
-    const flags = ['protected'];
-    if (t.girth >= 3.0) flags.push('heritage_candidate');
-    if (['Rain Tree','Angsana','Tembusu','Senegal Mahogany'].includes(t.species)) flags.push('high_conservation');
-    trees.push({ ...t, flags });
-  });
-
-  const totalRemove = Math.round(trees.length * 0.65);
-  const totalRetain = trees.length - totalRemove;
-
-  return {
-    projectName: 'Construction of Road Viaduct Along Pioneer Road',
-    drawingRef: 'L/RC216/RR/WSCL/0014–0017 (Addendum 1, Oct 2025)',
-    authority: 'LTA',
-    sheets: sheets.map(s => ({ sheetNo: 'LRC216/RR/WSCL/00' + s, removeCount: 80, retainCount: 30 })),
-    trees,
-    dataIssues: [
-      'Duplicate tree numbers detected: E4948, E4949, E4952, E4953, E4955 — each appears twice across sheets',
-      'Missing girth & height data: E4583, E4585, E4801, E5100 — field verification required before NParks submission',
-      'Blank species entries detected: E7887 (girth 0.4m, height 6m) — verify species on site',
-      'Heritage tree candidates: E9673 (Angsana, 4.4m girth), E9950 (Angsana, 4.4m girth), E7396 (Senegal Mahogany, 3.6m girth) — NParks may not approve removal',
-      '"Cluster" entries for Macarthur Palm and Nibung Palm — assessed per clump, not per stem',
-      'Cross-sheet duplicates: E8887–E8894, E9958–E9981 appear on multiple sheets — excluded from totals'
-    ],
-    totalRemove,
-    totalRetain,
-  };
-}
-
-// ══════════════════════════════════════════════════════════
-//  NAVIGATION
-// ══════════════════════════════════════════════════════════
-function showPage(id) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  window.scrollTo(0, 0);
-  const labels = { upload:'Step 1 of 3 — Upload', processing:'Step 2 of 3 — Analysing', report:'Step 3 of 3 — Report' };
-  document.getElementById('step-indicator').textContent = labels[id] || '';
-}
-
-// ══════════════════════════════════════════════════════════
-//  TOAST
-// ══════════════════════════════════════════════════════════
-function showToast(msg, type) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (type ? ' ' + type : '');
-  clearTimeout(t._t);
-  t._t = setTimeout(() => { t.className = 'toast'; }, type === 'err' ? 5000 : 3500);
-}
-
-// ══════════════════════════════════════════════════════════
-//  ANIMATED DOTS
-// ══════════════════════════════════════════════════════════
-let dotCount = 0;
-setInterval(() => {
-  const el = document.getElementById('proc-dots');
-  if (el) { dotCount = (dotCount % 3) + 1; el.textContent = '.'.repeat(dotCount); }
-}, 500);
-
-// ══════════════════════════════════════════════════════════
-//  DEMO MODE — skip upload, use PDF we already have
-// ══════════════════════════════════════════════════════════
-// If you want to bypass upload and show demo immediately:
-// buildReport(getDemoData()); showPage('report');
 </script>
 </body>
 </html>
