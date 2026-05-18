@@ -674,15 +674,19 @@ async function startAnalysis() {
   const mime = mimeMap[ext] || 'application/pdf';
 
   try {
-    // STEP 1: Upload directly to Vercel Blob from browser (no size limit)
-    const {upload} = await import('https://unpkg.com/@vercel/blob@0.27.0/dist/index.browser.mjs');
-    const blob = await upload(uploadedFile.name, uploadedFile, {
-      access: 'public',
-      handleUploadUrl: '/api/process',
-      clientPayload: JSON.stringify({action: 'blob-upload'}),
+    // STEP 1: Upload file to Vercel Blob via server
+    const uploadResp = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Action': 'upload' },
+      body: JSON.stringify({ fileData: uploadedFileB64, fileName: uploadedFile.name, mimeType: mime })
     });
-    const blobUrl = blob.url;
-    if (!blobUrl) throw new Error('No blob URL returned');
+    if (!uploadResp.ok) {
+      const err = await uploadResp.json();
+      throw new Error('Upload failed: ' + (err.error || uploadResp.status));
+    }
+    const uploadData = await uploadResp.json();
+    const blobUrl = uploadData.blobUrl;
+    if (!blobUrl) throw new Error('No blob URL: ' + JSON.stringify(uploadData));
 
     // STEP 2: Analyse using blob URL
     const analyseResp = await fetch('/api/process', {
