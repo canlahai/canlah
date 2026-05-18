@@ -113,6 +113,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks — well under 4.5MB limit
 
 function showStatus(msg, type = 'info') {
   const el = $('status');
@@ -125,6 +126,25 @@ function setProgress(pct, label) {
   $('prog-fill').style.width = pct + '%';
   $('prog-label').textContent = label;
   $('progress-area').style.display = 'block';
+}
+
+async function api(body) {
+  const res = await fetch('/api/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// Convert ArrayBuffer chunk to base64
+function toBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }
 
 // Drag & drop
@@ -141,42 +161,44 @@ async function handleFile(file) {
   $('results').style.display = 'none';
   showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`, 'info');
 
-  // ── Step 1: send raw PDF bytes to Edge function (no size limit) ───────
-  setProgress(15, 'Uploading PDF…');
-  let fileId;
   try {
-    const res = await fetch('/api/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/pdf' },
-      body: file,
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
-    fileId = data.fileId;
-    showStatus('Upload done — AI is reading the report…', 'info');
-  } catch (err) {
-    showStatus('Upload failed: ' + err.message, 'error');
-    $('progress-area').style.display = 'none';
-    return;
-  }
+    // ── Step 1: start multipart upload ──────────────────────────────────
+    setProgress(5, 'Starting upload…');
+    const { key, uploadId } = await api({ action: 'upload-start', filename: file.name });
 
-  // ── Step 2: analyse ───────────────────────────────────────────────────
-  setProgress(60, 'AI analysing traffic data…');
-  try {
-    const res = await fetch('/api/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'analyse', fileId }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+    // ── Step 2: upload chunks ────────────────────────────────────────────
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const parts = [];
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = await file.slice(start, end).arrayBuffer();
+      const data = toBase64(chunk);
+
+      const pct = Math.round(10 + ((i / totalChunks) * 45));
+      setProgress(pct, `Uploading part ${i + 1} of ${totalChunks}…`);
+
+      const part = await api({ action: 'upload-part', key, uploadId, partNumber: i + 1, data });
+      parts.push(part);
+    }
+
+    // ── Step 3: complete upload → Anthropic ─────────────────────────────
+    setProgress(60, 'Finalising upload…');
+    const { fileId } = await api({ action: 'upload-complete', key, uploadId, parts });
+    showStatus('Upload done — AI is reading the report…', 'info');
+
+    // ── Step 4: analyse ──────────────────────────────────────────────────
+    setProgress(75, 'AI analysing traffic data…');
+    const { data } = await api({ action: 'analyse', fileId });
 
     setProgress(100, 'Done!');
     setTimeout(() => { $('progress-area').style.display = 'none'; }, 800);
     showStatus('Analysis complete!', 'ok');
-    renderResults(data.data);
+    renderResults(data);
+
   } catch (err) {
-    showStatus('Analysis failed: ' + err.message, 'error');
+    showStatus('Error: ' + err.message, 'error');
     $('progress-area').style.display = 'none';
   }
 }

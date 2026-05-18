@@ -1,31 +1,71 @@
 // api/process.js
-// Edge runtime — no 4.5MB body limit (Vercel's limit only applies to
-// the Node.js serverless runtime with bodyParser).
-//
 // Actions:
-//   POST with Content-Type: application/pdf   → upload to Anthropic, return { fileId }
-//   POST with Content-Type: application/json  → { action:'analyse', fileId } → { data }
+//   POST { action: 'upload-start', filename }
+//     → creates a multipart upload in Vercel Blob, returns { key, uploadId }
+//   POST { action: 'upload-part', key, uploadId, partNumber, data (base64) }
+//     → uploads one chunk, returns { etag, partNumber }
+//   POST { action: 'upload-complete', key, uploadId, parts, blobPathname }
+//     → completes the multipart upload, gets blob URL, uploads to Anthropic, returns { fileId }
+//   POST { action: 'analyse', fileId }
+//     → runs Claude analysis, returns { data }
 
-export const config = { runtime: 'edge' };
+import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
 
-export default async function handler(request) {
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const { action } = req.body || {};
+
+  // ── START MULTIPART ────────────────────────────────────────────────────────
+  if (action === 'upload-start') {
+    const { filename } = req.body;
+    try {
+      const { key, uploadId } = await createMultipartUpload(
+        `traffic-uploads/${filename}`,
+        { access: 'public', contentType: 'application/pdf' }
+      );
+      return res.status(200).json({ key, uploadId });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
 
-  const ct = request.headers.get('content-type') || '';
-
-  // ── UPLOAD: browser sends raw PDF bytes ──────────────────────────────────
-  if (ct.includes('application/pdf')) {
+  // ── UPLOAD PART ────────────────────────────────────────────────────────────
+  if (action === 'upload-part') {
+    const { key, uploadId, partNumber, data } = req.body;
     try {
-      const pdfBytes = await request.arrayBuffer();
+      // data is base64-encoded chunk from browser
+      const buffer = Buffer.from(data, 'base64');
+      const part = await uploadPart(key, buffer, {
+        access: 'public',
+        uploadId,
+        partNumber,
+        contentType: 'application/pdf',
+      });
+      return res.status(200).json(part);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── COMPLETE MULTIPART → upload to Anthropic ───────────────────────────────
+  if (action === 'upload-complete') {
+    const { key, uploadId, parts } = req.body;
+    try {
+      // Complete the Vercel Blob multipart upload → get a public URL
+      const blob = await completeMultipartUpload(key, parts, {
+        access: 'public',
+        uploadId,
+        contentType: 'application/pdf',
+      });
+
+      // Fetch the PDF from Blob and upload to Anthropic Files API
+      const pdfRes = await fetch(blob.url);
+      if (!pdfRes.ok) throw new Error(`Failed to fetch blob: ${pdfRes.status}`);
+      const pdfBytes = await pdfRes.arrayBuffer();
 
       const form = new FormData();
-      form.append(
-        'file',
-        new Blob([pdfBytes], { type: 'application/pdf' }),
-        'upload.pdf'
-      );
+      form.append('file', new Blob([pdfBytes], { type: 'application/pdf' }), 'upload.pdf');
 
       const upRes = await fetch('https://api.anthropic.com/v1/files', {
         method: 'POST',
@@ -37,42 +77,25 @@ export default async function handler(request) {
         body: form,
       });
 
-      if (!upRes.ok) {
-        const err = await upRes.text();
-        return new Response(JSON.stringify({ error: `Anthropic upload failed: ${err}` }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
+      if (!upRes.ok) throw new Error(`Anthropic upload failed: ${await upRes.text()}`);
       const upData = await upRes.json();
-      return new Response(JSON.stringify({ fileId: upData.id }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
+
+      // Clean up blob (optional, don't fail if this errors)
+      try {
+        const { del } = await import('@vercel/blob');
+        await del(blob.url);
+      } catch (_) {}
+
+      return res.status(200).json({ fileId: upData.id });
     } catch (err) {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(500).json({ error: err.message });
     }
   }
 
-  // ── ANALYSE: { action: 'analyse', fileId } ───────────────────────────────
-  if (ct.includes('application/json')) {
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
-    }
-
-    const { action, fileId } = body;
-    if (action !== 'analyse') {
-      return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400 });
-    }
-    if (!fileId) {
-      return new Response(JSON.stringify({ error: 'fileId required' }), { status: 400 });
-    }
+  // ── ANALYSE ────────────────────────────────────────────────────────────────
+  if (action === 'analyse') {
+    const { fileId } = req.body;
+    if (!fileId) return res.status(400).json({ error: 'fileId required' });
 
     try {
       const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -119,34 +142,15 @@ Use null for missing fields. Extract as many locations as possible.`
         }),
       });
 
-      if (!msgRes.ok) {
-        const err = await msgRes.text();
-        return new Response(JSON.stringify({ error: `Claude API error: ${err}` }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
+      if (!msgRes.ok) return res.status(500).json({ error: await msgRes.text() });
       const msgData = await msgRes.json();
-      const text = msgData.content
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('');
-
+      const text = msgData.content.filter(b => b.type === 'text').map(b => b.text).join('');
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-      return new Response(JSON.stringify({ data: parsed }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(200).json({ data: parsed });
     } catch (err) {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(500).json({ error: err.message });
     }
   }
 
-  return new Response(JSON.stringify({ error: 'Unsupported content-type' }), {
-    status: 400,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return res.status(400).json({ error: `Unknown action: ${action}` });
 }
