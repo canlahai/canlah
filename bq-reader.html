@@ -643,14 +643,13 @@ function formatBytes(b) {
 //  ANALYSIS — CALLS CLAUDE API
 // ══════════════════════════════════════════════════════════
 async function startAnalysis() {
-  if (!uploadedFileB64) { showToast('Please select a file first', 'err'); return; }
+  if (!uploadedFile) { showToast('Please select a file first', 'err'); return; }
   showPage('processing');
 
   const STEPS = ['step-parse','step-extract','step-dedup','step-classify','step-bq','step-report'];
   const PCTS  = [10, 30, 50, 65, 80, 95];
   let si = 0;
 
-  // Animate steps
   const stepTimer = setInterval(() => {
     if (si > 0) {
       const prev = document.getElementById(STEPS[si - 1]);
@@ -670,67 +669,71 @@ async function startAnalysis() {
     }
   }, 1800);
 
-  // Build prompt
-  const ext = uploadedFile.name.split('.').pop().toLowerCase();
-  const isPDF = ext === 'pdf';
-  const mimeMap = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', pdf:'application/pdf' };
-  const mime = mimeMap[ext] || 'application/pdf';
-
-  const contentBlocks = [
-    isPDF
-      ? { type:'document', source:{ type:'base64', media_type:mime, data:uploadedFileB64 } }
-      : { type:'image',    source:{ type:'base64', media_type:mime, data:uploadedFileB64 } },
-    { type:'text', text: buildExtractionPrompt() }
-  ];
-
   try {
-    const resp = await fetch('/api/process', {
+    // STEP 1: Get API key from server
+    const tokenResp = await fetch('/api/process', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: contentBlocks }]
-      })
+      headers: { 'Content-Type': 'application/json', 'X-Action': 'get-upload-url' },
+      body: JSON.stringify({})
     });
+    if (!tokenResp.ok) throw new Error('Auth failed ' + tokenResp.status);
+    const { apiKey } = await tokenResp.json();
 
+    // STEP 2: Upload file directly from browser to Anthropic Files API
+    const formData = new FormData();
+    formData.append('file', uploadedFile, uploadedFile.name);
+
+    const uploadResp = await fetch('https://api.anthropic.com/v1/files', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'files-api-2025-04-14',
+      },
+      body: formData,
+    });
+    if (!uploadResp.ok) {
+      const err = await uploadResp.json();
+      throw new Error('Upload failed: ' + (err.error?.message || uploadResp.status));
+    }
+    const uploadData = await uploadResp.json();
+    const fileId = uploadData.id;
+    if (!fileId) throw new Error('No file ID returned');
+
+    // STEP 3: Analyse using file_id via our Edge Function
+    const analyseResp = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Action': 'analyse' },
+      body: JSON.stringify({ fileId, prompt: buildExtractionPrompt() })
+    });
     clearInterval(stepTimer);
+    if (!analyseResp.ok) throw new Error('Analysis failed ' + analyseResp.status);
 
-    if (!resp.ok) throw new Error('API error ' + resp.status);
-
-    const data = await resp.json();
+    const data = await analyseResp.json();
     const rawText = data.content.map(c => c.text || '').join('');
-
-    // Parse JSON from response
-    const jsonMatch = rawText.match(/```json\s*([\s\S]+?)\s*```/) ||
-                      rawText.match(/(\{[\s\S]+\})/);
+    const jsonMatch = rawText.match(/```json\s*([\s\S]+?)\s*```/) || rawText.match(/(\{[\s\S]+\})/);
     if (!jsonMatch) throw new Error('Could not parse extraction result');
-
     const result = JSON.parse(jsonMatch[1]);
 
-    // Finish progress
-    STEPS.forEach((id, i) => {
+    STEPS.forEach(id => {
       const el = document.getElementById(id);
       el.classList.remove('active');
       el.classList.add('done');
-      const icons = el.querySelectorAll('.spin');
-      icons.forEach(s => s.remove());
+      el.querySelectorAll('.spin').forEach(s => s.remove());
       el.querySelector('.step-icon').textContent = '✓';
     });
     document.getElementById('proc-bar').style.width = '100%';
     document.getElementById('proc-pct').textContent = '100%';
 
-    setTimeout(() => {
-      buildReport(result);
-      showPage('report');
-    }, 600);
+    setTimeout(() => { buildReport(result); showPage('report'); }, 600);
 
   } catch(err) {
     clearInterval(stepTimer);
     console.error(err);
-    showToast('Analysis failed: ' + err.message, 'err');
-    // Fall back to demo data
     setTimeout(() => {
       buildReport(getDemoData());
       showPage('report');
+      showToast('Showing demo data — ' + err.message, 'wa');
     }, 800);
   }
 }
