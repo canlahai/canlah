@@ -20,13 +20,44 @@ export default async function handler(req, res) {
 
   const action = req.headers['x-action'] || 'analyse';
 
-  // ── ACTION: Analyse using file_id ──
+  // ── UPLOAD: receive base64 file, forward to Anthropic Files API ──
+  if (action === 'upload') {
+    try {
+      const { fileData, fileName, mimeType } = req.body;
+      if (!fileData) return res.status(400).json({ error: 'No file data' });
+
+      const binary = Buffer.from(fileData, 'base64');
+      const boundary = 'X' + Math.random().toString(36).slice(2);
+      const header = Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName || 'file.pdf'}"\r\nContent-Type: ${mimeType || 'application/pdf'}\r\n\r\n`
+      );
+      const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+      const body = Buffer.concat([header, binary, footer]);
+
+      const resp = await fetch('https://api.anthropic.com/v1/files', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'files-api-2025-04-14',
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+      });
+      const data = await resp.json();
+      return res.status(resp.status).json(data);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── ANALYSE: send file_id to Claude ──
   if (action === 'analyse') {
     try {
       const { fileId, prompt } = req.body;
-      if (!fileId) return res.status(400).json({ error: 'No file_id provided' });
+      if (!fileId) return res.status(400).json({ error: 'No fileId' });
 
-      const anthropicResp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,41 +77,12 @@ export default async function handler(req, res) {
           }],
         }),
       });
-
-      const data = await anthropicResp.json();
-      return res.status(anthropicResp.status).json(data);
+      const data = await resp.json();
+      return res.status(resp.status).json(data);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
   }
 
-  // ── ACTION: Get API key for direct browser upload ──
-  // Returns a short-lived upload token — browser uploads directly to Anthropic
-  if (action === 'get-upload-url') {
-    // Return the API key scoped only for file upload
-    // The browser will use this to POST directly to Anthropic Files API
-    return res.status(200).json({ apiKey });
-  }
-
-  // ── LEGACY fallback ──
-  try {
-    const body = req.body;
-    const anthropicResp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8000,
-        messages: body.messages,
-      }),
-    });
-    const data = await anthropicResp.json();
-    return res.status(anthropicResp.status).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+  return res.status(400).json({ error: 'Unknown action' });
 }
