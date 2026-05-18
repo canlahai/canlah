@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traffic Data Reader — CanLah.ai</title>
+  <script src="https://cdn.jsdelivr.net/npm/@vercel/blob@0.24.1/dist/umd/index.js"></script>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red:    #e63329;
+      --navy:   #1a2340;
+      --cream:  #fdf6ee;
+      --sand:   #f0e6d3;
+      --text:   #2c2c2c;
+      --muted:  #888;
+      --radius: 10px;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header a { color: #fff; text-decoration: none; opacity: .7; font-size: .9rem; }
+    header a:hover { opacity: 1; }
+    header h1 { font-size: 1.3rem; font-weight: 700; flex: 1; }
+    .badge {
+      background: var(--red);
+      color: #fff;
+      font-size: .7rem;
+      font-weight: 700;
+      padding: .2rem .5rem;
+      border-radius: 4px;
+      letter-spacing: .05em;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    /* ── Upload card ──────────────────────────────────────────────────── */
+    .upload-card {
+      background: #fff;
+      border: 2px dashed #d0c8be;
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .upload-card:hover, .upload-card.drag { border-color: var(--red); background: #fff5f5; }
+    .upload-card svg { display: block; margin: 0 auto 1rem; opacity: .4; }
+    .upload-card p { color: var(--muted); font-size: .95rem; margin-top: .4rem; }
+    .upload-card strong { font-size: 1.05rem; }
+    #file-input { display: none; }
+
+    /* ── Progress ─────────────────────────────────────────────────────── */
+    #progress-area { display: none; margin-top: 1.5rem; }
+    .progress-bar-wrap {
+      background: var(--sand);
+      border-radius: 99px;
+      height: 10px;
+      overflow: hidden;
+      margin: .5rem 0 .3rem;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--red);
+      width: 0%;
+      transition: width .3s;
+      border-radius: 99px;
+    }
+    .progress-label { font-size: .85rem; color: var(--muted); }
+
+    /* ── Status ───────────────────────────────────────────────────────── */
+    #status {
+      margin-top: 1rem;
+      padding: .8rem 1rem;
+      border-radius: var(--radius);
+      font-size: .9rem;
+      display: none;
+    }
+    #status.info  { background: #e8f0fe; color: #1a56a0; }
+    #status.error { background: #fde8e8; color: #b91c1c; }
+    #status.ok    { background: #e8fdf0; color: #166534; }
+
+    /* ── Results ──────────────────────────────────────────────────────── */
+    #results { margin-top: 2rem; display: none; }
+    #results h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: #fff;
+      border-radius: var(--radius);
+      padding: 1.1rem 1rem;
+      box-shadow: 0 1px 6px rgba(0,0,0,.07);
+    }
+    .stat-card .label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; margin-top: .2rem; color: var(--navy); }
+    .stat-card .sub   { font-size: .8rem; color: var(--muted); }
+
+    /* ── Location cards ───────────────────────────────────────────────── */
+    .location-card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: 0 1px 6px rgba(0,0,0,.07);
+      margin-bottom: 1.2rem;
+      overflow: hidden;
+    }
+    .location-header {
+      padding: .9rem 1.2rem;
+      background: var(--navy);
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+    .location-header h3 { font-size: 1rem; font-weight: 600; }
+    .location-header .meta { font-size: .8rem; opacity: .75; }
+    .location-body { padding: 1rem 1.2rem; }
+
+    /* Mini hourly bar chart */
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 60px;
+      margin: .5rem 0 .25rem;
+    }
+    .bar-chart .bar {
+      flex: 1;
+      background: var(--red);
+      opacity: .7;
+      border-radius: 2px 2px 0 0;
+      position: relative;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .bar-chart .bar:hover { opacity: 1; }
+    .bar-chart .bar .tip {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--navy);
+      color: #fff;
+      font-size: .7rem;
+      padding: .2rem .4rem;
+      border-radius: 4px;
+      white-space: nowrap;
+      margin-bottom: 4px;
+      z-index: 10;
+    }
+    .bar-chart .bar:hover .tip { display: block; }
+
+    .hour-labels {
+      display: flex;
+      gap: 3px;
+      font-size: .6rem;
+      color: var(--muted);
+    }
+    .hour-labels span { flex: 1; text-align: center; }
+
+    .loc-stats {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-top: .8rem;
+      font-size: .85rem;
+    }
+    .loc-stats div { color: var(--muted); }
+    .loc-stats strong { color: var(--text); }
+
+    /* ── JSON toggle ──────────────────────────────────────────────────── */
+    details { margin-top: 1.5rem; }
+    summary { cursor: pointer; font-size: .85rem; color: var(--muted); user-select: none; }
+    pre {
+      margin-top: .5rem;
+      background: var(--navy);
+      color: #c8f0d0;
+      padding: 1rem;
+      border-radius: var(--radius);
+      font-size: .75rem;
+      overflow-x: auto;
+      max-height: 400px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/">← CanLah.ai</a>
+  <h1>🚗 Traffic Data Reader</h1>
+  <span class="badge">BETA</span>
+</header>
+
+<main>
+  <!-- Upload zone -->
+  <div class="upload-card" id="drop-zone">
+    <input type="file" id="file-input" accept="application/pdf" />
+    <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>
+    </svg>
+    <strong>Drop a Traffic PDF here</strong>
+    <p>or click to browse — up to 20 MB</p>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-area">
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="prog-fill"></div>
+    </div>
+    <div class="progress-label" id="prog-label">Uploading…</div>
+  </div>
+
+  <!-- Status message -->
+  <div id="status"></div>
+
+  <!-- Results -->
+  <div id="results">
+    <h2>📊 Extracted Traffic Data</h2>
+    <div class="summary-grid" id="summary-grid"></div>
+    <div id="location-cards"></div>
+    <details>
+      <summary>View raw JSON</summary>
+      <pre id="raw-json"></pre>
+    </details>
+  </div>
+</main>
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function showStatus(msg, type = 'info') {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+}
+
+function setProgress(pct, label) {
+  $('prog-fill').style.width = pct + '%';
+  $('prog-label').textContent = label;
+  $('progress-area').style.display = 'block';
+}
+
+// ── Drag & drop ──────────────────────────────────────────────────────────────
+const dropZone = $('drop-zone');
+dropZone.addEventListener('click', () => $('file-input').click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+$('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+// ── Main upload → analyse flow ────────────────────────────────────────────────
+async function handleFile(file) {
+  if (file.type !== 'application/pdf') {
+    showStatus('Please upload a PDF file.', 'error');
+    return;
+  }
+
+  $('results').style.display = 'none';
+  showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`, 'info');
+
+  // ── Step 1: upload directly to Vercel Blob ──────────────────────────────
+  setProgress(10, 'Uploading PDF to secure storage…');
+
+  let blobUrl;
+  try {
+    // Use the @vercel/blob client upload (token exchange with our API route)
+    const result = await VercelBlob.upload(file.name, file, {
+      access: 'public',
+      handleUploadUrl: '/api/upload-token',
+      onUploadProgress: ({ percentage }) => {
+        setProgress(10 + Math.round(percentage * 0.5), `Uploading… ${percentage}%`);
+      },
+    });
+    blobUrl = result.url;
+    showStatus('Upload complete — sending to AI for analysis…', 'info');
+  } catch (err) {
+    showStatus('Upload failed: ' + err.message, 'error');
+    return;
+  }
+
+  // ── Step 2: tell the server to fetch blob → Anthropic Files API ──────────
+  setProgress(65, 'Registering with AI…');
+  let fileId;
+  try {
+    const res = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upload', blobUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+    fileId = data.fileId;
+  } catch (err) {
+    showStatus('Server upload step failed: ' + err.message, 'error');
+    return;
+  }
+
+  // ── Step 3: analyse ──────────────────────────────────────────────────────
+  setProgress(80, 'AI is reading the traffic report…');
+  try {
+    const res = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'analyse', fileId }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+
+    setProgress(100, 'Done!');
+    setTimeout(() => { $('progress-area').style.display = 'none'; }, 800);
+    showStatus('Analysis complete!', 'ok');
+    renderResults(data.data);
+  } catch (err) {
+    showStatus('Analysis failed: ' + err.message, 'error');
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderResults(d) {
+  const results = $('results');
+  results.style.display = 'block';
+
+  // Summary stats
+  const sg = $('summary-grid');
+  sg.innerHTML = '';
+  const stats = [
+    { label: 'Report Date',      value: d.reportDate || '—',          sub: '' },
+    { label: 'Locations',        value: d.summary?.totalLocations ?? d.locations?.length ?? '—', sub: 'monitoring points' },
+    { label: 'Total Vehicles',   value: fmt(d.summary?.totalVehicles), sub: 'counted' },
+    { label: 'Report',           value: '',                            sub: d.reportTitle || '—' },
+  ];
+  stats.forEach(s => {
+    sg.innerHTML += `
+      <div class="stat-card">
+        <div class="label">${s.label}</div>
+        <div class="value">${s.value}</div>
+        <div class="sub">${s.sub}</div>
+      </div>`;
+  });
+
+  // Location cards
+  const lc = $('location-cards');
+  lc.innerHTML = '';
+  (d.locations || []).forEach(loc => {
+    const hourly = loc.hourlyData || [];
+    const maxVol = Math.max(...hourly.map(h => h.volume || 0), 1);
+
+    const bars = hourly.map(h => {
+      const pct = Math.round(((h.volume || 0) / maxVol) * 100);
+      return `<div class="bar" style="height:${pct}%">
+        <div class="tip">${h.hour}: ${fmt(h.volume)}</div>
+      </div>`;
+    }).join('');
+
+    // Show every 4th hour label
+    const labels = hourly.map((h, i) =>
+      `<span>${i % 4 === 0 ? h.hour?.slice(0,5) : ''}</span>`
+    ).join('');
+
+    lc.innerHTML += `
+      <div class="location-card">
+        <div class="location-header">
+          <h3>${loc.locationName || loc.locationId || 'Location'}</h3>
+          <span class="meta">${[loc.roadName, loc.direction].filter(Boolean).join(' · ')}</span>
+        </div>
+        <div class="location-body">
+          <div class="bar-chart">${bars || '<em style="color:var(--muted);font-size:.8rem">No hourly data</em>'}</div>
+          ${hourly.length ? `<div class="hour-labels">${labels}</div>` : ''}
+          <div class="loc-stats">
+            <div>Daily total <strong>${fmt(loc.dailyTotal)}</strong></div>
+            ${loc.peakHour ? `<div>Peak <strong>${loc.peakHour} · ${fmt(loc.peakVolume)} veh</strong></div>` : ''}
+            ${loc.lanes ? `<div>Lanes <strong>${loc.lanes}</strong></div>` : ''}
+          </div>
+        </div>
+      </div>`;
+  });
+
+  // Raw JSON
+  $('raw-json').textContent = JSON.stringify(d, null, 2);
+}
+
+function fmt(n) {
+  if (n === null || n === undefined || n === '') return '—';
+  return Number(n).toLocaleString();
+}
+</script>
+</body>
+</html>

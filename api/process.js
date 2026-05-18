@@ -1,88 +1,183 @@
-export const config = {
-  maxDuration: 60,
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-};
+// api/process.js
+// Accepts either:
+//   { action: 'upload', blobUrl: '...' }   <- new blob URL path (no size limit)
+//   { action: 'analyse', fileId: '...' }   <- analyse a previously uploaded file
+//
+// The old base64 path is removed — all uploads now come via Vercel Blob.
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Action');
+import Anthropic from '@anthropic-ai/sdk';
 
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export const config = { runtime: 'edge' };
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const action = req.headers['x-action'] || 'analyse';
+export default async function handler(request) {
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
+  }
 
-  // UPLOAD: receive base64 file, forward to Anthropic Files API
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { action } = body;
+
+  // ── UPLOAD action ──────────────────────────────────────────────────────────
+  // Fetch the PDF from Blob storage and upload it to Anthropic Files API.
   if (action === 'upload') {
+    const { blobUrl } = body;
+    if (!blobUrl) {
+      return new Response(JSON.stringify({ error: 'blobUrl is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     try {
-      const { fileData, fileName, mimeType } = req.body;
-      if (!fileData) return res.status(400).json({ error: 'No file data' });
+      // Fetch the PDF from Vercel Blob (server-to-server, no size limit issues)
+      const pdfResponse = await fetch(blobUrl);
+      if (!pdfResponse.ok) {
+        throw new Error(`Failed to fetch blob: ${pdfResponse.status}`);
+      }
 
-      const binary = Buffer.from(fileData, 'base64');
-      const boundary = 'X' + Math.random().toString(36).slice(2);
-      const header = Buffer.from(
-        '--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + (fileName || 'file.pdf') + '"\r\nContent-Type: ' + (mimeType || 'application/pdf') + '\r\n\r\n'
-      );
-      const footer = Buffer.from('\r\n--' + boundary + '--\r\n');
-      const body = Buffer.concat([header, binary, footer]);
+      const pdfBuffer = await pdfResponse.arrayBuffer();
+      const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
 
-      const resp = await fetch('https://api.anthropic.com/v1/files', {
+      // Upload to Anthropic Files API
+      const formData = new FormData();
+      formData.append('file', pdfBlob, 'traffic-report.pdf');
+
+      const uploadResponse = await fetch('https://api.anthropic.com/v1/files', {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
           'anthropic-version': '2023-06-01',
           'anthropic-beta': 'files-api-2025-04-14',
-          'Content-Type': 'multipart/form-data; boundary=' + boundary,
         },
-        body,
+        body: formData,
       });
-      const data = await resp.json();
-      return res.status(resp.status).json(data);
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
+
+      if (!uploadResponse.ok) {
+        const err = await uploadResponse.text();
+        throw new Error(`Anthropic upload failed: ${err}`);
+      }
+
+      const uploadData = await uploadResponse.json();
+
+      return new Response(JSON.stringify({ fileId: uploadData.id }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   }
 
-  // ANALYSE: send file_id to Claude
+  // ── ANALYSE action ─────────────────────────────────────────────────────────
+  // Use a previously uploaded Anthropic file ID to extract traffic data.
   if (action === 'analyse') {
-    try {
-      const { fileId, prompt } = req.body;
-      if (!fileId) return res.status(400).json({ error: 'No fileId' });
+    const { fileId } = body;
+    if (!fileId) {
+      return new Response(JSON.stringify({ error: 'fileId is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'files-api-2025-04-14',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 8000,
-          messages: [{
+    try {
+      const message = await anthropic.beta.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [
+          {
             role: 'user',
             content: [
-              { type: 'document', source: { type: 'file', file_id: fileId } },
-              { type: 'text', text: prompt },
+              {
+                type: 'document',
+                source: {
+                  type: 'file',
+                  file_id: fileId,
+                },
+              },
+              {
+                type: 'text',
+                text: `You are analysing a Singapore traffic data report (PDF).
+Extract ALL traffic count data you can find and return it as a single JSON object.
+
+Return ONLY valid JSON, no markdown, no explanation. Structure:
+
+{
+  "reportTitle": "string",
+  "reportDate": "string",
+  "locations": [
+    {
+      "locationId": "string",
+      "locationName": "string",
+      "roadName": "string",
+      "direction": "string",
+      "lanes": number,
+      "hourlyData": [
+        {
+          "hour": "HH:MM",
+          "volume": number,
+          "speed": number | null,
+          "occupancy": number | null
+        }
+      ],
+      "dailyTotal": number,
+      "peakHour": "HH:MM",
+      "peakVolume": number
+    }
+  ],
+  "summary": {
+    "totalLocations": number,
+    "totalVehicles": number,
+    "dataDate": "string",
+    "notes": "string"
+  }
+}
+
+If any field is not available in the document, use null. Extract as many locations as possible.`,
+              },
             ],
-          }],
-        }),
+          },
+        ],
+        betas: ['files-api-2025-04-14'],
       });
-      const data = await resp.json();
-      return res.status(resp.status).json(data);
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
+
+      const responseText = message.content
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join('');
+
+      // Strip any accidental markdown fences
+      const clean = responseText.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+
+      return new Response(JSON.stringify({ data: parsed }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ error: error.message, raw: error.toString() }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
     }
   }
 
-  return res.status(400).json({ error: 'Unknown action' });
+  return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
