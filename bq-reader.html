@@ -209,6 +209,17 @@ input,select,textarea{font-family:'Syne',sans-serif}
 .act-btn:hover{border-color:var(--yellow);color:var(--yellow)}
 .act-btn.primary{background:var(--yellow);border-color:var(--yellow);color:var(--ink)}
 .act-btn.primary:hover{background:var(--yellow-dk)}
+.saved-reports-panel{
+  background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);
+  padding:1rem 1.25rem;margin:1rem 0 1.5rem;box-shadow:0 10px 30px rgba(0,0,0,.18);
+}
+.sr-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:1rem;font-weight:700;color:var(--paper)}
+.sr-list{display:flex;flex-direction:column;gap:12px}
+.sr-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--g7)}
+.sr-item:first-child{border-top:none}
+.sr-title{font-weight:700;color:var(--paper);font-size:14px}
+.sr-sub{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g5);margin-top:4px}
+.sr-loading,.sr-empty,.sr-error{font-size:13px;color:var(--g4);padding:10px 0}
 .rh-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--g7)}
 .rh-stat{background:var(--slate);padding:1rem 1.25rem;text-align:center}
 .rh-stat-val{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1;margin-bottom:4px}
@@ -498,8 +509,18 @@ input,select,textarea{font-family:'Syne',sans-serif}
         <div class="rh-actions">
           <button class="act-btn" onclick="window.print()">Print</button>
           <button class="act-btn" onclick="exportCSV()">Export CSV</button>
+          <button class="act-btn" onclick="exportJSON()">Export JSON</button>
+          <button class="act-btn" onclick="toggleSavedReports()">Saved Reports</button>
+          <button class="act-btn" onclick="saveReport()">Save Report</button>
           <button class="act-btn primary" onclick="showPage('upload')">New Drawing</button>
         </div>
+      </div>
+      <div class="saved-reports-panel" id="saved-reports-panel" style="display:none">
+        <div class="sr-header">
+          <div>Saved reports</div>
+          <button class="act-btn" onclick="toggleSavedReports()">Close</button>
+        </div>
+        <div id="saved-reports-list" class="sr-list"></div>
       </div>
       <div class="rh-stats" id="r-stats"></div>
     </div>
@@ -584,9 +605,12 @@ input,select,textarea{font-family:'Syne',sans-serif}
 //  STATE
 // ══════════════════════════════════════════════════════════
 let uploadedFile = null;
-let uploadedFileB64 = null;
+const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks to stay below Vercel 4.5MB body size limit
 let allTrees = [];
 let filteredTrees = [];
+let savedReportsCache = [];
+let publicApiKey = null;
+let isDemoMode = true;
 let sortCol = 'no';
 let sortDir = 1;
 
@@ -621,9 +645,6 @@ function processFile(file) {
     showToast('File too large — maximum 30MB', 'err'); return;
   }
   uploadedFile = file;
-  const reader = new FileReader();
-  reader.onload = e => { uploadedFileB64 = e.target.result.split(',')[1]; };
-  reader.readAsDataURL(file);
 
   document.getElementById('upload-idle').style.display = 'none';
   document.getElementById('upload-selected').style.display = 'block';
@@ -639,11 +660,67 @@ function formatBytes(b) {
   return (b / 1024 / 1024).toFixed(1) + 'MB';
 }
 
+async function apiProcess(body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (publicApiKey) {
+    headers['x-api-key'] = publicApiKey;
+  }
+
+  const res = await fetch('/api/process', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function loadAppConfig() {
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) return;
+    const json = await res.json();
+    publicApiKey = json.publicApiKey || null;
+    isDemoMode = json.demoMode;
+  } catch (err) {
+    console.warn('Could not load app config', err);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadAppConfig);
+
+function bufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 // ══════════════════════════════════════════════════════════
 //  ANALYSIS — CALLS CLAUDE API
 // ══════════════════════════════════════════════════════════
+async function uploadChunkWithRetry(key, uploadId, partNumber, data, mimeType, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiProcess({ action: 'upload-part', key, uploadId, partNumber, data, mimeType });
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const waitMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // exponential backoff
+        showToast(`Retrying chunk ${partNumber} (attempt ${attempt + 1}/${maxRetries})…`, 'wa');
+        await new Promise(r => setTimeout(r, waitMs));
+      }
+    }
+  }
+  throw new Error(`Failed to upload chunk ${partNumber} after ${maxRetries} attempts: ${lastError.message}`);
+}
+
 async function startAnalysis() {
-  if (!uploadedFile || !uploadedFileB64) { showToast('Please select a file first', 'err'); return; }
+  if (!uploadedFile) { showToast('Please select a file first', 'err'); return; }
   showPage('processing');
 
   const STEPS = ['step-parse','step-extract','step-dedup','step-classify','step-bq','step-report'];
@@ -674,51 +751,63 @@ async function startAnalysis() {
   const mime = mimeMap[ext] || 'application/pdf';
 
   try {
-    // STEP 1: Upload file to Vercel Blob via server
-    const uploadResp = await fetch('/api/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Action': 'upload' },
-      body: JSON.stringify({ fileData: uploadedFileB64, fileName: uploadedFile.name, mimeType: mime })
-    });
-    if (!uploadResp.ok) {
-      const err = await uploadResp.json();
-      throw new Error('Upload failed: ' + (err.error || uploadResp.status));
-    }
-    const uploadData = await uploadResp.json();
-    const blobUrl = uploadData.blobUrl;
-    if (!blobUrl) throw new Error('No blob URL: ' + JSON.stringify(uploadData));
-
-    // STEP 2: Analyse using blob URL
-    const analyseResp = await fetch('/api/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Action': 'analyse' },
-      body: JSON.stringify({ blobUrl, prompt: buildExtractionPrompt() })
-    });
-    clearInterval(stepTimer);
-    if (!analyseResp.ok) throw new Error('Analysis failed ' + analyseResp.status);
-
-    const data = await analyseResp.json();
-    const rawText = data.content.map(c => c.text || '').join('');
-    console.log('Raw response:', rawText.slice(0, 500));
-    
-    // Try multiple JSON extraction patterns
-    let result = null;
-    const patterns = [
-      /```json\s*([\s\S]+?)\s*```/,
-      /```\s*([\s\S]+?)\s*```/,
-      /(\{[\s\S]+\})/,
-    ];
-    for (const pattern of patterns) {
-      const match = rawText.match(pattern);
-      if (match) {
-        try { result = JSON.parse(match[1]); break; } catch(e) { continue; }
+    // Validate environment
+    const debugRes = await fetch('/debug').catch(() => null);
+    if (debugRes && debugRes.ok) {
+      const debug = await debugRes.json();
+      if (!debug.blobToken) {
+        throw new Error('Vercel Blob token not configured. Please set BLOB_READ_WRITE_TOKEN in .env');
+      }
+      if (!debug.anthropicKey) {
+        throw new Error('Anthropic API key not configured. Please set ANTHROPIC_API_KEY in .env');
       }
     }
-    // Last resort: try parsing the whole response
-    if (!result) {
-      try { result = JSON.parse(rawText); } catch(e) {}
+
+    // STEP 1: Start multipart upload to Vercel Blob
+    showToast(`Starting upload for ${formatBytes(uploadedFile.size)}…`, 'info');
+    const { key, uploadId } = await apiProcess({ action: 'upload-start', filename: uploadedFile.name, mimeType: mime });
+    const totalChunks = Math.ceil(uploadedFile.size / CHUNK_SIZE);
+    const parts = [];
+
+    // STEP 2: Upload chunks with retry
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(uploadedFile.size, start + CHUNK_SIZE);
+      const chunk = await uploadedFile.slice(start, end).arrayBuffer();
+      const data = bufferToBase64(chunk);
+      const chunkSizeMB = (chunk.byteLength / 1024 / 1024).toFixed(1);
+      showToast(`Uploading chunk ${i + 1}/${totalChunks} (${chunkSizeMB}MB)…`, 'info');
+      
+      const part = await uploadChunkWithRetry(key, uploadId, i + 1, data, mime);
+      if (!part || !part.etag) {
+        throw new Error(`Upload part ${i + 1} returned invalid response: ${JSON.stringify(part)}`);
+      }
+      parts.push(part);
+      
+      const uploadProgress = 10 + Math.round(((i + 1) / totalChunks) * 30);
+      document.getElementById('proc-bar').style.width = uploadProgress + '%';
+      document.getElementById('proc-pct').textContent = uploadProgress + '%';
     }
-    if (!result) throw new Error('Parse failed. Response: ' + rawText.slice(0, 200));
+
+    // STEP 3: Complete upload
+    showToast('Finalising upload…', 'info');
+    const completeRes = await apiProcess({ action: 'upload-complete', key, uploadId, parts, mimeType: mime });
+    const fileId = completeRes.fileId;
+    if (!fileId) {
+      throw new Error(`Upload complete failed: ${JSON.stringify(completeRes)}`);
+    }
+    showToast('Upload complete. Analysing with Claude…', 'info');
+
+    // STEP 4: Run analysis
+    document.getElementById('proc-bar').style.width = '50%';
+    document.getElementById('proc-pct').textContent = '50%';
+    const { data } = await apiProcess({ action: 'analyse', fileId });
+    
+    clearInterval(stepTimer);
+    const result = data;
+    if (!result || typeof result !== 'object') {
+      throw new Error('Analysis returned invalid data');
+    }
 
     STEPS.forEach(id => {
       const el = document.getElementById(id);
@@ -729,16 +818,18 @@ async function startAnalysis() {
     });
     document.getElementById('proc-bar').style.width = '100%';
     document.getElementById('proc-pct').textContent = '100%';
+    showToast('Analysis complete!', 'ok');
 
     setTimeout(() => { buildReport(result); showPage('report'); }, 600);
 
   } catch(err) {
     clearInterval(stepTimer);
     console.error(err);
+    showToast('Error: ' + err.message, 'err');
     setTimeout(() => {
       buildReport(getDemoData());
       showPage('report');
-      showToast('Showing demo data — ' + err.message, 'wa');
+      showToast('Showing demo data (check console for error details)', 'wa');
     }, 800);
   }
 }
@@ -1243,6 +1334,114 @@ function exportCSV() {
   a.download = 'canlah-tree-register.csv';
   a.click();
   showToast('Tree register exported as CSV ✓', 'ok');
+}
+
+// ══════════════════════════════════════════════════════════
+//  EXPORT JSON
+// ══════════════════════════════════════════════════════════
+function exportJSON() {
+  const exportData = {
+    projectName: document.getElementById('r-title').textContent,
+    drawingRef: document.getElementById('r-ref').textContent,
+    exportDate: new Date().toISOString(),
+    trees: allTrees,
+    summary: {
+      totalExtracted: allTrees.length,
+      totalRemoval: allTrees.filter(t => !t.flags?.includes('retained')).length,
+      protected: allTrees.filter(t => t.flags?.includes('protected')).length,
+      heritage: allTrees.filter(t => t.flags?.includes('heritage_candidate')).length,
+      flagged: allTrees.filter(t => t.flags && t.flags.length > 0).length,
+    },
+  };
+  const json = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'canlah-tree-data.json';
+  a.click();
+  showToast('Tree data exported as JSON ✓', 'ok');
+}
+
+async function saveReport() {
+  try {
+    const exportData = {
+      projectName: document.getElementById('r-title').textContent,
+      drawingRef: document.getElementById('r-ref').textContent,
+      exportDate: new Date().toISOString(),
+      trees: allTrees,
+      summary: {
+        totalExtracted: allTrees.length,
+        totalRemoval: allTrees.filter(t => !t.flags?.includes('retained')).length,
+      },
+    };
+    const res = await fetch('/api/save-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report: exportData }),
+    });
+    const j = await res.json();
+    if (!res.ok || j.error) throw new Error(j.error || 'Save failed');
+    showToast('Report saved (' + j.id + ')', 'ok');
+  } catch (err) {
+    console.error(err);
+    showToast('Failed to save report: ' + err.message, 'err');
+  }
+}
+
+async function fetchSavedReports() {
+  const panel = document.getElementById('saved-reports-panel');
+  const list = document.getElementById('saved-reports-list');
+  panel.style.display = 'block';
+  list.innerHTML = '<div class="sr-loading">Loading saved reports…</div>';
+
+  try {
+    const res = await fetch('/api/reports');
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Unable to load saved reports');
+    savedReportsCache = json.reports || [];
+    renderSavedReports();
+  } catch (err) {
+    console.error(err);
+    list.innerHTML = `<div class="sr-error">Unable to load saved reports: ${err.message}</div>`;
+  }
+}
+
+function renderSavedReports() {
+  const list = document.getElementById('saved-reports-list');
+  if (!savedReportsCache.length) {
+    list.innerHTML = '<div class="sr-empty">No saved reports yet. Generate a report and save it to see it here.</div>';
+    return;
+  }
+
+  list.innerHTML = savedReportsCache.map((report) => `
+    <div class="sr-item">
+      <div>
+        <div class="sr-title">${report.projectName || 'Untitled report'}</div>
+        <div class="sr-sub">Saved ${new Date(report.savedAt).toLocaleString('en-SG')} · ${report.drawingRef || 'No drawing ref'}</div>
+      </div>
+      <button class="act-btn" onclick="loadSavedReport('${report.id}')">Load</button>
+    </div>
+  `).join('');
+}
+
+function loadSavedReport(id) {
+  const report = savedReportsCache.find((item) => item.id === id);
+  if (!report) {
+    showToast('Saved report not found', 'err');
+    return;
+  }
+  buildReport(report);
+  document.getElementById('saved-reports-panel').style.display = 'none';
+  showToast('Loaded saved report', 'ok');
+}
+
+function toggleSavedReports() {
+  const panel = document.getElementById('saved-reports-panel');
+  if (panel.style.display === 'block') {
+    panel.style.display = 'none';
+    return;
+  }
+  fetchSavedReports();
 }
 
 // ══════════════════════════════════════════════════════════

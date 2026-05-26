@@ -1,7 +1,17 @@
 {
   "name": "canlah",
   "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "local": "node dev-server.js",
+    "dev": "node dev-server.js",
+    "start": "node dev-server.js"
+  },
   "dependencies": {
-    "@vercel/blob": "^0.27.0"
+    "@vercel/blob": "^0.27.0",
+    "@supabase/supabase-js": "^2.106.1"
+  },
+  "devDependencies": {
+    "vercel": "^54.4.1"
   }
 }
