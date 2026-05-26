@@ -21,6 +21,7 @@ export default defineConfig({
     env: {
       PORT: String(PORT),
       DEMO_MODE: 'true',
+      RATE_LIMIT_PER_MIN: '10000',
     },
     url: `http://127.0.0.1:${PORT}/api/config`,
     reuseExistingServer: !process.env.CI,

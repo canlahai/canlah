@@ -446,9 +446,31 @@ async function handleApi(req, res) {
     }
 
     if (action === 'analyse') {
-      const { fileId, blobUrl, prompt } = body;
+      const { fileId, blobUrl, prompt, reportType } = body;
       if (!fileId && (!blobUrl || !prompt)) throw new Error('fileId or blobUrl + prompt are required');
       if (DEMO_MODE) {
+        if (reportType === 'site-report') {
+          const demoSite = {
+            siteName: 'Pioneer Road Viaduct — Pier 12',
+            reportDate: new Date().toISOString().slice(0, 10),
+            weather: 'Partly cloudy, 31°C',
+            progressPercent: 65,
+            progressNotes: 'Pier formwork 80% complete. Rebar tying in progress on upper section. Ready for concrete pour next week subject to inspection.',
+            workersOnSite: 14,
+            safetyIssues: [
+              'Worker spotted without hard hat near scaffolding (north face)',
+              'Loose materials at edge of working platform — fall hazard',
+            ],
+            issues: [
+              { severity: 'high', description: 'Drainage blocked near access road — flooding risk after rain' },
+              { severity: 'medium', description: 'Site notice board outdated; current permits not displayed' },
+              { severity: 'low', description: 'Material stockpile slightly encroaching on pedestrian walkway' },
+            ],
+            materialsObserved: ['Rebar bundles', 'Formwork panels', 'Concrete blocks', 'Aggregate'],
+            equipmentOnSite: ['Tower crane TC-02', 'Concrete pump', 'Mobile generator', 'Bar bender'],
+          };
+          return send(res, 200, JSON.stringify({ data: demoSite }), { 'Content-Type': 'application/json' });
+        }
         const demoData = {
           projectName: 'Construction of Road Viaduct Along Pioneer Road',
           drawingRef: 'L/RC216/RR/WSCL/0014–0017',
