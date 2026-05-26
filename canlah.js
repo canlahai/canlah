@@ -1,6 +1,9 @@
 // CanLah.ai shared frontend lib. Loaded by each pillar page.
 // Provides: config bootstrap, page switching, toast, upload zone wiring,
 // chunked upload + analyse, save/list reports.
+// Wrapped in IIFE so module-private state doesn't collide with consumer globals.
+
+(() => {
 
 const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks to stay below Vercel 4.5MB body cap
 
@@ -76,14 +79,14 @@ const CanLah = {
     if (onSelected) onSelected(file);
   },
 
-  _bufferToBase64(buffer) {
+  bufferToBase64(buffer) {
     let binary = '';
     const bytes = new Uint8Array(buffer);
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
     return btoa(binary);
   },
 
-  async _apiProcess(body) {
+  async apiProcess(body) {
     const headers = { 'Content-Type': 'application/json' };
     if (this.state.publicApiKey) headers['x-api-key'] = this.state.publicApiKey;
     const res = await fetch('/api/process', { method: 'POST', headers, body: JSON.stringify(body) });
@@ -99,7 +102,7 @@ const CanLah = {
     const ext = file.name.split('.').pop().toLowerCase();
     const mime = ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' })[ext] || 'application/octet-stream';
 
-    const { key, uploadId } = await this._apiProcess({ action: 'upload-start', filename: file.name, mimeType: mime });
+    const { key, uploadId } = await this.apiProcess({ action: 'upload-start', filename: file.name, mimeType: mime });
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     const parts = [];
     for (let i = 0; i < totalChunks; i++) {
@@ -107,15 +110,15 @@ const CanLah = {
       const end = Math.min(file.size, start + CHUNK_SIZE);
       const chunkBuf = await file.slice(start, end).arrayBuffer();
       this.showToast(`Uploading chunk ${i + 1}/${totalChunks}…`, 'info');
-      const part = await this._apiProcess({ action: 'upload-part', key, uploadId, partNumber: i + 1, data: this._bufferToBase64(chunkBuf), mimeType: mime });
+      const part = await this.apiProcess({ action: 'upload-part', key, uploadId, partNumber: i + 1, data: this.bufferToBase64(chunkBuf), mimeType: mime });
       parts.push({ etag: part.etag, partNumber: i + 1 });
     }
 
     this.showToast('Finalising upload…', 'info');
-    const { fileId } = await this._apiProcess({ action: 'upload-complete', key, uploadId, parts, mimeType: mime });
+    const { fileId } = await this.apiProcess({ action: 'upload-complete', key, uploadId, parts, mimeType: mime });
 
     this.showToast('Analysing with Claude…', 'info');
-    const analyse = await this._apiProcess({ action: 'analyse', fileId, prompt, reportType });
+    const analyse = await this.apiProcess({ action: 'analyse', fileId, prompt, reportType });
     return analyse.data;
   },
 
@@ -149,3 +152,5 @@ const CanLah = {
 };
 
 window.CanLah = CanLah;
+
+})();
