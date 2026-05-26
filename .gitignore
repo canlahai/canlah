@@ -4,3 +4,7 @@ memory
 .vscode/
 data/
 test-tree-plan.txt
+test-results/
+playwright-report/
+blob-report/
+.playwright/

@@ -41,15 +41,16 @@ Notes:
 
 Store these in `.env` for local development.
 
-## Running the upload test (quick)
-The repo contains a quick test script that exercises the multipart flow against the dev server.
+## End-to-end tests
+
+Playwright drives the full upload → analyse → save → list flow against a dev server running in demo mode (no real Blob or Anthropic credentials needed).
 
 ```bash
-chmod +x /tmp/test-upload.sh # created during development by the dev
-/tmp/test-upload.sh
+npx playwright install chromium # one-time, downloads ~90MB
+npm run test:e2e
 ```
 
-You should see `upload-start`, `upload-part`, `upload-complete` and `analyse` responses. In demo mode `analyse` returns example tree data.
+The test suite lives in `e2e/` and auto-starts the dev server on port 3030. See [playwright.config.js](playwright.config.js).
 
 ## Saving reports
 
@@ -103,7 +104,6 @@ Tip: limit function max duration and ensure your Blob token has the proper scope
 ## Next steps (recommended)
 - Add persistent storage for analysis results (Vercel KV, Supabase, or a small DB) so users can revisit past reports.
 - Add minimal authentication (API key or session) and rate limiting before allowing public uploads.
-- Add automated E2E tests (Playwright) to validate the full upload → analyse → report flow.
 
 ## Troubleshooting
 - If `debug` shows `ANTHROPIC_API_KEY: missing` you are in demo mode. Add a real key to `.env` and restart the server.
