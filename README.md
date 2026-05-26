@@ -1,13 +1,24 @@
-# CanLah.ai — Tree Felling BQ Reader
+# CanLah.ai
 
-Small demo service that accepts PDF/image uploads, stores them to Vercel Blob
-and runs an Anthropic (Claude) analysis to extract tree registers and produce
-a Bill of Quantities style report.
+AI-powered tools for Singapore construction QS firms and contractors. Three
+pillars in this repo, all sharing the same upload → Anthropic analysis →
+structured report → save/list pattern:
+
+- **BQ Reader** (`bq-reader.html`) — extract tree registers from NParks / LTA
+  tree felling drawings into a Bill of Quantities.
+- **Site Report** (`site-report.html`) — upload a site photo, get a structured
+  daily report (progress %, workers, safety alerts, materials, equipment).
+- **HR Compliance** (`hr-compliance.html`) — audit worker registries against
+  MOM rules (expiring work permits, missing CSOC certs, DRC breaches).
 
 ## What this repo contains
-- `bq-reader.html` — single-page frontend for upload, progress and report
-- `api/process.js` — serverless-style handler for multipart upload + analysis
-- `dev-server.js` — simple local dev server with demo-mode fallback
+- Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`
+- `canlah.css` + `canlah.js` — shared frontend lib used by `site-report` and
+  `hr-compliance` (CSS tokens, upload zone, chunked upload, save/list helpers)
+- `api/process.js` — serverless handler for multipart upload + analysis
+- `api/config.js` — runtime config so the frontend can pick up the public key
+- `dev-server.js` — local dev server with demo-mode fallback + Supabase save
+- `e2e/` — Playwright happy-path tests for each pillar
 - `.env.example` — example environment variables
 
 ## Quick start (local)
