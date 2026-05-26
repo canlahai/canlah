@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanLah.ai — HR Compliance</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0c0c0a;
+  --paper: #f2efe8;
+  --yellow: #e8c027;
+  --orange: #d95f2b;
+  --slate: #1e1e1b;
+  --g8: #242420;
+  --g7: #363632;
+  --g6: #4a4a45;
+  --g5: #656560;
+  --g4: #888882;
+  --g3: #aeaba3;
+  --g2: #d0cdc5;
+  --red: #c0392b;
+  --rbg: #2e1414;
+  --amber: #c97a12;
+  --abg: #2a1e08;
+  --green: #2a7a47;
+  --gbg: #152a1e;
+  --glt: #c8e6d4;
+  --r: 2px;
+  --rl: 6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--paper);font-family:'Syne',sans-serif;font-size:15px;line-height:1.7;min-height:100vh}
+button{font-family:'Syne',sans-serif;cursor:pointer}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--g7);border-radius:2px}
+::-webkit-scrollbar-track{background:transparent}
+
+.topbar{position:fixed;top:0;left:0;right:0;z-index:100;height:56px;background:var(--ink);border-bottom:1px solid var(--g7);display:flex;align-items:center;padding:0 2rem;gap:16px}
+.topbar::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--yellow) 0%,var(--orange) 100%)}
+.brand-name{font-size:17px;font-weight:800;color:var(--paper);letter-spacing:-.02em}
+.brand-name span{color:var(--yellow)}
+.brand-name em{color:var(--orange);font-style:normal}
+.topbar-spacer{flex:1}
+.topbar-tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);letter-spacing:.10em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--g7);border-radius:var(--r)}
+
+.page{display:none;min-height:calc(100vh - 56px);margin-top:56px}
+.page.active{display:block}
+
+.upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:3rem 2rem}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:20px}
+.eyebrow::before,.eyebrow::after{content:'//';opacity:.4;margin:0 8px}
+h1.hero{font-size:clamp(40px,7vw,72px);font-weight:800;line-height:.95;letter-spacing:-.03em;text-align:center;max-width:760px;margin-bottom:16px}
+h1.hero .yl{color:var(--yellow)}
+h1.hero .og{color:var(--orange)}
+.sub{font-size:17px;color:var(--g4);text-align:center;max-width:520px;margin-bottom:48px}
+
+.upload-zone{width:100%;max-width:600px;border:2px dashed var(--g6);border-radius:var(--rl);background:var(--slate);padding:3rem 2rem;text-align:center;cursor:pointer;transition:all .25s ease;position:relative}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--yellow);background:rgba(232,192,39,.04)}
+.upload-zone input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.uz-title{font-size:18px;font-weight:700;margin:1rem 0 .5rem}
+.uz-sub{font-size:13px;color:var(--g4);margin-bottom:1.25rem}
+.uz-formats{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:1.25rem}
+.fmt-tag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g4);padding:3px 8px;border:1px solid var(--g7);border-radius:var(--r);letter-spacing:.06em;text-transform:uppercase}
+.uz-btn{background:var(--yellow);color:var(--ink);border:none;padding:12px 24px;font-weight:700;border-radius:var(--r);font-size:14px}
+
+.file-info{display:flex;align-items:center;gap:14px;padding:1rem;background:var(--g8);border:1px solid var(--g7);border-radius:var(--rl);margin-bottom:1rem}
+.file-icon{font-size:28px}
+.file-name{font-weight:700;color:var(--paper)}
+.file-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5)}
+.analyse-btn{width:100%;background:var(--orange);color:var(--paper);border:none;padding:14px;font-weight:700;border-radius:var(--r);font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px}
+
+.proc-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:3rem 2rem;text-align:center}
+.proc-eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--yellow);letter-spacing:.14em;text-transform:uppercase;margin-bottom:16px}
+.proc-title{font-size:32px;font-weight:800;letter-spacing:-.02em;margin-bottom:32px}
+
+.report-screen{padding:2rem;max-width:1100px;margin:0 auto}
+.rh-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.rh-title{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:6px}
+.rh-meta{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g4)}
+.rh-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:1.5rem;flex-wrap:wrap}
+.rh-actions{display:flex;gap:8px;flex-wrap:wrap}
+.act-btn{background:var(--slate);border:1px solid var(--g7);color:var(--g3);padding:8px 14px;font-size:13px;border-radius:var(--r);font-weight:600}
+.act-btn:hover{border-color:var(--yellow);color:var(--yellow)}
+.act-btn.primary{background:var(--yellow);border-color:var(--yellow);color:var(--ink)}
+
+.vitals{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:2px;background:var(--g7);margin-bottom:1.5rem;border-radius:var(--rl);overflow:hidden}
+.vital{background:var(--slate);padding:1rem 1.25rem}
+.v-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.v-val{font-size:24px;font-weight:800;letter-spacing:-.02em}
+
+.section{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);padding:1.25rem 1.5rem;margin-bottom:1rem}
+.section-title{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.10em;margin-bottom:12px}
+.section.alert{border-color:var(--red);background:var(--rbg)}
+.section.alert .section-title{color:var(--red)}
+.section.ok{border-color:var(--green);background:var(--gbg)}
+.section.ok .section-title{color:var(--glt)}
+
+.drc-card{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.drc-ratio{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;letter-spacing:-.02em}
+.drc-badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 10px;border-radius:var(--r);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.drc-badge.ok{background:var(--gbg);color:var(--glt);border:1px solid var(--green)}
+.drc-badge.bad{background:var(--rbg);color:var(--red);border:1px solid var(--red)}
+
+table.records{width:100%;border-collapse:collapse;font-size:13px}
+table.records th{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--g7);font-weight:600}
+table.records td{padding:10px;border-bottom:1px solid var(--g7);color:var(--g2)}
+table.records tr:last-child td{border-bottom:none}
+.expiry-soon{color:var(--red);font-weight:700}
+.expiry-warn{color:var(--amber);font-weight:600}
+
+.permit-bar{display:flex;flex-wrap:wrap;gap:14px}
+.permit-pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--g7);background:var(--g8);border-radius:var(--r);font-size:13px}
+.permit-pill .ct{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--yellow)}
+
+.issue{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--g7)}
+.issue:first-child{border-top:none}
+.sev{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 8px;border-radius:var(--r);text-transform:uppercase;letter-spacing:.06em;font-weight:700;flex-shrink:0;height:fit-content}
+.sev.high{background:var(--rbg);color:var(--red);border:1px solid var(--red)}
+.sev.medium{background:var(--abg);color:var(--amber);border:1px solid var(--amber)}
+.sev.low{background:var(--gbg);color:var(--green);border:1px solid var(--green)}
+
+.saved-panel{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);padding:1rem 1.25rem;margin-bottom:1.25rem}
+.sp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-weight:700}
+.sr-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--g7)}
+.sr-item:first-child{border-top:none}
+.sr-title{font-weight:700;color:var(--paper);font-size:14px}
+.sr-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g5);margin-top:3px}
+.sr-empty{color:var(--g4);font-size:13px;padding:8px 0}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--slate);border:1px solid var(--g7);color:var(--paper);padding:12px 18px;border-radius:var(--r);font-size:13px;opacity:0;transition:all .25s ease;z-index:1000;max-width:90vw}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.ok{border-color:var(--green);color:var(--glt)}
+.toast.err{border-color:var(--red)}
+.toast.info{border-color:var(--yellow)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-name"><span>Can</span><em>Lah</em>.ai</div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-tag">HR Compliance</div>
+</div>
+
+<!-- PAGE: UPLOAD -->
+<div class="page active" id="page-upload">
+  <div class="upload-screen">
+    <div class="eyebrow">MOM · Work Permits · CSOC · DRC</div>
+    <h1 class="hero"><span class="yl">Workforce.</span> <span class="og">Compliant.</span></h1>
+    <p class="sub">Upload your worker registry, payroll PDF, or MOM submission. Claude flags expiring permits, missing certifications, and Dependency Ratio Ceiling breaches.</p>
+
+    <div class="upload-zone" id="upload-zone"
+         ondragover="handleDragOver(event)"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" onchange="handleFileSelect(event)">
+
+      <div id="upload-idle">
+        <div class="uz-title">Drop your worker registry here</div>
+        <div class="uz-sub">PDF, JPG or PNG. MOM extract, payroll register, or certification roster.</div>
+        <div class="uz-formats">
+          <span class="fmt-tag">PDF</span>
+          <span class="fmt-tag">JPG</span>
+          <span class="fmt-tag">PNG</span>
+        </div>
+        <button class="uz-btn" onclick="document.getElementById('file-input').click();event.stopPropagation()">Choose file</button>
+      </div>
+
+      <div id="upload-selected" style="display:none">
+        <div class="file-info">
+          <div class="file-icon">👷</div>
+          <div>
+            <div class="file-name" id="selected-name">—</div>
+            <div class="file-meta" id="selected-meta">—</div>
+          </div>
+        </div>
+        <button class="analyse-btn" id="analyse-btn" onclick="event.stopPropagation();startAnalysis()">
+          Run Compliance Check
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: PROCESSING -->
+<div class="page" id="page-processing">
+  <div class="proc-screen">
+    <div class="proc-eyebrow">Auditing workforce</div>
+    <div class="proc-title">Checking compliance<span id="proc-dots">.</span></div>
+  </div>
+</div>
+
+<!-- PAGE: REPORT -->
+<div class="page" id="page-report">
+  <div class="report-screen">
+    <div class="rh-top">
+      <div>
+        <div class="rh-eyebrow">HR Compliance Report · CanLah.ai</div>
+        <div class="rh-title" id="r-company">—</div>
+        <div class="rh-meta" id="r-meta">—</div>
+      </div>
+      <div class="rh-actions">
+        <button class="act-btn" onclick="toggleSavedReports()">Saved Reports</button>
+        <button class="act-btn" onclick="saveReport()">Save Report</button>
+        <button class="act-btn primary" onclick="showPage('upload')">New Roster</button>
+      </div>
+    </div>
+
+    <div class="saved-panel" id="saved-panel" style="display:none">
+      <div class="sp-header">
+        <div>Saved compliance reports</div>
+        <button class="act-btn" onclick="toggleSavedReports()">Close</button>
+      </div>
+      <div id="saved-list"></div>
+    </div>
+
+    <div class="vitals" id="r-vitals"></div>
+
+    <div class="section" id="r-drc-section">
+      <div class="section-title">Dependency Ratio Ceiling (DRC)</div>
+      <div class="drc-card" id="r-drc-card"></div>
+    </div>
+
+    <div class="section" id="r-permits" style="display:none">
+      <div class="section-title">Workforce by permit type</div>
+      <div class="permit-bar" id="r-permits-bar"></div>
+    </div>
+
+    <div class="section alert" id="r-expiring" style="display:none">
+      <div class="section-title">Permits expiring soon</div>
+      <table class="records">
+        <thead><tr><th>Worker</th><th>Name</th><th>Permit</th><th>Expiry</th><th>Days</th></tr></thead>
+        <tbody id="r-expiring-rows"></tbody>
+      </table>
+    </div>
+
+    <div class="section alert" id="r-missing" style="display:none">
+      <div class="section-title">Missing certifications</div>
+      <table class="records">
+        <thead><tr><th>Worker</th><th>Name</th><th>Missing</th></tr></thead>
+        <tbody id="r-missing-rows"></tbody>
+      </table>
+    </div>
+
+    <div class="section" id="r-issues" style="display:none">
+      <div class="section-title">Compliance issues</div>
+      <div id="r-issues-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CHUNK_SIZE = 3 * 1024 * 1024;
+const HR_COMPLIANCE_PROMPT = `You are an HR compliance analyst for a Singapore construction company. Audit the uploaded document against Singapore Ministry of Manpower (MOM) rules.
+
+Return ONLY valid JSON in this exact structure:
+\`\`\`json
+{
+  "companyName": "company name from document",
+  "documentRef": "best-guess document reference / period",
+  "totalWorkers": 0,
+  "byPermitType": { "Work Permit": 0, "S Pass": 0, "Employment Pass": 0 },
+  "expiringPermits": [
+    { "workerId": "W001", "name": "...", "permitType": "Work Permit", "expiryDate": "YYYY-MM-DD", "daysUntilExpiry": 30 }
+  ],
+  "missingCertifications": [
+    { "workerId": "W001", "name": "...", "missing": ["CSOC"] }
+  ],
+  "drcStatus": { "current": "1:7", "limit": "1:7", "compliant": true },
+  "complianceIssues": [
+    { "severity": "high|medium|low", "description": "..." }
+  ]
+}
+\`\`\`
+
+Rules:
+- Permits expiring within 60 days count as expiringPermits
+- DRC limits depend on sector — assume Construction: 1:7 unless document states otherwise
+- Required certifications include CSOC (Construction Safety Orientation Course), and for supervisors CSCS
+- Return ONLY the JSON. No preamble.`;
+
+let uploadedFile = null;
+let publicApiKey = null;
+let isDemoMode = true;
+let savedReportsCache = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const cfg = await res.json();
+      publicApiKey = cfg.publicApiKey || null;
+      isDemoMode = cfg.demoMode;
+    }
+  } catch {}
+});
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => { t.className = 'toast'; }, type === 'err' ? 5000 : 3500);
+}
+
+function handleDragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
+function handleDragLeave(e) { e.preventDefault(); document.getElementById('upload-zone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+}
+function handleFileSelect(e) { if (e.target.files[0]) processFile(e.target.files[0]); }
+
+function processFile(file) {
+  if (!/\.(pdf|jpe?g|png)$/i.test(file.name)) { showToast('Use PDF, JPG, or PNG', 'err'); return; }
+  if (file.size > 30 * 1024 * 1024) { showToast('Maximum 30MB', 'err'); return; }
+  uploadedFile = file;
+  document.getElementById('upload-idle').style.display = 'none';
+  document.getElementById('upload-selected').style.display = 'block';
+  document.getElementById('selected-name').textContent = file.name;
+  document.getElementById('selected-meta').textContent =
+    `${(file.size / 1024 / 1024).toFixed(1)}MB · ${file.type || 'unknown'}`;
+}
+
+function bufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+async function apiProcess(body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (publicApiKey) headers['x-api-key'] = publicApiKey;
+  const res = await fetch('/api/process', { method: 'POST', headers, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function startAnalysis() {
+  if (!uploadedFile) { showToast('Pick a file first', 'err'); return; }
+  showPage('processing');
+
+  const ext = uploadedFile.name.split('.').pop().toLowerCase();
+  const mime = ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' })[ext] || 'application/octet-stream';
+
+  try {
+    const { key, uploadId } = await apiProcess({ action: 'upload-start', filename: uploadedFile.name, mimeType: mime });
+    const totalChunks = Math.ceil(uploadedFile.size / CHUNK_SIZE);
+    const parts = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(uploadedFile.size, start + CHUNK_SIZE);
+      const chunkBuf = await uploadedFile.slice(start, end).arrayBuffer();
+      showToast(`Uploading chunk ${i + 1}/${totalChunks}…`, 'info');
+      const part = await apiProcess({ action: 'upload-part', key, uploadId, partNumber: i + 1, data: bufferToBase64(chunkBuf), mimeType: mime });
+      parts.push({ etag: part.etag, partNumber: i + 1 });
+    }
+
+    showToast('Finalising upload…', 'info');
+    const { fileId } = await apiProcess({ action: 'upload-complete', key, uploadId, parts, mimeType: mime });
+
+    showToast('Auditing workforce with Claude…', 'info');
+    const analyse = await apiProcess({ action: 'analyse', fileId, prompt: HR_COMPLIANCE_PROMPT, reportType: 'hr-compliance' });
+
+    buildReport(analyse.data);
+    showPage('report');
+    showToast('Compliance audit complete', 'ok');
+  } catch (err) {
+    console.error(err);
+    showToast('Error: ' + err.message, 'err');
+    showPage('upload');
+  }
+}
+
+function buildReport(d) {
+  document.getElementById('r-company').textContent = d.companyName || 'Untitled company';
+  document.getElementById('r-meta').textContent = `${d.documentRef || 'No document ref'} · Generated ${new Date().toLocaleString('en-SG')}`;
+
+  document.getElementById('r-vitals').innerHTML = `
+    <div class="vital"><div class="v-label">Total workers</div><div class="v-val">${d.totalWorkers ?? '—'}</div></div>
+    <div class="vital"><div class="v-label">Expiring permits</div><div class="v-val">${(d.expiringPermits || []).length}</div></div>
+    <div class="vital"><div class="v-label">Missing certs</div><div class="v-val">${(d.missingCertifications || []).length}</div></div>
+    <div class="vital"><div class="v-label">Issues</div><div class="v-val">${(d.complianceIssues || []).length}</div></div>
+  `;
+
+  const drc = d.drcStatus || {};
+  const drcSection = document.getElementById('r-drc-section');
+  drcSection.classList.remove('alert', 'ok');
+  drcSection.classList.add(drc.compliant ? 'ok' : 'alert');
+  document.getElementById('r-drc-card').innerHTML = `
+    <div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Current ratio</div>
+      <div class="drc-ratio">${drc.current || '—'}</div>
+    </div>
+    <div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Limit</div>
+      <div class="drc-ratio">${drc.limit || '—'}</div>
+    </div>
+    <span class="drc-badge ${drc.compliant ? 'ok' : 'bad'}">${drc.compliant ? 'Compliant' : 'Non-compliant'}</span>
+  `;
+
+  const permits = d.byPermitType || {};
+  const permitEntries = Object.entries(permits);
+  document.getElementById('r-permits').style.display = permitEntries.length ? 'block' : 'none';
+  document.getElementById('r-permits-bar').innerHTML = permitEntries
+    .map(([type, count]) => `<div class="permit-pill"><span>${type}</span><span class="ct">${count}</span></div>`)
+    .join('');
+
+  const expiring = d.expiringPermits || [];
+  document.getElementById('r-expiring').style.display = expiring.length ? 'block' : 'none';
+  document.getElementById('r-expiring-rows').innerHTML = expiring.map(e => `
+    <tr>
+      <td><code>${e.workerId || ''}</code></td>
+      <td>${e.name || ''}</td>
+      <td>${e.permitType || ''}</td>
+      <td>${e.expiryDate || ''}</td>
+      <td class="${e.daysUntilExpiry <= 30 ? 'expiry-soon' : 'expiry-warn'}">${e.daysUntilExpiry ?? ''}</td>
+    </tr>
+  `).join('');
+
+  const missing = d.missingCertifications || [];
+  document.getElementById('r-missing').style.display = missing.length ? 'block' : 'none';
+  document.getElementById('r-missing-rows').innerHTML = missing.map(m => `
+    <tr>
+      <td><code>${m.workerId || ''}</code></td>
+      <td>${m.name || ''}</td>
+      <td>${(m.missing || []).join(', ')}</td>
+    </tr>
+  `).join('');
+
+  const issues = d.complianceIssues || [];
+  document.getElementById('r-issues').style.display = issues.length ? 'block' : 'none';
+  document.getElementById('r-issues-list').innerHTML = issues.map(i => `
+    <div class="issue"><span class="sev ${i.severity || 'low'}">${i.severity || 'low'}</span><div>${i.description || ''}</div></div>
+  `).join('');
+
+  window._lastReport = d;
+}
+
+async function saveReport() {
+  try {
+    const report = Object.assign({ reportType: 'hr-compliance' }, window._lastReport || {});
+    const res = await fetch('/api/save-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report }),
+    });
+    const j = await res.json();
+    if (!res.ok || j.error) throw new Error(j.error || 'Save failed');
+    showToast('Compliance report saved (' + j.id + ')', 'ok');
+  } catch (err) {
+    showToast('Save failed: ' + err.message, 'err');
+  }
+}
+
+async function toggleSavedReports() {
+  const panel = document.getElementById('saved-panel');
+  if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const list = document.getElementById('saved-list');
+  list.innerHTML = '<div class="sr-empty">Loading…</div>';
+  try {
+    const res = await fetch('/api/reports');
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Load failed');
+    savedReportsCache = (json.reports || []).filter(r => r.reportType === 'hr-compliance');
+    if (!savedReportsCache.length) { list.innerHTML = '<div class="sr-empty">No saved compliance reports yet.</div>'; return; }
+    list.innerHTML = savedReportsCache.map(r => `
+      <div class="sr-item">
+        <div>
+          <div class="sr-title">${r.companyName || 'Untitled company'}</div>
+          <div class="sr-sub">Saved ${new Date(r.savedAt).toLocaleString('en-SG')} · ${r.documentRef || ''}</div>
+        </div>
+        <button class="act-btn" onclick="loadSavedReport('${r.id}')">Load</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="sr-empty" style="color:var(--red)">${err.message}</div>`;
+  }
+}
+
+function loadSavedReport(id) {
+  const r = savedReportsCache.find(x => x.id === id);
+  if (!r) { showToast('Report not found', 'err'); return; }
+  buildReport(r);
+  document.getElementById('saved-panel').style.display = 'none';
+}
+
+let dotCount = 0;
+setInterval(() => {
+  const el = document.getElementById('proc-dots');
+  if (el) { dotCount = (dotCount % 3) + 1; el.textContent = '.'.repeat(dotCount); }
+}, 500);
+</script>
+</body>
+</html>

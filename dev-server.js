@@ -449,6 +449,30 @@ async function handleApi(req, res) {
       const { fileId, blobUrl, prompt, reportType } = body;
       if (!fileId && (!blobUrl || !prompt)) throw new Error('fileId or blobUrl + prompt are required');
       if (DEMO_MODE) {
+        if (reportType === 'hr-compliance') {
+          const demoHr = {
+            companyName: 'Acme Construction Pte Ltd',
+            documentRef: 'Q1 2026 Worker Registry',
+            totalWorkers: 87,
+            byPermitType: { 'Work Permit': 65, 'S Pass': 18, 'Employment Pass': 4 },
+            expiringPermits: [
+              { workerId: 'W0023', name: 'Kumar S/O Raja', permitType: 'Work Permit', expiryDate: '2026-06-14', daysUntilExpiry: 19 },
+              { workerId: 'W0041', name: 'Rahman bin Ismail', permitType: 'Work Permit', expiryDate: '2026-06-22', daysUntilExpiry: 27 },
+              { workerId: 'W0058', name: 'Lakshmi Devi', permitType: 'S Pass', expiryDate: '2026-07-10', daysUntilExpiry: 45 },
+            ],
+            missingCertifications: [
+              { workerId: 'W0045', name: 'Ahmad bin Hassan', missing: ['CSOC'] },
+              { workerId: 'W0067', name: 'Ravi Kumar', missing: ['CSOC', 'CSCS refresher'] },
+            ],
+            drcStatus: { current: '1:7.2', limit: '1:7', compliant: false },
+            complianceIssues: [
+              { severity: 'high', description: 'Dependency Ratio Ceiling exceeded — current 1:7.2 vs limit 1:7 for construction sector' },
+              { severity: 'medium', description: '3 workers without current Safety Orientation refresher in past 12 months' },
+              { severity: 'low', description: 'Worker register last updated 14 days ago — recommend weekly refresh' },
+            ],
+          };
+          return send(res, 200, JSON.stringify({ data: demoHr }), { 'Content-Type': 'application/json' });
+        }
         if (reportType === 'site-report') {
           const demoSite = {
             siteName: 'Pioneer Road Viaduct — Pier 12',
