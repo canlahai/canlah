@@ -1,6 +1,6 @@
 # CanLah.ai
 
-AI-powered tools for Singapore construction QS firms and contractors. Three
+AI-powered tools for Singapore construction QS firms and contractors. Four
 pillars in this repo, all sharing the same upload → Anthropic analysis →
 structured report → save/list pattern:
 
@@ -10,15 +10,29 @@ structured report → save/list pattern:
   daily report (progress %, workers, safety alerts, materials, equipment).
 - **HR Compliance** (`hr-compliance.html`) — audit worker registries against
   MOM rules (expiring work permits, missing CSOC certs, DRC breaches).
+- **Programme Planner** (`programme-planner.html`) — upload a construction
+  programme and get a Gantt with phases, tasks, milestones, and the critical
+  path.
+
+## Auth
+
+In production, protected endpoints (`/api/process`, `/api/save-report`,
+`/api/reports`) require a signed-cookie session. Users sign in at `/login`
+with `ACCESS_PASSWORD`. In `DEMO_MODE=true`, auth is bypassed for local dev.
 
 ## What this repo contains
-- Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`
-- `canlah.css` + `canlah.js` — shared frontend lib used by `site-report` and
-  `hr-compliance` (CSS tokens, upload zone, chunked upload, save/list helpers)
-- `api/process.js` — serverless handler for multipart upload + analysis
-- `api/config.js` — runtime config so the frontend can pick up the public key
-- `dev-server.js` — local dev server with demo-mode fallback + Supabase save
-- `e2e/` — Playwright happy-path tests for each pillar
+- Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`,
+  `programme-planner.html`, plus `login.html`
+- `canlah.css` + `canlah.js` — shared frontend lib (tokens, upload, save/list,
+  401 → /login redirect)
+- `api/process.js` — multipart upload + Anthropic analysis
+- `api/save-report.js` + `api/reports.js` — Supabase-backed save / list
+- `api/login.js` + `api/logout.js` — session cookie set/clear
+- `api/config.js` — runtime config endpoint
+- `lib/auth.js` — HMAC-signed cookie helpers (used by both `api/*.js` and
+  `dev-server.js` so dev and prod behave the same)
+- `dev-server.js` — local dev server with demo-mode + Supabase + auth mirror
+- `e2e/` — Playwright tests per pillar plus login flow
 - `.env.example` — example environment variables
 
 ## Quick start (local)
