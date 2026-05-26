@@ -90,9 +90,15 @@ const CanLah = {
     const headers = { 'Content-Type': 'application/json' };
     if (this.state.publicApiKey) headers['x-api-key'] = this.state.publicApiKey;
     const res = await fetch('/api/process', { method: 'POST', headers, body: JSON.stringify(body) });
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || res.statusText);
     return data;
+  },
+
+  _redirectToLogin() {
+    const here = location.pathname + location.search;
+    location.href = '/login?return=' + encodeURIComponent(here);
   },
 
   async uploadAndAnalyse({ prompt, reportType }) {
@@ -129,6 +135,7 @@ const CanLah = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
     const j = await res.json();
     if (!res.ok || j.error) throw new Error(j.error || 'Save failed');
     return j;
@@ -136,6 +143,7 @@ const CanLah = {
 
   async listSavedReports(reportType) {
     const res = await fetch('/api/reports');
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
     const json = await res.json();
     if (!res.ok || json.error) throw new Error(json.error || 'Load failed');
     return (json.reports || []).filter(r => r.reportType === reportType);

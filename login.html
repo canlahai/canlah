@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanLah.ai — Sign in</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/canlah.css">
+<style>
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:3rem 2rem}
+.login-card{width:100%;max-width:420px;background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);padding:2.5rem 2rem}
+.login-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
+.login-title{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:8px}
+.login-sub{color:var(--g4);font-size:14px;margin-bottom:2rem}
+.login-form{display:flex;flex-direction:column;gap:14px}
+.login-form label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.10em;margin-bottom:4px;display:block}
+.login-form input{width:100%;background:var(--ink);border:1px solid var(--g7);border-radius:var(--r);color:var(--paper);font-family:'Syne',sans-serif;font-size:15px;padding:11px 14px;outline:none;transition:border-color .15s}
+.login-form input:focus{border-color:var(--yellow)}
+.login-form button{background:var(--yellow);color:var(--ink);border:none;font-weight:700;font-size:14px;padding:12px;border-radius:var(--r);cursor:pointer;letter-spacing:-.01em}
+.login-form button:hover{background:#c4a01e}
+.login-form button:disabled{background:var(--g7);color:var(--g5);cursor:not-allowed}
+.login-err{font-size:13px;color:var(--red);min-height:20px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-name"><span>Can</span><em>Lah</em>.ai</div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-tag">Sign in</div>
+</div>
+
+<div class="page active">
+  <div class="login-screen">
+    <div class="login-card">
+      <div class="login-eyebrow">Early access</div>
+      <div class="login-title">Sign in to continue</div>
+      <div class="login-sub">Enter the access password to use BQ Reader, Site Report, and HR Compliance.</div>
+
+      <form class="login-form" id="login-form">
+        <div>
+          <label for="password">Access password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
+        </div>
+        <button type="submit" id="login-btn">Sign in</button>
+        <div class="login-err" id="login-err"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const form = document.getElementById('login-form');
+const errEl = document.getElementById('login-err');
+const btn = document.getElementById('login-btn');
+
+function getReturnTo() {
+  const params = new URLSearchParams(location.search);
+  const r = params.get('return');
+  if (!r) return '/';
+  if (r.startsWith('/') && !r.startsWith('//')) return r;
+  return '/';
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: document.getElementById('password').value }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Sign-in failed');
+    location.href = getReturnTo();
+  } catch (err) {
+    errEl.textContent = err.message;
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
+});
+</script>
+</body>
+</html>

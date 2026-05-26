@@ -14,6 +14,7 @@
 //     → runs Claude analysis for any prompt using a public blob URL, returns full Anthropic response
 
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
+import { requireAuth } from '../lib/auth.js';
 
 const TREE_EXTRACTION_PROMPT = `You are an expert Singapore construction document analyst specialising in NParks / LTA tree felling drawings. Analyse this tree affected plan and extract ALL tree data.
 
@@ -71,21 +72,6 @@ const createSafeBlobKey = filename => {
   return `uploads/${Date.now()}-${safeName}`;
 };
 
-const PUBLIC_API_KEY = process.env.PUBLIC_API_KEY || '';
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
-const DEMO_MODE = process.env.DEMO_MODE === 'true' || !process.env.BLOB_READ_WRITE_TOKEN;
-
-function getRequestApiKey(req) {
-  return String(req.headers['x-api-key'] || req.headers['x-admin-key'] || '').trim();
-}
-
-function checkPublicOrAdminKey(req, res) {
-  if (!PUBLIC_API_KEY && !ADMIN_API_KEY) return true;
-  const key = getRequestApiKey(req);
-  if (key && (key === PUBLIC_API_KEY || key === ADMIN_API_KEY)) return true;
-  res.status(401).json({ error: 'Unauthorized: invalid API key' });
-  return false;
-}
 
 const BLOB_API_BASE_URL =
   process.env.VERCEL_BLOB_API_URL ||
@@ -143,7 +129,7 @@ async function uploadBufferToBlob(filename, buffer, contentType) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!DEMO_MODE && !checkPublicOrAdminKey(req, res)) return;
+  if (!requireAuth(req, res).ok) return;
 
   const action = (req.headers['x-action'] || req.body?.action || '').toString();
   const body = req.body || {};

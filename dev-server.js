@@ -2,9 +2,9 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
 import { createClient } from '@supabase/supabase-js';
+import { authCheck, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = path.resolve('./');
@@ -56,15 +56,12 @@ const DATA_DIR = path.join(ROOT, 'data');
 const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
 
 const PUBLIC_API_KEY = process.env.PUBLIC_API_KEY || '';
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
-const SESSION_MAX_AGE = Number(process.env.SESSION_MAX_AGE_SEC || 60 * 60 * 24);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_REPORTS_TABLE = process.env.SUPABASE_REPORTS_TABLE || 'canlah_reports';
 const SUPABASE = SUPABASE_URL && SUPABASE_SERVICE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   : null;
-const SESSIONS = new Map();
 
 async function ensureDataDir() {
   try {
@@ -141,81 +138,15 @@ async function ensureDemoRoot() {
 const RATE_LIMIT_MAP = new Map();
 const RATE_LIMIT_PER_MIN = Number(process.env.RATE_LIMIT_PER_MIN || 60);
 
-function parseCookies(req) {
-  const raw = req.headers.cookie || '';
-  return raw.split(';').reduce((cookies, part) => {
-    const [name, ...rest] = part.split('=');
-    if (!name) return cookies;
-    cookies[name.trim()] = decodeURIComponent((rest.join('=') || '').trim());
-    return cookies;
-  }, {});
-}
-
-function getRequestApiKey(req) {
-  return String(req.headers['x-api-key'] || req.headers['x-admin-key'] || '').trim();
-}
-
 function getClientIp(req) {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
   return ip.split(',')[0].trim();
 }
 
-function makeSessionToken() {
-  return randomBytes(16).toString('hex');
-}
-
-function cleanupSessions() {
-  const now = Date.now();
-  for (const [token, session] of SESSIONS.entries()) {
-    if (session.expiresAt < now) SESSIONS.delete(token);
-  }
-}
-
-function getSession(req) {
-  cleanupSessions();
-  const cookies = parseCookies(req);
-  const token = cookies['canlah_session'];
-  if (!token) return null;
-  const session = SESSIONS.get(token);
-  if (!session || session.expiresAt < Date.now()) {
-    SESSIONS.delete(token);
-    return null;
-  }
-  return session;
-}
-
-function createSession(role) {
-  const token = makeSessionToken();
-  const expiresAt = Date.now() + SESSION_MAX_AGE * 1000;
-  SESSIONS.set(token, { role, expiresAt });
-  return token;
-}
-
-function getSessionCookie(token) {
-  return `canlah_session=${token}; HttpOnly; Path=/; Max-Age=${SESSION_MAX_AGE}; SameSite=Lax`;
-}
-
-function clearSessionCookie() {
-  return 'canlah_session=deleted; HttpOnly; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-}
-
-function checkAdminSessionOrKey(req, res) {
-  const session = getSession(req);
-  if (session?.role === 'admin') return true;
-  if (!ADMIN_API_KEY) return true;
-  const key = getRequestApiKey(req);
-  if (key && key === ADMIN_API_KEY) return true;
-  send(res, 401, JSON.stringify({ error: 'Unauthorized: invalid admin key' }), { 'Content-Type': 'application/json' });
-  return false;
-}
-
-function checkPublicOrSessionOrAdmin(req, res) {
-  const session = getSession(req);
-  if (session?.role === 'admin' || session?.role === 'public') return true;
-  const key = getRequestApiKey(req);
-  if (PUBLIC_API_KEY || ADMIN_API_KEY) {
-    if (key && (key === PUBLIC_API_KEY || key === ADMIN_API_KEY)) return true;
-    send(res, 401, JSON.stringify({ error: 'Unauthorized: invalid API key' }), { 'Content-Type': 'application/json' });
+function requireAuthDev(req, res) {
+  const result = authCheck(req);
+  if (!result.ok) {
+    send(res, 401, JSON.stringify({ error: 'Unauthorized — please log in' }), { 'Content-Type': 'application/json' });
     return false;
   }
   return true;
@@ -630,12 +561,33 @@ const server = http.createServer((req, res) => {
     })();
     return;
   }
+  if (parsedUrl.pathname === '/api/login' && req.method === 'POST') {
+    (async () => {
+      try {
+        if (!rateLimitCheck(req, res)) return;
+        const expected = process.env.ACCESS_PASSWORD;
+        if (!expected) return send(res, 503, JSON.stringify({ error: 'Access not configured (set ACCESS_PASSWORD)' }), { 'Content-Type': 'application/json' });
+        const body = await parseBody(req);
+        if (!body || typeof body.password !== 'string') return send(res, 400, JSON.stringify({ error: 'password required' }), { 'Content-Type': 'application/json' });
+        if (body.password !== expected) return send(res, 401, JSON.stringify({ error: 'Invalid password' }), { 'Content-Type': 'application/json' });
+        const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
+        return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json', 'Set-Cookie': setSessionCookie({ role: 'user', exp }) });
+      } catch (err) {
+        return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/logout' && req.method === 'POST') {
+    return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json', 'Set-Cookie': clearSessionCookie() });
+  }
+
   if (parsedUrl.pathname === '/api/save-report' && req.method === 'POST') {
     (async () => {
       try {
         if (!rateLimitCheck(req, res)) return;
-        const requireAuth = !DEMO_MODE;
-        if (requireAuth && !checkAdminSessionOrKey(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
         const body = await parseBody(req);
         if (!body || !body.report) return send(res, 400, JSON.stringify({ error: 'report required' }), { 'Content-Type': 'application/json' });
         const id = 'r-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
@@ -653,8 +605,7 @@ const server = http.createServer((req, res) => {
     (async () => {
       try {
         if (!rateLimitCheck(req, res)) return;
-        const requireAuth = !DEMO_MODE;
-        if (requireAuth && !checkAdminSessionOrKey(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
         const reports = await loadReports();
         return send(res, 200, JSON.stringify({ reports }), { 'Content-Type': 'application/json' });
       } catch (err) {
@@ -665,11 +616,10 @@ const server = http.createServer((req, res) => {
   }
 
   if (parsedUrl.pathname === '/api/process') {
-    // Protect API actions with rate limiting and optional API key when not in demo mode
     (async () => {
       try {
         if (!rateLimitCheck(req, res)) return;
-        if (!DEMO_MODE && !checkPublicOrSessionOrAdmin(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
         return handleApi(req, res);
       } catch (err) {
         return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
