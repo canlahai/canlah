@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanLah.ai — Programme Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/canlah.css">
+<style>
+/* Programme-planner-only — Gantt grid + bars */
+.gantt-wrap{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow-x:auto;margin-bottom:1.5rem}
+.gantt{min-width:900px}
+.gantt-header{display:grid;grid-template-columns:240px 1fr;border-bottom:1px solid var(--g7);background:var(--g8)}
+.gantt-corner{padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.08em;border-right:1px solid var(--g7)}
+.gantt-months{display:flex;position:relative;height:34px}
+.gantt-month{flex:1;border-right:1px solid var(--g7);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g4);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;overflow:hidden}
+.gantt-month:last-child{border-right:none}
+
+.gantt-row{display:grid;grid-template-columns:240px 1fr;border-bottom:1px solid var(--g7);min-height:34px}
+.gantt-row:last-child{border-bottom:none}
+.gantt-row.phase-row{background:var(--g8)}
+.gantt-row.phase-row .gantt-label{font-weight:700;color:var(--paper);text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em}
+.gantt-label{padding:8px 14px;border-right:1px solid var(--g7);font-size:12px;color:var(--g2);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gantt-label .phase-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.gantt-track{position:relative;padding:6px 0}
+.gantt-bar{position:absolute;height:20px;border-radius:3px;display:flex;align-items:center;padding:0 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--paper);overflow:hidden;white-space:nowrap;letter-spacing:.04em;line-height:1}
+.gantt-bar.critical{background:var(--red);border:1px solid var(--red)}
+.gantt-bar.normal{background:var(--g6);border:1px solid var(--g5)}
+.gantt-milestone{position:absolute;top:50%;transform:translate(-50%,-50%) rotate(45deg);width:14px;height:14px;background:var(--yellow);border:1px solid var(--yellow-dk,#c4a01e)}
+.gantt-milestone-label{position:absolute;top:50%;transform:translateY(-50%);margin-left:10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--yellow);white-space:nowrap;letter-spacing:.04em}
+
+.phase-legend{display:flex;flex-wrap:wrap;gap:14px}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--g3)}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+
+.crit-path{display:flex;flex-wrap:wrap;gap:6px}
+.crit-task{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 9px;border:1px solid var(--red);background:var(--rbg);color:#e07070;border-radius:var(--r)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-name"><span>Can</span><em>Lah</em>.ai</div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-tag">Programme Planner</div>
+</div>
+
+<div class="page active" id="page-upload">
+  <div class="upload-screen">
+    <div class="eyebrow">Construction Schedule Intelligence</div>
+    <h1 class="hero"><span class="yl">Programme.</span> <span class="og">Decoded.</span></h1>
+    <p class="sub">Upload your construction programme (MS Project export, Asta plot, or hand-drawn schedule). Claude extracts phases, tasks, durations, milestones, and the critical path into an interactive Gantt.</p>
+
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png">
+
+      <div id="upload-idle">
+        <div class="uz-title">Drop your programme here</div>
+        <div class="uz-sub">PDF, JPG or PNG. Tender programme, master schedule, or progress chart.</div>
+        <div class="uz-formats">
+          <span class="fmt-tag">PDF</span>
+          <span class="fmt-tag">JPG</span>
+          <span class="fmt-tag">PNG</span>
+        </div>
+        <button class="uz-btn" onclick="document.getElementById('file-input').click();event.stopPropagation()">Choose file</button>
+      </div>
+
+      <div id="upload-selected" style="display:none">
+        <div class="file-info">
+          <div class="file-icon">📅</div>
+          <div>
+            <div class="file-name" id="selected-name">—</div>
+            <div class="file-meta" id="selected-meta">—</div>
+          </div>
+        </div>
+        <button class="analyse-btn" id="analyse-btn" onclick="event.stopPropagation();startAnalysis()">
+          Decode Programme
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-processing">
+  <div class="proc-screen">
+    <div class="proc-eyebrow">Parsing programme</div>
+    <div class="proc-title">Extracting tasks and critical path<span id="proc-dots">.</span></div>
+  </div>
+</div>
+
+<div class="page" id="page-report">
+  <div class="report-screen">
+    <div class="rh-top">
+      <div>
+        <div class="rh-eyebrow">Programme · CanLah.ai</div>
+        <div class="rh-title" id="r-project">—</div>
+        <div class="rh-meta" id="r-meta">—</div>
+      </div>
+      <div class="rh-actions">
+        <button class="act-btn" onclick="toggleSavedReports()">Saved Reports</button>
+        <button class="act-btn" onclick="saveReport()">Save Report</button>
+        <button class="act-btn primary" onclick="CanLah.showPage('upload')">New Programme</button>
+      </div>
+    </div>
+
+    <div class="saved-panel" id="saved-panel" style="display:none">
+      <div class="sp-header">
+        <div>Saved programmes</div>
+        <button class="act-btn" onclick="toggleSavedReports()">Close</button>
+      </div>
+      <div id="saved-list"></div>
+    </div>
+
+    <div class="vitals" id="r-vitals"></div>
+
+    <div class="section" id="r-gantt-section">
+      <div class="section-title">Gantt</div>
+      <div class="gantt-wrap"><div class="gantt" id="r-gantt"></div></div>
+    </div>
+
+    <div class="section" id="r-phases" style="display:none">
+      <div class="section-title">Phases</div>
+      <div class="phase-legend" id="r-phases-legend"></div>
+    </div>
+
+    <div class="section alert" id="r-critical" style="display:none">
+      <div class="section-title">Critical path</div>
+      <div class="crit-path" id="r-critical-list"></div>
+    </div>
+
+    <div class="section" id="r-milestones" style="display:none">
+      <div class="section-title">Milestones</div>
+      <ul class="notes" id="r-milestones-list"></ul>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/canlah.js"></script>
+<script>
+const REPORT_TYPE = 'programme-plan';
+
+const PROGRAMME_PROMPT = `You are a construction programme analyst for Singapore projects. Read the uploaded programme document (tender programme, Asta plot, MS Project export, or progress chart) and extract a structured representation.
+
+Return ONLY valid JSON in this exact structure:
+\`\`\`json
+{
+  "projectName": "best guess at project name",
+  "projectRef": "contract / drawing reference if visible, else ''",
+  "startDate": "YYYY-MM-DD",
+  "endDate": "YYYY-MM-DD",
+  "totalDurationDays": 0,
+  "phases": [
+    { "id": "p1", "name": "Site Mobilisation", "color": "amber" }
+  ],
+  "tasks": [
+    { "id": "t1", "name": "Site set-up", "phaseId": "p1", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "onCriticalPath": false }
+  ],
+  "milestones": [
+    { "id": "m1", "name": "Foundation complete", "date": "YYYY-MM-DD" }
+  ],
+  "criticalPathTaskIds": ["t1", "t5"]
+}
+\`\`\`
+
+Rules:
+- Phase colors: pick from {amber, orange, yellow, green, blue, red}. Use distinct colors per phase.
+- Critical path: mark each task with onCriticalPath true/false; list their ids in criticalPathTaskIds.
+- Dates as YYYY-MM-DD. Use realistic Singapore construction durations if document is ambiguous.
+- Return ONLY the JSON. No preamble.`;
+
+let savedReportsCache = [];
+
+CanLah.init().then(() => CanLah.setupUploadZone({ accept: /\.(pdf|jpe?g|png)$/i }));
+
+async function startAnalysis() {
+  if (!CanLah.state.uploadedFile) { CanLah.showToast('Pick a file first', 'err'); return; }
+  CanLah.showPage('processing');
+  try {
+    const data = await CanLah.uploadAndAnalyse({ prompt: PROGRAMME_PROMPT, reportType: REPORT_TYPE });
+    buildReport(data);
+    CanLah.showPage('report');
+    CanLah.showToast('Programme decoded', 'ok');
+  } catch (err) {
+    console.error(err);
+    CanLah.showToast('Error: ' + err.message, 'err');
+    CanLah.showPage('upload');
+  }
+}
+
+// ── Gantt rendering ───────────────────────────────────────────────
+const PHASE_COLOR_MAP = {
+  amber: '#c97a12', orange: '#d95f2b', yellow: '#e8c027',
+  green: '#2a7a47', blue: '#1a5fa0', red: '#c0392b',
+};
+
+function dateToMs(s) { return new Date(s + 'T00:00:00').getTime(); }
+function monthLabel(d) { return d.toLocaleString('en-SG', { month: 'short', year: '2-digit' }); }
+
+function buildGantt(d) {
+  const gantt = document.getElementById('r-gantt');
+  gantt.innerHTML = '';
+  if (!d.tasks || !d.tasks.length) return;
+
+  const startMs = dateToMs(d.startDate);
+  const endMs = dateToMs(d.endDate);
+  const totalMs = Math.max(endMs - startMs, 24 * 3600 * 1000);
+
+  // Month headers spanning [startDate, endDate]
+  const months = [];
+  const cursor = new Date(startMs);
+  cursor.setDate(1);
+  while (cursor.getTime() <= endMs) {
+    months.push(new Date(cursor.getTime()));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  const header = document.createElement('div');
+  header.className = 'gantt-header';
+  header.innerHTML = `
+    <div class="gantt-corner">Task</div>
+    <div class="gantt-months">${months.map(m => `<div class="gantt-month">${monthLabel(m)}</div>`).join('')}</div>
+  `;
+  gantt.appendChild(header);
+
+  // Group tasks by phase, preserving phase order
+  const phasesById = new Map((d.phases || []).map(p => [p.id, p]));
+  const tasksByPhase = new Map();
+  for (const t of d.tasks) {
+    const list = tasksByPhase.get(t.phaseId) || [];
+    list.push(t);
+    tasksByPhase.set(t.phaseId, list);
+  }
+
+  const pctFor = ms => ((ms - startMs) / totalMs) * 100;
+
+  for (const phase of (d.phases || [])) {
+    const phaseRow = document.createElement('div');
+    phaseRow.className = 'gantt-row phase-row';
+    const color = PHASE_COLOR_MAP[phase.color] || '#888';
+    phaseRow.innerHTML = `
+      <div class="gantt-label"><span class="phase-dot" style="background:${color}"></span>${phase.name}</div>
+      <div class="gantt-track"></div>
+    `;
+    gantt.appendChild(phaseRow);
+
+    for (const task of (tasksByPhase.get(phase.id) || [])) {
+      const row = document.createElement('div');
+      row.className = 'gantt-row';
+      const left = pctFor(dateToMs(task.start));
+      const width = pctFor(dateToMs(task.end)) - left;
+      row.innerHTML = `
+        <div class="gantt-label">${task.name}</div>
+        <div class="gantt-track">
+          <div class="gantt-bar ${task.onCriticalPath ? 'critical' : 'normal'}" style="left:${left}%;width:${Math.max(width, 0.5)}%">${task.name}</div>
+        </div>
+      `;
+      gantt.appendChild(row);
+    }
+  }
+
+  // Milestones row at the bottom
+  if (d.milestones && d.milestones.length) {
+    const msRow = document.createElement('div');
+    msRow.className = 'gantt-row';
+    const trackInner = d.milestones.map(m => {
+      const left = pctFor(dateToMs(m.date));
+      return `
+        <div class="gantt-milestone" style="left:${left}%" title="${m.name} · ${m.date}"></div>
+        <div class="gantt-milestone-label" style="left:${left}%">${m.name}</div>
+      `;
+    }).join('');
+    msRow.innerHTML = `
+      <div class="gantt-label" style="font-weight:700;color:var(--yellow)">Milestones</div>
+      <div class="gantt-track">${trackInner}</div>
+    `;
+    gantt.appendChild(msRow);
+  }
+}
+
+function buildReport(d) {
+  document.getElementById('r-project').textContent = d.projectName || 'Untitled project';
+  document.getElementById('r-meta').textContent = `${d.projectRef || 'No ref'} · ${d.startDate || '?'} → ${d.endDate || '?'} · ${d.totalDurationDays ?? '—'} days`;
+
+  document.getElementById('r-vitals').innerHTML = `
+    <div class="vital"><div class="v-label">Duration</div><div class="v-val">${d.totalDurationDays ?? '—'}d</div></div>
+    <div class="vital"><div class="v-label">Phases</div><div class="v-val">${(d.phases || []).length}</div></div>
+    <div class="vital"><div class="v-label">Tasks</div><div class="v-val">${(d.tasks || []).length}</div></div>
+    <div class="vital"><div class="v-label">Milestones</div><div class="v-val">${(d.milestones || []).length}</div></div>
+    <div class="vital"><div class="v-label">Critical path</div><div class="v-val">${(d.criticalPathTaskIds || []).length}</div></div>
+  `;
+
+  buildGantt(d);
+
+  const phases = d.phases || [];
+  document.getElementById('r-phases').style.display = phases.length ? 'block' : 'none';
+  document.getElementById('r-phases-legend').innerHTML = phases.map(p =>
+    `<div class="legend-item"><span class="legend-dot" style="background:${PHASE_COLOR_MAP[p.color] || '#888'}"></span>${p.name}</div>`
+  ).join('');
+
+  const critIds = d.criticalPathTaskIds || [];
+  const critTasks = (d.tasks || []).filter(t => critIds.includes(t.id));
+  document.getElementById('r-critical').style.display = critTasks.length ? 'block' : 'none';
+  document.getElementById('r-critical-list').innerHTML = critTasks.map(t =>
+    `<span class="crit-task">${t.name}</span>`
+  ).join('');
+
+  const milestones = d.milestones || [];
+  document.getElementById('r-milestones').style.display = milestones.length ? 'block' : 'none';
+  document.getElementById('r-milestones-list').innerHTML = milestones.map(m =>
+    `<li><strong style="color:var(--yellow)">◆</strong> ${m.name} — ${m.date}</li>`
+  ).join('');
+
+  window._lastReport = d;
+}
+
+async function saveReport() {
+  try {
+    const j = await CanLah.saveReport(window._lastReport || {}, REPORT_TYPE);
+    CanLah.showToast('Programme saved (' + j.id + ')', 'ok');
+  } catch (err) {
+    CanLah.showToast('Save failed: ' + err.message, 'err');
+  }
+}
+
+async function toggleSavedReports() {
+  const panel = document.getElementById('saved-panel');
+  if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const list = document.getElementById('saved-list');
+  list.innerHTML = '<div class="sr-empty">Loading…</div>';
+  try {
+    savedReportsCache = await CanLah.listSavedReports(REPORT_TYPE);
+    if (!savedReportsCache.length) { list.innerHTML = '<div class="sr-empty">No saved programmes yet.</div>'; return; }
+    list.innerHTML = savedReportsCache.map(r => `
+      <div class="sr-item">
+        <div>
+          <div class="sr-title">${r.projectName || 'Untitled project'}</div>
+          <div class="sr-sub">Saved ${new Date(r.savedAt).toLocaleString('en-SG')} · ${r.totalDurationDays ?? '—'} days</div>
+        </div>
+        <button class="act-btn" onclick="loadSavedReport('${r.id}')">Load</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="sr-empty" style="color:var(--red)">${err.message}</div>`;
+  }
+}
+
+function loadSavedReport(id) {
+  const r = savedReportsCache.find(x => x.id === id);
+  if (!r) { CanLah.showToast('Programme not found', 'err'); return; }
+  buildReport(r);
+  document.getElementById('saved-panel').style.display = 'none';
+}
+</script>
+</body>
+</html>

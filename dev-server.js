@@ -380,6 +380,44 @@ async function handleApi(req, res) {
       const { fileId, blobUrl, prompt, reportType } = body;
       if (!fileId && (!blobUrl || !prompt)) throw new Error('fileId or blobUrl + prompt are required');
       if (DEMO_MODE) {
+        if (reportType === 'programme-plan') {
+          const demoProg = {
+            projectName: 'Construction of HDB EW2 Connection — Blk 102',
+            projectRef: 'HDB/PUB/EW2/2026',
+            startDate: '2026-06-01',
+            endDate: '2027-09-15',
+            totalDurationDays: 471,
+            phases: [
+              { id: 'p1', name: 'Mobilisation', color: 'amber' },
+              { id: 'p2', name: 'Piling & Substructure', color: 'orange' },
+              { id: 'p3', name: 'Superstructure', color: 'yellow' },
+              { id: 'p4', name: 'MEP & Finishes', color: 'green' },
+              { id: 'p5', name: 'Handover', color: 'blue' },
+            ],
+            tasks: [
+              { id: 't1', name: 'Site set-up', phaseId: 'p1', start: '2026-06-01', end: '2026-06-30', onCriticalPath: true },
+              { id: 't2', name: 'Hoarding & site office', phaseId: 'p1', start: '2026-06-15', end: '2026-07-10', onCriticalPath: false },
+              { id: 't3', name: 'Bored piling', phaseId: 'p2', start: '2026-07-01', end: '2026-09-30', onCriticalPath: true },
+              { id: 't4', name: 'Pile caps & ground beams', phaseId: 'p2', start: '2026-09-15', end: '2026-11-15', onCriticalPath: true },
+              { id: 't5', name: 'Basement slab', phaseId: 'p2', start: '2026-11-01', end: '2026-12-15', onCriticalPath: true },
+              { id: 't6', name: 'Tower crane erection', phaseId: 'p3', start: '2026-12-01', end: '2026-12-20', onCriticalPath: false },
+              { id: 't7', name: 'Superstructure (L1-L9)', phaseId: 'p3', start: '2026-12-15', end: '2027-04-30', onCriticalPath: true },
+              { id: 't8', name: 'Superstructure (L10-L18)', phaseId: 'p3', start: '2027-04-15', end: '2027-07-15', onCriticalPath: true },
+              { id: 't9', name: 'MEP rough-in', phaseId: 'p4', start: '2027-03-01', end: '2027-07-30', onCriticalPath: false },
+              { id: 't10', name: 'Architectural finishes', phaseId: 'p4', start: '2027-05-01', end: '2027-08-15', onCriticalPath: true },
+              { id: 't11', name: 'T&C and pre-handover', phaseId: 'p5', start: '2027-08-01', end: '2027-09-01', onCriticalPath: true },
+              { id: 't12', name: 'TOP & handover', phaseId: 'p5', start: '2027-09-01', end: '2027-09-15', onCriticalPath: true },
+            ],
+            milestones: [
+              { id: 'm1', name: 'Piling complete', date: '2026-09-30' },
+              { id: 'm2', name: 'Substructure complete', date: '2026-12-15' },
+              { id: 'm3', name: 'Top-out', date: '2027-07-15' },
+              { id: 'm4', name: 'TOP', date: '2027-09-15' },
+            ],
+            criticalPathTaskIds: ['t1', 't3', 't4', 't5', 't7', 't8', 't10', 't11', 't12'],
+          };
+          return send(res, 200, JSON.stringify({ data: demoProg }), { 'Content-Type': 'application/json' });
+        }
         if (reportType === 'hr-compliance') {
           const demoHr = {
             companyName: 'Acme Construction Pte Ltd',
