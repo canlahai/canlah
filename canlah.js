@@ -18,12 +18,15 @@ const CanLah = {
     try {
       const res = await fetch('/api/config');
       if (res.ok) {
-        const cfg = await res.json();
-        this.state.publicApiKey = cfg.publicApiKey || null;
-        this.state.demoMode = cfg.demoMode;
-      }
+          const cfg = await res.json();
+          this.state.publicApiKey = cfg.publicApiKey || null;
+          this.state.demoMode = cfg.demoMode;
+          this.state.session = cfg.session || null;
+          this.state.caller = cfg.caller || null;
+        }
     } catch {}
     this._startDotsAnimation();
+    this.renderUserStatus();
     return this;
   },
 
@@ -40,6 +43,74 @@ const CanLah = {
     t.className = 'toast show' + (type ? ' ' + type : '');
     clearTimeout(t._t);
     t._t = setTimeout(() => { t.className = 'toast'; }, type === 'err' ? 5000 : 3500);
+  },
+
+  _createModalRoot() {
+    if (this._modalRoot) return this._modalRoot;
+    const root = document.createElement('div');
+    root.className = 'canlah-modal-overlay';
+    root.innerHTML = `
+      <div class="canlah-modal" role="dialog" aria-modal="true" aria-labelledby="canlah-modal-title">
+        <div class="cm-head">
+          <div id="canlah-modal-title" class="cm-title"></div>
+          <button type="button" class="cm-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="cm-body"></div>
+        <div class="cm-actions">
+          <button type="button" class="cm-cancel cm-btn">Cancel</button>
+          <button type="button" class="cm-confirm cm-btn">Confirm</button>
+        </div>
+      </div>
+    `;
+    root.style.display = 'none';
+    document.body.appendChild(root);
+    this._modalRoot = root;
+    this._modalRoot.querySelector('.cm-close').addEventListener('click', () => this._resolveModal(false));
+    this._modalRoot.querySelector('.cm-cancel').addEventListener('click', () => this._resolveModal(false));
+    this._modalRoot.querySelector('.cm-confirm').addEventListener('click', () => this._resolveModal(true));
+    window.addEventListener('keydown', (event) => {
+      if (!this._modalRoot || this._modalRoot.style.display !== 'flex') return;
+      if (event.key === 'Escape') this._resolveModal(false);
+    });
+    return root;
+  },
+
+  _resolveModal(value) {
+    if (this._modalResolver) {
+      this._modalResolver(value);
+      this._modalResolver = null;
+    }
+    const root = this._modalRoot;
+    if (!root) return;
+    root.style.display = 'none';
+  },
+
+  async _showModal({ title, body, confirmText = 'Confirm', cancelText = 'Cancel' }) {
+    const root = this._createModalRoot();
+    root.querySelector('#canlah-modal-title').textContent = title;
+    root.querySelector('.cm-body').innerHTML = body;
+    root.querySelector('.cm-confirm').textContent = confirmText;
+    root.querySelector('.cm-cancel').textContent = cancelText;
+    root.style.display = 'flex';
+    return new Promise((resolve) => {
+      this._modalResolver = resolve;
+    });
+  },
+
+  async showConfirm({ title, message, confirmText = 'Delete', cancelText = 'Cancel' }) {
+    const body = `<p>${message}</p>`;
+    return await this._showModal({ title, body, confirmText, cancelText });
+  },
+
+  async showPrompt({ title, message, placeholder = '', defaultValue = '', confirmText = 'Save', cancelText = 'Cancel' }) {
+    const body = `
+      <p>${message}</p>
+      <input id="canlah-prompt-input" class="cm-input" type="text" placeholder="${placeholder}" value="${defaultValue}">
+    `;
+    const accepted = await this._showModal({ title, body, confirmText, cancelText });
+    if (!accepted) return null;
+    const input = document.getElementById('canlah-prompt-input');
+    return input ? input.value.trim() : null;
   },
 
   setupUploadZone({ accept, maxBytes = 30 * 1024 * 1024, onSelected } = {}) {
@@ -101,6 +172,35 @@ const CanLah = {
     location.href = '/login?return=' + encodeURIComponent(here);
   },
 
+  renderUserStatus() {
+    const topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    let node = document.getElementById('canlah-user-status');
+    if (!node) {
+      node = document.createElement('div');
+      node.id = 'canlah-user-status';
+      node.className = 'topbar-user';
+      topbar.appendChild(node);
+    }
+    const session = this.state.session;
+    if (session?.id) {
+      const label = session.name ? session.name : session.id.slice(0, 8);
+      const role = session.role ? ` (${session.role})` : '';
+      node.innerHTML = `<span class="topbar-user-label">Logged in as ${label}${role}</span><button type="button" class="act-btn small" onclick="CanLah.logout()">Logout</button>`;
+      return;
+    }
+    if (this.state.demoMode) {
+      node.textContent = 'Demo mode';
+      return;
+    }
+    node.innerHTML = `<button type="button" class="act-btn small" onclick="location.href='/login?return=${encodeURIComponent(location.pathname)}'">Sign in</button>`;
+  },
+
+  async logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    location.href = '/login?return=' + encodeURIComponent(location.pathname + location.search);
+  },
+
   async uploadAndAnalyse({ prompt, reportType }) {
     const file = this.state.uploadedFile;
     if (!file) throw new Error('No file selected');
@@ -147,6 +247,67 @@ const CanLah = {
     const json = await res.json();
     if (!res.ok || json.error) throw new Error(json.error || 'Load failed');
     return (json.reports || []).filter(r => r.reportType === reportType);
+  },
+
+  async deleteReport(id) {
+    const res = await fetch('/api/reports', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Delete failed');
+    return json;
+  },
+
+  async updateReport(id, changes) {
+    const res = await fetch('/api/reports', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, changes }),
+    });
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Update failed');
+    return json;
+  },
+
+  downloadReport(report) {
+    const filename = `${(report.reportTitle || report.projectName || report.siteName || report.companyName || 'canlah-report').replace(/[^a-zA-Z0-9-_]/g, '_')}-${report.id || 'report'}.json`;
+    const data = JSON.stringify(report, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
+
+  async downloadReportPdfById(id) {
+    const res = await fetch(`/api/report-pdf?id=${encodeURIComponent(id)}`);
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || 'PDF export failed');
+    }
+    const blob = await res.blob();
+    const filename = `canlah-report-${id}.pdf`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
+
+  async downloadReportById(id) {
+    const res = await fetch(`/api/reports?ids=${encodeURIComponent(id)}`);
+    if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Load failed');
+    const r = (json.reports || [])[0];
+    if (!r) throw new Error('Report not found');
+    this.downloadReport(r);
   },
 
   _startDotsAnimation() {

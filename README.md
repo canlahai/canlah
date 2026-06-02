@@ -14,6 +14,12 @@ structured report → save/list pattern:
   programme and get a Gantt with phases, tasks, milestones, and the critical
   path.
 
+**👉 New to CanLah?** Start with [GETTING_STARTED.md](GETTING_STARTED.md) — it covers local setup, deployment, and everything in between.
+
+**📚 Documentation Index** → [DOCUMENTATION.md](DOCUMENTATION.md) (quick reference for all guides)
+
+**🚀 Production Checklist** → [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) (deployment steps + tasks)
+
 ## Auth
 
 In production, protected endpoints (`/api/process`, `/api/save-report`,
@@ -75,6 +81,12 @@ npx playwright install chromium # one-time, downloads ~90MB
 npm run test:e2e
 ```
 
+A dedicated Supabase-backed E2E test exists for production persistence validation:
+
+```bash
+npm run test:e2e:supabase
+```
+
 The test suite lives in `e2e/` and auto-starts the dev server on port 3030. See [playwright.config.js](playwright.config.js).
 
 ## Saving reports
@@ -83,6 +95,7 @@ The dev server supports saving and listing analysis reports in Supabase when `SU
 
 - Save a report: POST `/api/save-report` with JSON `{ "report": { ... } }`. Returns `{ ok: true, id }`.
 - List reports: GET `/api/reports` returns `{ reports: [...] }`.
+- Health check: GET `/api/health` returns runtime status for `supabase`, `sentry`, `demoMode`, and deployment readiness.
 
 If you configure Supabase, the app will persist saved reports in the specified table with server-side storage.
 
@@ -103,7 +116,7 @@ Use the `SUPABASE_REPORTS_TABLE` env var to override the table name if needed.
 
 For local dev you can configure an admin API key to protect sensitive endpoints. Add `ADMIN_API_KEY` to `.env` and the server will require the same key in the `x-api-key` request header for `/api/save-report` and `/api/reports`.
 
-If `PUBLIC_API_KEY` is configured, browser uploads and analysis requests to `/api/process` will also require that key. The app exposes runtime metadata at `/api/config` so the frontend can automatically send the public key when available.
+If `PUBLIC_API_KEY` is configured, browser uploads and analysis requests to `/api/process` will also require that key. The app exposes runtime metadata at `/api/config` so the frontend can automatically send the public key and Supabase persistence status when available.
 
 In `DEMO_MODE=true`, saved report endpoints can also be used without an admin key so the browser UI can list and load reports during local development.
 
@@ -118,13 +131,24 @@ curl -H "x-api-key: your_local_admin_api_key_here" http://localhost:3000/api/rep
 
 ## Deploying to Vercel
 
-This project is ready to deploy as a static site + serverless function on Vercel.
+This project is production-ready for Vercel deployment with full Supabase persistence, health monitoring, and error tracking.
 
-1. Create a new Vercel project, connect this repository.
-2. Add the environment variables in the Vercel dashboard: `BLOB_READ_WRITE_TOKEN`, `ANTHROPIC_API_KEY` (if needed), and set `DEMO_MODE=false` for production.
-3. Ensure the `api/process.js` function is placed under the `api/` folder (it already is). Vercel will deploy it as an Edge/Serverless Function.
+**See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete step-by-step guide**, covering:
+- Repository connection to Vercel
+- Environment secrets configuration
+- Health endpoint verification
+- Sentry error tracking setup
+- Uptime monitoring
+- Production checklist
+- Troubleshooting and scaling
 
-Tip: limit function max duration and ensure your Blob token has the proper scope for multipart uploads.
+For Supabase schema, RLS policies, and CI/CD pipeline setup, also see [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+
+Quick reference:
+- Health check: `GET /api/health` (no auth required, 200 = ready)
+- Config: `GET /api/config` (runtime status including Supabase + Sentry)
+- Function timeouts: 5–60s per endpoint (defined in `vercel.json`)
+- Cache headers: Non-caching for health/config, standard for others
 
 ## Next steps (recommended)
 - Add persistent storage for analysis results (Vercel KV, Supabase, or a small DB) so users can revisit past reports.

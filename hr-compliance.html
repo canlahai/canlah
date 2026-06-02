@@ -29,7 +29,8 @@ table.records tr:last-child td{border-bottom:none}
 <body>
 
 <div class="topbar">
-  <div class="brand-name"><span>Can</span><em>Lah</em>.ai</div>
+  <a href="/" class="brand-name" style="text-decoration:none;cursor:pointer" title="Back to home"><span>Can</span><em>Lah</em>.ai</a>
+  <a href="/" class="topbar-tag" style="text-decoration:none;cursor:pointer">← Home</a>
   <div class="topbar-spacer"></div>
   <div class="topbar-tag">HR Compliance</div>
 </div>
@@ -285,6 +286,8 @@ function buildReport(d) {
 
 async function saveReport() {
   try {
+    window._lastReport = window._lastReport || {};
+    window._lastReport.reportTitle = window._lastReport.reportTitle || window._lastReport.companyName || 'Compliance report';
     const j = await CanLah.saveReport(window._lastReport || {}, REPORT_TYPE);
     CanLah.showToast('Compliance report saved (' + j.id + ')', 'ok');
   } catch (err) {
@@ -304,10 +307,15 @@ async function toggleSavedReports() {
     list.innerHTML = savedReportsCache.map(r => `
       <div class="sr-item">
         <div>
-          <div class="sr-title">${r.companyName || 'Untitled company'}</div>
+          <div class="sr-title">${r.reportTitle || r.companyName || 'Untitled company'}</div>
           <div class="sr-sub">Saved ${new Date(r.savedAt).toLocaleString('en-SG')} · ${r.documentRef || ''}</div>
         </div>
-        <button class="act-btn" onclick="loadSavedReport('${r.id}')">Load</button>
+        <div class="sr-actions">
+          <button class="act-btn" onclick="loadSavedReport('${r.id}')">Load</button>
+          <button class="act-btn" onclick="downloadSavedReport('${r.id}')">Download</button>
+          <button class="act-btn" onclick="renameSavedReport('${r.id}')">Rename</button>
+          <button class="act-btn" onclick="deleteSavedReport('${r.id}')">Delete</button>
+        </div>
       </div>
     `).join('');
   } catch (err) {
@@ -320,6 +328,85 @@ function loadSavedReport(id) {
   if (!r) { CanLah.showToast('Report not found', 'err'); return; }
   buildReport(r);
   document.getElementById('saved-panel').style.display = 'none';
+}
+
+function downloadSavedReport(id) {
+  const report = savedReportsCache.find((item) => item.id === id);
+  if (!report) { CanLah.showToast('Report not found', 'err'); return; }
+  CanLah.downloadReport(report);
+}
+
+function renameSavedReport(id) {
+  const r = savedReportsCache.find(x => x.id === id);
+  if (!r) { CanLah.showToast('Report not found', 'err'); return; }
+  CanLah.showPrompt({
+    title: 'Rename saved report',
+    message: 'Enter a new title for this report',
+    placeholder: 'Report title',
+    defaultValue: r.reportTitle || r.companyName || 'Untitled report',
+    confirmText: 'Rename',
+    cancelText: 'Cancel',
+  }).then(async (newTitle) => {
+    if (!newTitle) return;
+    try {
+      await CanLah.updateReport(id, { reportTitle: newTitle });
+      r.reportTitle = newTitle;
+      const list = document.getElementById('saved-list');
+      list.innerHTML = savedReportsCache.map(rr => `
+        <div class="sr-item">
+          <div>
+            <div class="sr-title">${rr.reportTitle || rr.companyName || 'Untitled company'}</div>
+            <div class="sr-sub">Saved ${new Date(rr.savedAt).toLocaleString('en-SG')} · ${rr.documentRef || ''}</div>
+          </div>
+          <div class="sr-actions">
+            <button class="act-btn" onclick="loadSavedReport('${rr.id}')">Load</button>
+            <button class="act-btn" onclick="downloadSavedReport('${rr.id}')">Download</button>
+            <button class="act-btn" onclick="renameSavedReport('${rr.id}')">Rename</button>
+            <button class="act-btn" onclick="deleteSavedReport('${rr.id}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+      CanLah.showToast('Saved report renamed', 'ok');
+    } catch (err) {
+      CanLah.showToast('Rename failed: ' + err.message, 'err');
+    }
+  });
+}
+
+async function deleteSavedReport(id) {
+  const confirmed = await CanLah.showConfirm({
+    title: 'Delete saved report',
+    message: 'Are you sure you want to delete this saved report? This cannot be undone.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  });
+  if (!confirmed) return;
+  try {
+    await CanLah.deleteReport(id);
+    savedReportsCache = savedReportsCache.filter((item) => item.id !== id);
+    const list = document.getElementById('saved-list');
+    if (savedReportsCache.length) {
+      list.innerHTML = savedReportsCache.map(r => `
+        <div class="sr-item">
+          <div>
+            <div class="sr-title">${r.reportTitle || r.companyName || 'Untitled company'}</div>
+            <div class="sr-sub">Saved ${new Date(r.savedAt).toLocaleString('en-SG')} · ${r.documentRef || ''}</div>
+          </div>
+          <div class="sr-actions">
+            <button class="act-btn" onclick="loadSavedReport('${r.id}')">Load</button>
+            <button class="act-btn" onclick="downloadSavedReport('${r.id}')">Download</button>
+            <button class="act-btn" onclick="renameSavedReport('${r.id}')">Rename</button>
+            <button class="act-btn" onclick="deleteSavedReport('${r.id}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      list.innerHTML = '<div class="sr-empty">No saved compliance reports yet.</div>';
+    }
+    CanLah.showToast('Saved report deleted', 'ok');
+  } catch (err) {
+    CanLah.showToast('Delete failed: ' + err.message, 'err');
+  }
 }
 </script>
 

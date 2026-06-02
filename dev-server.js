@@ -2,9 +2,14 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+// PDF generation moved to lib/pdf.js
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
-import { createClient } from '@supabase/supabase-js';
-import { authCheck, setSessionCookie, clearSessionCookie } from './lib/auth.js';
+import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
+import { getSupabaseConfig } from './lib/supabase.js';
+import { getSentryStatus } from './lib/sentry.js';
+import { loadReports, saveReport, deleteReport, updateReport, getReportsByIds } from './lib/reports.js';
+import { initSentry, captureException } from './lib/sentry.js';
+import * as log from './lib/log.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = path.resolve('./');
@@ -27,9 +32,30 @@ function loadDotEnv() {
   } catch {
     // ignore missing .env
   }
+
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  log.warn('Supabase not configured; running in local JSON mode');
+}
+if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  log.warn('BLOB_READ_WRITE_TOKEN not set; demo upload mode active');
+}
 }
 
 loadDotEnv();
+
+const SENTRY_ENABLED = initSentry();
+if (SENTRY_ENABLED) {
+  log.info('Sentry initialized');
+}
+
+process.on('uncaughtException', (err) => {
+  log.error('uncaughtException', err);
+  captureException(err);
+});
+process.on('unhandledRejection', (reason) => {
+  log.error('unhandledRejection', reason);
+  captureException(reason instanceof Error ? reason : new Error(String(reason)));
+});
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -52,81 +78,8 @@ function contentType(filePath) {
 const DEMO_MODE = (process.env.DEMO_MODE === 'true') || !process.env.BLOB_READ_WRITE_TOKEN;
 const DEMO_ROOT = '/tmp/canlah-demo';
 const DEMO_FILE_MAP = new Map();
-const DATA_DIR = path.join(ROOT, 'data');
-const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
 
 const PUBLIC_API_KEY = process.env.PUBLIC_API_KEY || '';
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
-const SUPABASE_REPORTS_TABLE = process.env.SUPABASE_REPORTS_TABLE || 'canlah_reports';
-const SUPABASE = SUPABASE_URL && SUPABASE_SERVICE_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-  : null;
-
-async function ensureDataDir() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (e) {}
-}
-
-async function saveReportToSupabase(obj) {
-  if (!SUPABASE) throw new Error('Supabase not configured');
-  const { data, error } = await SUPABASE
-    .from(SUPABASE_REPORTS_TABLE)
-    .insert([{ id: obj.id, savedAt: obj.savedAt, report: obj }], { returning: 'representation' });
-  if (error) throw error;
-  const saved = data?.[0];
-  return saved?.report || { id: saved?.id, savedAt: saved?.savedAt, ...saved?.report };
-}
-
-async function loadReportsFromSupabase() {
-  if (!SUPABASE) throw new Error('Supabase not configured');
-  const { data, error } = await SUPABASE
-    .from(SUPABASE_REPORTS_TABLE)
-    .select('*')
-    .order('savedAt', { ascending: false })
-    .limit(200);
-  if (error) throw error;
-  return data.map((row) => row.report || { id: row.id, savedAt: row.savedAt, ...row.report });
-}
-
-async function loadReports() {
-  if (SUPABASE) {
-    try {
-      return await loadReportsFromSupabase();
-    } catch (e) {
-      console.warn('[dev] Supabase load failed, falling back to local JSON:', e.message);
-    }
-  }
-
-  try {
-    await ensureDataDir();
-    const raw = await fs.readFile(REPORTS_FILE, 'utf8');
-    return JSON.parse(raw || '[]');
-  } catch (e) {
-    return [];
-  }
-}
-
-async function saveReportObject(obj) {
-  if (SUPABASE) {
-    try {
-      return await saveReportToSupabase(obj);
-    } catch (e) {
-      console.warn('[dev] Supabase save failed, falling back to local JSON:', e.message);
-    }
-  }
-
-  const reports = await loadReports();
-  reports.unshift(obj);
-  try {
-    await ensureDataDir();
-    await fs.writeFile(REPORTS_FILE, JSON.stringify(reports, null, 2), 'utf8');
-  } catch (e) {
-    throw e;
-  }
-  return obj;
-}
 
 async function ensureDemoRoot() {
   try {
@@ -201,6 +154,13 @@ async function demoComplete(uploadId, parts, filename) {
 }
 
 function send(res, status, body, headers = {}) {
+  const method = res?.req?.method || 'UNKNOWN';
+  const url = res?.req?.url || 'UNKNOWN';
+  if (status >= 500) {
+    log.error(`[http] ${method} ${url} ${status}`, body);
+  } else {
+    log.info(`[http] ${method} ${url} ${status}`);
+  }
   res.writeHead(status, { 'Access-Control-Allow-Origin': '*', ...headers });
   res.end(body);
 }
@@ -532,8 +492,7 @@ async function handleApi(req, res) {
     }
 
     return send(res, 400, JSON.stringify({ error: `Unknown action: ${action}` }), { 'Content-Type': 'application/json' });
-  } catch (err) {
-    return send(res, 500, JSON.stringify({ error: err.message || 'Internal server error' }), { 'Content-Type': 'application/json' });
+  } catch (err) {    captureException(err);    return send(res, 500, JSON.stringify({ error: err.message || 'Internal server error' }), { 'Content-Type': 'application/json' });
   }
 }
 
@@ -609,7 +568,11 @@ const server = http.createServer((req, res) => {
         if (!body || typeof body.password !== 'string') return send(res, 400, JSON.stringify({ error: 'password required' }), { 'Content-Type': 'application/json' });
         if (body.password !== expected) return send(res, 401, JSON.stringify({ error: 'Invalid password' }), { 'Content-Type': 'application/json' });
         const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
-        return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json', 'Set-Cookie': setSessionCookie({ role: 'user', exp }) });
+        const id = 'u-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+        const name = typeof body.name === 'string' ? body.name.trim() : '';
+        const payload = { role: 'user', id, exp };
+        if (name) payload.name = name;
+        return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json', 'Set-Cookie': setSessionCookie(payload) });
       } catch (err) {
         return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
       }
@@ -629,8 +592,11 @@ const server = http.createServer((req, res) => {
         const body = await parseBody(req);
         if (!body || !body.report) return send(res, 400, JSON.stringify({ error: 'report required' }), { 'Content-Type': 'application/json' });
         const id = 'r-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
-        const toSave = Object.assign({ id, savedAt: new Date().toISOString() }, body.report);
-        await saveReportObject(toSave);
+        const session = getSession(req) || {};
+        const ownerId = session.id || null;
+        const ownerName = session.name || null;
+        const toSave = Object.assign({ id, savedAt: new Date().toISOString(), ownerId, ownerName }, body.report);
+        await saveReport(toSave);
         return send(res, 200, JSON.stringify({ ok: true, id }), { 'Content-Type': 'application/json' });
       } catch (err) {
         return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
@@ -639,13 +605,92 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (parsedUrl.pathname === '/api/reports' && req.method === 'GET') {
+  if (parsedUrl.pathname === '/api/reports') {
     (async () => {
       try {
         if (!rateLimitCheck(req, res)) return;
         if (!requireAuthDev(req, res)) return;
-        const reports = await loadReports();
-        return send(res, 200, JSON.stringify({ reports }), { 'Content-Type': 'application/json' });
+
+        if (req.method === 'GET') {
+          const reports = await loadReports();
+          return send(res, 200, JSON.stringify({ reports }), { 'Content-Type': 'application/json' });
+        }
+
+        if (req.method === 'DELETE') {
+          const id = parsedUrl.searchParams.get('id') || (body && body.id);
+          if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+
+          const caller = authCheck(req);
+          if (!caller.ok) return send(res, 401, JSON.stringify({ error: 'Unauthorized' }), { 'Content-Type': 'application/json' });
+          const session = getSession(req) || {};
+
+          if (caller.role !== 'admin') {
+            const items = await getReportsByIds([id]);
+            const it = items[0];
+            if (!it) return send(res, 404, JSON.stringify({ error: 'not found' }), { 'Content-Type': 'application/json' });
+            if (it.ownerId && it.ownerId !== session.id) return send(res, 403, JSON.stringify({ error: 'Forbidden — cannot delete someone else\'s report' }), { 'Content-Type': 'application/json' });
+          }
+
+          await deleteReport(id);
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+
+        if (req.method === 'PATCH') {
+          const body = await parseBody(req);
+          const id = body?.id || parsedUrl.searchParams.get('id');
+          const changes = body?.changes;
+          if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+          if (!changes || typeof changes !== 'object') return send(res, 400, JSON.stringify({ error: 'changes required' }), { 'Content-Type': 'application/json' });
+          const caller = authCheck(req);
+          if (!caller.ok) return send(res, 401, JSON.stringify({ error: 'Unauthorized' }), { 'Content-Type': 'application/json' });
+          const session = getSession(req) || {};
+
+          if (caller.role !== 'admin') {
+            const items = await getReportsByIds([id]);
+            const it = items[0];
+            if (!it) return send(res, 404, JSON.stringify({ error: 'not found' }), { 'Content-Type': 'application/json' });
+            if (it.ownerId && it.ownerId !== session.id) return send(res, 403, JSON.stringify({ error: 'Forbidden — cannot update someone else\'s report' }), { 'Content-Type': 'application/json' });
+          }
+
+          await updateReport(id, changes);
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+
+        if (req.method === 'POST') {
+          const body = await parseBody(req);
+          const action = body?.action;
+          if (action === 'transfer') {
+            const id = body.id;
+            const toUserId = body.toUserId;
+            const toUserName = body.toUserName || null;
+            if (!id || !toUserId) return send(res, 400, JSON.stringify({ error: 'id and toUserId required' }), { 'Content-Type': 'application/json' });
+
+            const caller = authCheck(req);
+            if (!caller.ok) return send(res, 401, JSON.stringify({ error: 'Unauthorized' }), { 'Content-Type': 'application/json' });
+            const session = getSession(req) || {};
+
+            if (caller.role !== 'admin') {
+              const items = await getReportsByIds([id]);
+              const it = items[0];
+              if (!it) return send(res, 404, JSON.stringify({ error: 'not found' }), { 'Content-Type': 'application/json' });
+              if (it.ownerId && it.ownerId !== session.id) return send(res, 403, JSON.stringify({ error: 'Forbidden — cannot transfer someone else\'s report' }), { 'Content-Type': 'application/json' });
+            }
+
+            const prev = (await getReportsByIds([id]))[0] || {};
+            const changes = {
+              ownerId: toUserId,
+              ownerName: toUserName || null,
+              previousOwnerId: prev.ownerId || null,
+              previousOwnerName: prev.ownerName || null,
+              transferredAt: new Date().toISOString(),
+              transferredBy: session.id || null,
+            };
+            await updateReport(id, changes);
+            return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+          }
+        }
+
+        return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
       } catch (err) {
         return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
       }
@@ -666,12 +711,70 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (parsedUrl.pathname === '/api/config' && req.method === 'GET') {
+    const caller = authCheck(req);
+    const session = getSession(req) || null;
     return send(res, 200, JSON.stringify({
       publicApiKey: PUBLIC_API_KEY || null,
       demoMode: DEMO_MODE,
       blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
       anthropicKey: !!process.env.ANTHROPIC_API_KEY,
+      supabase: getSupabaseConfig(),
+      sentry: getSentryStatus(),
+      session: session ? { id: session.id, role: session.role } : null,
+      caller: caller.ok ? (caller.role || (caller.demo ? 'demo' : 'user')) : null,
     }), { 'Content-Type': 'application/json' });
+  }
+
+  if (parsedUrl.pathname === '/api/health' && req.method === 'GET') {
+    return send(res, 200, JSON.stringify({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      nodeEnv: process.env.NODE_ENV || 'development',
+      demoMode: DEMO_MODE,
+      blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+      anthropicKey: !!process.env.ANTHROPIC_API_KEY,
+      supabase: getSupabaseConfig(),
+      sentry: getSentryStatus(),
+    }), { 'Content-Type': 'application/json' });
+  }
+
+  if (parsedUrl.pathname === '/api/report-pdf' && req.method === 'GET') {
+    (async () => {
+      try {
+        if (!rateLimitCheck(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
+        const id = parsedUrl.searchParams.get('id');
+        if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+        const caller = authCheck(req);
+        if (!caller.ok) return send(res, 401, JSON.stringify({ error: 'Unauthorized' }), { 'Content-Type': 'application/json' });
+        const session = getSession(req) || {};
+        const reports = await getReportsByIds([id]);
+        const report = reports[0];
+        if (!report) return send(res, 404, JSON.stringify({ error: 'Report not found' }), { 'Content-Type': 'application/json' });
+        if (caller.role !== 'admin' && report.ownerId && report.ownerId !== session.id) {
+          return send(res, 403, JSON.stringify({ error: 'Forbidden — cannot export someone else\'s report' }), { 'Content-Type': 'application/json' });
+        }
+
+        const title = report.reportTitle || report.projectName || report.siteName || report.companyName || 'CanLah Report';
+        const filename = `${title.replace(/[^a-zA-Z0-9-_]/g, '_')}-${report.id}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // Delegate PDF generation to lib/pdf.js
+        try {
+          const { generateReportPdf } = await import('./lib/pdf.js');
+          await generateReportPdf(report, res);
+          return;
+        } catch (pdfErr) {
+          console.error('[pdf] generation failed', pdfErr);
+          try { res.end(); } catch (_) {}
+          return;
+        }
+      } catch (err) {
+        return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
   }
 
   if (parsedUrl.pathname === '/debug') {

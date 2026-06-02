@@ -13,8 +13,12 @@
 //   POST { action: 'analyse', blobUrl, prompt }
 //     → runs Claude analysis for any prompt using a public blob URL, returns full Anthropic response
 
-import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
+import { createMultipartUpload, completeMultipartUpload } from '@vercel/blob';
 import { requireAuth } from '../lib/auth.js';
+import { initSentry, captureException } from '../lib/sentry.js';
+import * as log from '../lib/log.js';
+
+initSentry();
 
 const TREE_EXTRACTION_PROMPT = `You are an expert Singapore construction document analyst specialising in NParks / LTA tree felling drawings. Analyse this tree affected plan and extract ALL tree data.
 
@@ -150,6 +154,8 @@ export default async function handler(req, res) {
       console.log('[api] upload-start created', { key, uploadId: String(uploadId).slice(0, 60) + '...' });
       return res.status(200).json({ key, uploadId });
     } catch (err) {
+      captureException(err);
+      log.error('[api/process] upload-start failed', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -169,6 +175,8 @@ export default async function handler(req, res) {
       console.log('[api] upload-part result', { key, uploadId: String(uploadId).slice(0,60) + '...', partNumber, byteLength: buffer.length, etag: part?.etag });
       return res.status(200).json(part);
     } catch (err) {
+      captureException(err);
+      log.error('[api/process] upload-part failed', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -217,6 +225,8 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ fileId: upData.id });
     } catch (err) {
+      captureException(err);
+      log.error('[api/process] upload-complete failed', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -232,6 +242,8 @@ export default async function handler(req, res) {
       const blob = await uploadBufferToBlob(fileName, buffer, mimeType);
       return res.status(200).json({ blobUrl: blob.url });
     } catch (err) {
+      captureException(err);
+      log.error('[api/process] upload failed', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -265,7 +277,7 @@ export default async function handler(req, res) {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 4096,
           messages: [{ role: 'user', content }],
         }),
@@ -285,6 +297,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json(msgData);
     } catch (err) {
+      captureException(err);
       return res.status(500).json({ error: err.message });
     }
   }

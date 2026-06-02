@@ -1,10 +1,47 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
+  "buildCommand": "npm run build || echo 'no build script'",
   "functions": {
     "api/process.js": {
       "maxDuration": 60
+    },
+    "api/save-report.js": {
+      "maxDuration": 30
+    },
+    "api/reports.js": {
+      "maxDuration": 30
+    },
+    "api/report-pdf.js": {
+      "maxDuration": 60
+    },
+    "api/login.js": {
+      "maxDuration": 10
+    },
+    "api/logout.js": {
+      "maxDuration": 10
+    },
+    "api/config.js": {
+      "maxDuration": 5
+    },
+    "api/health.js": {
+      "maxDuration": 5
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/api/health",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/api/config",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    }
+  ]
 }
+
 

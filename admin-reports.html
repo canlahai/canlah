@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin — Saved Reports</title>
+  <link rel="stylesheet" href="/canlah.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <a href="/" style="display:inline-block;margin-bottom:12px;color:inherit;text-decoration:none;opacity:.7;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.06em">← Home</a>
+    <h1 id="admin-heading">Admin — Saved Reports</h1>
+    <p class="hero-sub">Manage saved reports: pagination, bulk export, and bulk delete.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="admin-heading" class="saved-panel">
+      <div class="sp-header">
+        <div class="sp-controls">
+          <label for="ar-search" class="sr-only">Search reports</label>
+          <input id="ar-search" aria-label="Search reports" placeholder="Search title, project, company or drawing ref" class="admin-input">
+          <label for="ar-perpage" class="sr-only">Reports per page</label>
+          <select id="ar-perpage" aria-label="Reports per page" class="admin-select">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+          <button type="button" class="act-btn" id="ar-refresh">Refresh</button>
+        </div>
+        <div>
+          <button type="button" class="act-btn" onclick="location.href='/'">Back</button>
+        </div>
+      </div>
+
+      <div class="sp-actions" role="toolbar" aria-label="Bulk actions">
+        <label class="checkbox-label"><input type="checkbox" id="ar-select-all"> Select all on page</label>
+        <button type="button" class="act-btn" id="ar-export">Export selected</button>
+        <button type="button" class="act-btn" id="ar-bulk-delete">Delete selected</button>
+        <div class="sp-pagination">
+          <button type="button" class="act-btn" id="ar-prev">Prev</button>
+          <span id="ar-page">Page 1</span>
+          <button type="button" class="act-btn" id="ar-next">Next</button>
+        </div>
+      </div>
+
+      <div class="admin-summary" aria-live="polite" id="ar-summary">Loading reports…</div>
+      <div id="ar-list" class="sr-list" aria-live="polite" aria-busy="true"></div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script src="/canlah.js"></script>
+<script>
+let adminCache = [];
+let currentPage = 0;
+let perPage = 50;
+
+async function init() {
+  await CanLah.init();
+  document.getElementById('ar-refresh').addEventListener('click', fetchPage);
+  document.getElementById('ar-search').addEventListener('input', () => { currentPage = 0; fetchPage(); });
+  document.getElementById('ar-perpage').addEventListener('change', (e) => { perPage = Number(e.target.value); currentPage = 0; fetchPage(); });
+  document.getElementById('ar-prev').addEventListener('click', () => { if (currentPage > 0) { currentPage--; fetchPage(); } });
+  document.getElementById('ar-next').addEventListener('click', () => { currentPage++; fetchPage(); });
+  document.getElementById('ar-select-all').addEventListener('change', toggleSelectAll);
+  document.getElementById('ar-export').addEventListener('click', exportSelected);
+  document.getElementById('ar-bulk-delete').addEventListener('click', bulkDeleteSelected);
+  fetchPage();
+}
+
+function toggleSelectAll(e) {
+  const checked = e.target.checked;
+  document.querySelectorAll('.ar-chk').forEach(cb => cb.checked = checked);
+}
+
+function selectedIds() {
+  return Array.from(document.querySelectorAll('.ar-chk:checked')).map(cb => cb.dataset.id);
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"]+/g, (match) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;'
+  })[match]);
+}
+
+async async function fetchPage() {
+  const list = document.getElementById('ar-list');
+  const summary = document.getElementById('ar-summary');
+  list.setAttribute('aria-busy', 'true');
+  list.innerHTML = '<div class="sr-empty">Loading…</div>';
+  summary.textContent = 'Loading reports…';
+  const q = encodeURIComponent(document.getElementById('ar-search').value || '');
+  try {
+    const res = await fetch(`/api/reports?page=${currentPage}&perPage=${perPage}&q=${q}`);
+    if (!res.ok) throw new Error('Unable to load reports');
+    const json = await res.json();
+    adminCache = (json.reports || []).slice();
+    renderPage();
+  } catch (err) {
+    list.innerHTML = `<div class="sr-empty" style="color:var(--red)">${escapeHtml(err.message)}</div>`;
+    summary.textContent = 'Unable to load reports.';
+    list.setAttribute('aria-busy', 'false');
+  }
+}
+
+function renderPage() {
+  const list = document.getElementById('ar-list');
+  const summary = document.getElementById('ar-summary');
+  if (!adminCache.length) {
+    list.innerHTML = '<div class="sr-empty">No reports on this page.</div>';
+    summary.textContent = 'No reports found for the current query.';
+    document.getElementById('ar-page').textContent = `Page ${currentPage+1}`;
+    list.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  const ownerSet = new Set(adminCache.map((r) => r.ownerName || r.ownerId || 'Unassigned'));
+  summary.textContent = `${adminCache.length} reports (owners: ${Array.from(ownerSet).slice(0, 4).join(', ')}${ownerSet.size > 4 ? `, +${ownerSet.size - 4} more` : ''})`;
+
+  list.innerHTML = adminCache.map(r => `
+    <div class="sr-item" role="listitem">
+      <div class="sr-meta-row">
+        <label class="checkbox-label"><input type="checkbox" class="ar-chk" data-id="${escapeHtml(r.id)}"> Select</label>
+        <div>
+          <div class="sr-title">${escapeHtml(r.reportTitle || r.projectName || r.siteName || r.companyName || 'Untitled')}</div>
+          <div class="sr-sub">Saved ${new Date(r.savedAt).toLocaleString('en-SG')} · ${escapeHtml(r.reportType || '—')}</div>
+          <div class="sr-owner">Owner: ${escapeHtml(r.ownerName || r.ownerId || 'Unassigned')}</div>
+        </div>
+      </div>
+      <div class="sr-actions">
+        <button type="button" class="act-btn ar-download" data-id="${escapeHtml(r.id)}" aria-label="Download report ${escapeHtml(r.reportTitle || r.projectName || r.siteName || r.companyName || r.id)}">Download</button>
+        <button type="button" class="act-btn ar-rename" data-id="${escapeHtml(r.id)}" aria-label="Rename report ${escapeHtml(r.reportTitle || r.projectName || r.siteName || r.companyName || r.id)}">Rename</button>
+        <button type="button" class="act-btn ar-transfer" data-id="${escapeHtml(r.id)}" aria-label="Transfer ownership of report ${escapeHtml(r.reportTitle || r.projectName || r.siteName || r.companyName || r.id)}">Transfer</button>
+      </div>
+    </div>
+  `).join('');
+  attachRowActions();
+  document.getElementById('ar-page').textContent = `Page ${currentPage+1}`;
+  list.setAttribute('aria-busy', 'false');
+}
+
+function attachRowActions() {
+  document.querySelectorAll('.ar-transfer').forEach(btn => {
+    btn.removeEventListener('click', onTransferClick);
+    btn.addEventListener('click', onTransferClick);
+  });
+  document.querySelectorAll('.ar-rename').forEach(btn => {
+    btn.removeEventListener('click', onRenameClick);
+    btn.addEventListener('click', onRenameClick);
+  });
+  document.querySelectorAll('.ar-download').forEach(btn => {
+    btn.removeEventListener('click', onDownloadClick);
+    btn.addEventListener('click', onDownloadClick);
+  });
+}
+
+async function onTransferClick(event) {
+  const id = event.currentTarget.dataset.id;
+  await transferOwner(id);
+}
+
+async function onRenameClick(event) {
+  const id = event.currentTarget.dataset.id;
+  await renameLocal(id);
+}
+
+async function onDownloadClick(event) {
+  const id = event.currentTarget.dataset.id;
+  await CanLah.downloadReportById(id);
+}
+
+async function exportSelected() {
+  const ids = selectedIds();
+  if (!ids.length) return CanLah.showToast('No reports selected', 'err');
+  try {
+    const res = await fetch('/api/reports', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'export', ids }) });
+    if (!res.ok) throw new Error('Export failed');
+    const json = await res.json();
+    const blob = new Blob([JSON.stringify(json.reports || [], null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `canlah-reports-page${currentPage+1}.json`; a.click(); URL.revokeObjectURL(url);
+    CanLah.showToast('Export downloaded', 'ok');
+  } catch (err) { CanLah.showToast('Export failed: ' + err.message, 'err'); }
+}
+
+async function bulkDeleteSelected() {
+  const ids = selectedIds();
+  if (!ids.length) return CanLah.showToast('No reports selected', 'err');
+  const confirmed = await CanLah.showConfirm({ title: 'Delete saved reports', message: `Delete ${ids.length} reports? This cannot be undone.`, confirmText: 'Delete', cancelText: 'Cancel' });
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/reports', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'bulk-delete', ids }) });
+    if (!res.ok) {
+      const json = await res.json().catch(()=>({}));
+      throw new Error(json.error || 'Bulk delete failed');
+    }
+    CanLah.showToast('Deleted', 'ok');
+    fetchPage();
+  } catch (err) { CanLah.showToast('Delete failed: ' + err.message, 'err'); }
+}
+
+async function renameLocal(id) {
+  const r = adminCache.find(x => x.id === id);
+  if (!r) return CanLah.showToast('Report not found', 'err');
+  const newTitle = await CanLah.showPrompt({ title: 'Rename saved report', message: 'Enter new title', placeholder: 'Title', defaultValue: r.reportTitle || r.projectName || '', confirmText: 'Rename', cancelText: 'Cancel' });
+  if (!newTitle) return;
+  try {
+    const res = await fetch('/api/reports', { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id, changes: { reportTitle: newTitle } }) });
+    if (!res.ok) throw new Error('Rename failed');
+    r.reportTitle = newTitle;
+    renderPage();
+    CanLah.showToast('Renamed', 'ok');
+  } catch (err) { CanLah.showToast('Rename failed: ' + err.message, 'err'); }
+}
+
+async function transferOwner(id) {
+  const report = adminCache.find(x => x.id === id);
+  if (!report) return CanLah.showToast('Report not found', 'err');
+  const newOwnerId = await CanLah.showPrompt({
+    title: 'Transfer report ownership',
+    message: 'Enter the new owner ID',
+    placeholder: 'user-id',
+    defaultValue: report.ownerId || '',
+    confirmText: 'Transfer',
+    cancelText: 'Cancel'
+  });
+  if (!newOwnerId) return;
+  const newOwnerName = await CanLah.showPrompt({
+    title: 'Transfer report ownership',
+    message: 'Enter the new owner name (optional)',
+    placeholder: 'Owner name',
+    defaultValue: report.ownerName || '',
+    confirmText: 'Transfer',
+    cancelText: 'Skip'
+  });
+  try {
+    const res = await fetch('/api/reports', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'transfer', id, toUserId: newOwnerId, toUserName: newOwnerName || null }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      throw new Error(json.error || 'Transfer failed');
+    }
+    report.ownerId = newOwnerId;
+    report.ownerName = newOwnerName || report.ownerName || null;
+    renderPage();
+    CanLah.showToast('Ownership transferred', 'ok');
+  } catch (err) {
+    CanLah.showToast('Transfer failed: ' + err.message, 'err');
+  }
+}
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
