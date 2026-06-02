@@ -7,7 +7,7 @@
     "dev": "node dev-server.js",
     "start": "node dev-server.js",
     "test:e2e": "playwright test",
-    "test:unit": "node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs"
+    "test:unit": "node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
