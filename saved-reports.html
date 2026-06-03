@@ -1,0 +1,178 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Saved Reports — CanLah.ai</title>
+  <link rel="stylesheet" href="/canlah.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <a href="/" style="display:inline-block;margin-bottom:12px;color:inherit;text-decoration:none;opacity:.7;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.06em">← Home</a>
+    <h1>Saved Reports</h1>
+    <p class="hero-sub">Browse, search and manage all saved reports.</p>
+  </header>
+
+  <main>
+    <div class="saved-panel">
+      <div class="sp-header">
+        <div style="display:flex;gap:12px;align-items:center">
+          <input id="sr-search" placeholder="Search title, project, company or drawing ref" style="width:420px;padding:8px;border-radius:10px;border:1px solid var(--g7);background:var(--g8);color:var(--paper)">
+          <select id="sr-filter-type" style="padding:8px;border-radius:10px;border:1px solid var(--g7);background:var(--g8);color:var(--paper)">
+            <option value="">All types</option>
+            <option value="bq">BQ</option>
+            <option value="reports">Site / Safety</option>
+            <option value="hr">HR</option>
+            <option value="planning">Programme</option>
+          </select>
+          <button class="act-btn" id="sr-refresh">Refresh</button>
+        </div>
+        <div>
+          <button class="act-btn" onclick="location.href='/'">Back</button>
+        </div>
+      </div>
+
+      <div id="sr-list" class="sr-list" style="margin-top:8px"></div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+</div>
+
+<script src="/canlah.js"></script>
+<script>
+let savedReportsCache = [];
+
+async function init() {
+  await CanLah.init();
+  document.getElementById('sr-refresh').addEventListener('click', fetchReports);
+  document.getElementById('sr-search').addEventListener('input', renderReports);
+  document.getElementById('sr-filter-type').addEventListener('change', renderReports);
+  fetchReports();
+}
+
+async function fetchReports() {
+  const list = document.getElementById('sr-list');
+  list.innerHTML = '<div class="sr-empty">Loading…</div>';
+  try {
+    const res = await fetch('/api/reports');
+    if (!res.ok) throw new Error('Unable to load reports');
+    const json = await res.json();
+    savedReportsCache = (json.reports || []).slice();
+    renderReports();
+  } catch (err) {
+    list.innerHTML = `<div class="sr-empty" style="color:var(--red)">${err.message}</div>`;
+  }
+}
+
+function renderReports() {
+  const q = (document.getElementById('sr-search').value || '').toLowerCase();
+  const type = document.getElementById('sr-filter-type').value;
+  const list = document.getElementById('sr-list');
+  const filtered = savedReportsCache.filter(r => {
+    if (type && String(r.reportType || '') !== type) return false;
+    if (!q) return true;
+    const fields = [r.reportTitle, r.projectName, r.siteName, r.companyName, r.drawingRef, r.documentRef].join(' ').toLowerCase();
+    return fields.includes(q);
+  });
+  if (!filtered.length) { list.innerHTML = '<div class="sr-empty">No reports found.</div>'; return; }
+
+  list.innerHTML = filtered.map(r => {
+    const title = r.reportTitle || r.projectName || r.siteName || r.companyName || 'Untitled';
+    const isOwner = CanLah.state?.session && CanLah.state.session.id && r.ownerId && CanLah.state.session.id === r.ownerId;
+    const owner = r.ownerId ? (isOwner ? 'You' : (r.ownerName || (r.ownerId.slice ? r.ownerId.slice(0,8) : r.ownerId))) : '';
+    const isAdmin = CanLah.state?.caller === 'admin';
+    const canEdit = isAdmin || isOwner;
+    return `
+    <div class="sr-item">
+      <div>
+        <div class="sr-title">${title}${owner ? ' · <small style="color:var(--g5)">owner: ' + owner + '</small>' : ''}</div>
+        <div class="sr-sub">Saved ${new Date(r.savedAt).toLocaleString('en-SG')} · ${r.reportType || '—'}</div>
+      </div>
+      <div class="sr-actions">
+        <button class="act-btn" onclick="loadReport('${r.id}')">Load</button>
+        <button class="act-btn" onclick="downloadReport('${r.id}')">Download</button>
+        <button class="act-btn" onclick="downloadPdf('${r.id}')">PDF</button>
+        ${canEdit ? `<button class="act-btn" onclick="renameReport('${r.id}')">Rename</button>` : ''}
+        ${canEdit ? `<button class="act-btn" onclick="transferOwnership('${r.id}')">Transfer</button>` : ''}
+        ${canEdit ? `<button class="act-btn" onclick="deleteReport('${r.id}')">Delete</button>` : ''}
+      </div>
+    </div>
+  `}).join('');
+}
+
+function findReport(id) { return savedReportsCache.find(x => x.id === id); }
+
+function loadReport(id) {
+  const r = findReport(id);
+  if (!r) { CanLah.showToast('Report not found', 'err'); return; }
+  const t = r.reportType || '';
+  const mapping = { bq: '/bq-reader.html', reports: '/site-report.html', hr: '/hr-compliance.html', planning: '/programme-planner.html' };
+  const target = mapping[t] || '/';
+  try { sessionStorage.setItem('canlah_load_report', JSON.stringify(r)); } catch {}
+  location.href = target;
+}
+
+function downloadReport(id) {
+  const r = findReport(id);
+  if (!r) { CanLah.showToast('Report not found', 'err'); return; }
+  CanLah.downloadReport(r);
+}
+
+function downloadPdf(id) {
+  CanLah.downloadReportPdfById(id).catch((err) => CanLah.showToast('PDF export failed: ' + err.message, 'err'));
+}
+
+async function deleteReport(id) {
+  const confirmed = await CanLah.showConfirm({ title: 'Delete saved report', message: 'Delete this saved report? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel' });
+  if (!confirmed) return;
+  try {
+    await CanLah.deleteReport(id);
+    savedReportsCache = savedReportsCache.filter(x => x.id !== id);
+    renderReports();
+    CanLah.showToast('Report deleted', 'ok');
+  } catch (err) { CanLah.showToast('Delete failed: ' + err.message, 'err'); }
+}
+
+async function renameReport(id) {
+  const r = findReport(id);
+  if (!r) { CanLah.showToast('Report not found', 'err'); return; }
+  const newTitle = await CanLah.showPrompt({ title: 'Rename saved report', message: 'Enter new title', placeholder: 'Title', defaultValue: r.reportTitle || r.projectName || '', confirmText: 'Rename', cancelText: 'Cancel' });
+  if (!newTitle) return;
+  try {
+    await CanLah.updateReport(id, { reportTitle: newTitle });
+    r.reportTitle = newTitle;
+    renderReports();
+    CanLah.showToast('Renamed', 'ok');
+  } catch (err) { CanLah.showToast('Rename failed: ' + err.message, 'err'); }
+}
+
+async function transferOwnership(id) {
+  const r = findReport(id);
+  if (!r) { CanLah.showToast('Report not found', 'err'); return; }
+  const input = await CanLah.showPrompt({ title: 'Transfer ownership', message: 'Enter target user name or id', placeholder: 'e.g. Alice Tan or u-1234', confirmText: 'Transfer', cancelText: 'Cancel' });
+  if (!input) return;
+  let toUserId = input.trim();
+  let toUserName = null;
+  if (!toUserId.startsWith('u-')) {
+    toUserName = toUserId;
+    toUserId = 'u-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+  }
+  try {
+    const res = await fetch('/api/reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'transfer', id, toUserId, toUserName }) });
+    if (!res.ok) throw new Error('Transfer failed');
+    // update cache
+    r.ownerId = toUserId;
+    r.ownerName = toUserName;
+    r.previousOwnerId = r.previousOwnerId || r.ownerId;
+    r.previousOwnerName = r.previousOwnerName || r.ownerName;
+    r.transferredAt = new Date().toISOString();
+    renderReports();
+    CanLah.showToast('Ownership transferred', 'ok');
+  } catch (err) { CanLah.showToast('Transfer failed: ' + err.message, 'err'); }
+}
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>

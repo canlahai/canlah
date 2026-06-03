@@ -20,8 +20,14 @@ export default defineConfig({
     command: `node dev-server.js`,
     env: {
       PORT: String(PORT),
-      DEMO_MODE: 'true',
+      DEMO_MODE: process.env.PLAYWRIGHT_SUPABASE_MODE ? 'false' : 'true',
       RATE_LIMIT_PER_MIN: '10000',
+      // Pass through Supabase env vars if testing against live backend
+      ...(process.env.PLAYWRIGHT_SUPABASE_MODE ? {
+        SUPABASE_URL: process.env.SUPABASE_URL,
+        SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
+        SUPABASE_REPORTS_TABLE: process.env.SUPABASE_REPORTS_TABLE,
+      } : {}),
     },
     url: `http://127.0.0.1:${PORT}/api/config`,
     reuseExistingServer: !process.env.CI,

@@ -7,11 +7,14 @@
     "dev": "node dev-server.js",
     "start": "node dev-server.js",
     "test:e2e": "playwright test",
-    "test:unit": "node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs"
+    "test:e2e:supabase": "PLAYWRIGHT_SUPABASE_MODE=1 npx playwright test e2e/supabase-persistence.spec.js",
+    "test:unit": "node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs && node test/unit/reports.test.mjs && node test/unit/pdf.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
-    "@vercel/blob": "^0.27.0"
+    "@vercel/blob": "^0.27.0",
+    "pdfkit": "^0.15.0",
+    "@sentry/node": "^7.11.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

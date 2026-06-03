@@ -375,7 +375,7 @@ input,select,textarea{font-family:'Syne',sans-serif}
 
 <!-- TOPBAR -->
 <div class="topbar">
-  <div class="brand">
+  <a href="/" class="brand" style="text-decoration:none;cursor:pointer" title="Back to home">
     <div class="brand-mark">
       <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
         <rect width="32" height="32" rx="5" fill="#1e1e1b"/>
@@ -385,7 +385,8 @@ input,select,textarea{font-family:'Syne',sans-serif}
       </svg>
     </div>
     <div class="brand-name">Can<span>Lah</span><em>.ai</em></div>
-  </div>
+  </a>
+  <a href="/" class="topbar-tag" style="text-decoration:none;cursor:pointer">← Home</a>
   <div class="topbar-spacer"></div>
   <div class="topbar-tag">Tree Felling BQ Reader</div>
   <div class="topbar-step" id="step-indicator">Step 1 of 3 — Upload</div>
@@ -402,7 +403,7 @@ input,select,textarea{font-family:'Syne',sans-serif}
     </h1>
     <p class="hero-sub">
       Drop any NParks / LTA tree affected plan PDF. Multi-sheet, any format.
-      We extract every tree, flag every error, and output a BQ in minutes.
+      We count every tree, flag every error, and list the quantities in minutes.
     </p>
 
     <div class="upload-zone" id="upload-zone"
@@ -479,7 +480,7 @@ input,select,textarea{font-family:'Syne',sans-serif}
       </div>
       <div class="proc-step" id="step-bq">
         <span class="step-icon">💰</span>
-        <span>Calculating replacement ratios and BQ cost estimates</span>
+        <span>Calculating replacement ratios and quantity take-off</span>
       </div>
       <div class="proc-step" id="step-report">
         <span class="step-icon">📋</span>
@@ -1359,6 +1360,7 @@ async function saveReport() {
     const exportData = {
       projectName: document.getElementById('r-title').textContent,
       drawingRef: document.getElementById('r-ref').textContent,
+      reportTitle: document.getElementById('r-title').textContent || document.getElementById('r-ref').textContent,
       exportDate: new Date().toISOString(),
       trees: allTrees,
       summary: {
@@ -1403,10 +1405,15 @@ function renderSavedReports() {
   list.innerHTML = savedReportsCache.map((report) => `
     <div class="sr-item">
       <div>
-        <div class="sr-title">${report.projectName || 'Untitled report'}</div>
+        <div class="sr-title">${report.reportTitle || report.projectName || 'Untitled report'}</div>
         <div class="sr-sub">Saved ${new Date(report.savedAt).toLocaleString('en-SG')} · ${report.drawingRef || 'No drawing ref'}</div>
       </div>
-      <button class="act-btn" onclick="loadSavedReport('${report.id}')">Load</button>
+      <div class="sr-actions">
+        <button class="act-btn" onclick="loadSavedReport('${report.id}')">Load</button>
+        <button class="act-btn" onclick="downloadSavedReport('${report.id}')">Download</button>
+        <button class="act-btn" onclick="renameSavedReport('${report.id}')">Rename</button>
+        <button class="act-btn" onclick="deleteSavedReport('${report.id}')">Delete</button>
+      </div>
     </div>
   `).join('');
 }
@@ -1420,6 +1427,63 @@ function loadSavedReport(id) {
   buildReport(report);
   document.getElementById('saved-reports-panel').style.display = 'none';
   showToast('Loaded saved report', 'ok');
+}
+
+function downloadSavedReport(id) {
+  const report = savedReportsCache.find((item) => item.id === id);
+  if (!report) {
+    showToast('Saved report not found', 'err');
+    return;
+  }
+  CanLah.downloadReport(report);
+}
+
+async function deleteSavedReport(id) {
+  const confirmed = await CanLah.showConfirm({
+    title: 'Delete saved report',
+    message: 'Are you sure you want to delete this saved report? This cannot be undone.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  });
+  if (!confirmed) return;
+
+  try {
+    await CanLah.deleteReport(id);
+    savedReportsCache = savedReportsCache.filter((item) => item.id !== id);
+    renderSavedReports();
+    showToast('Saved report deleted', 'ok');
+  } catch (err) {
+    console.error(err);
+    showToast('Delete failed: ' + err.message, 'err');
+  }
+}
+
+async function renameSavedReport(id) {
+  const report = savedReportsCache.find((item) => item.id === id);
+  if (!report) {
+    showToast('Saved report not found', 'err');
+    return;
+  }
+  const currentTitle = report.reportTitle || report.projectName || report.drawingRef || 'Untitled report';
+  const newTitle = await CanLah.showPrompt({
+    title: 'Rename saved report',
+    message: 'Enter a new title for this report',
+    placeholder: 'Report title',
+    defaultValue: currentTitle,
+    confirmText: 'Rename',
+    cancelText: 'Cancel',
+  });
+  if (newTitle === null || !newTitle) return;
+
+  try {
+    await CanLah.updateReport(id, { reportTitle: newTitle });
+    report.reportTitle = newTitle;
+    renderSavedReports();
+    showToast('Saved report renamed', 'ok');
+  } catch (err) {
+    console.error(err);
+    showToast('Rename failed: ' + err.message, 'err');
+  }
 }
 
 function toggleSavedReports() {

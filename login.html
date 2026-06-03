@@ -39,11 +39,15 @@
 
       <form class="login-form" id="login-form">
         <div>
+          <label for="name">Name (optional)</label>
+          <input type="text" id="name" name="name" autocomplete="name" placeholder="Your name">
+        </div>
+        <div>
           <label for="password">Access password</label>
           <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
         </div>
         <button type="submit" id="login-btn">Sign in</button>
-        <div class="login-err" id="login-err"></div>
+        <div class="login-err" id="login-err" role="alert" aria-live="assertive"></div>
       </form>
     </div>
   </div>
@@ -73,7 +77,10 @@ form.addEventListener('submit', async (e) => {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: document.getElementById('password').value }),
+      body: JSON.stringify({
+        password: document.getElementById('password').value,
+        name: document.getElementById('name').value,
+      }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || 'Sign-in failed');
