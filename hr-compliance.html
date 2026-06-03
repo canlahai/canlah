@@ -148,6 +148,7 @@ Return ONLY valid JSON in this exact structure:
   "companyName": "company name from document",
   "documentRef": "best-guess document reference / period",
   "totalWorkers": 0,
+  "localWorkers": 0,
   "byPermitType": { "Work Permit": 0, "S Pass": 0, "Employment Pass": 0 },
   "expiringPermits": [
     { "workerId": "W001", "name": "...", "permitType": "Work Permit", "expiryDate": "YYYY-MM-DD", "daysUntilExpiry": 30 }
@@ -163,6 +164,7 @@ Return ONLY valid JSON in this exact structure:
 \`\`\`
 
 Rules:
+- localWorkers = full-time local employees (Singaporeans + PRs); needed for the Dependency Ratio Ceiling. Extract the raw count only — do NOT compute the DRC ratio or days-to-expiry yourself, CanLah computes those.
 - Permits expiring within 60 days count as expiringPermits
 - DRC limits depend on sector — assume Construction: 1:7 unless document states otherwise
 - Required certifications include CSOC (Construction Safety Orientation Course), and for supervisors CSCS
@@ -200,7 +202,19 @@ function buildReport(d) {
     <div class="vital"><div class="v-label">Issues</div><div class="v-val">${(d.complianceIssues || []).length}</div></div>
   `;
 
-  const drc = d.drcStatus || {};
+  // DRC: compute deterministically from raw counts (don't trust AI's ratio).
+  let drc = d.drcStatus || {};
+  let drcComputed = null;
+  if (window.HRCompliance && d.localWorkers != null) {
+    const bp = d.byPermitType || {};
+    drcComputed = window.HRCompliance.computeDRC({
+      localWorkers: d.localWorkers,
+      workPermit: bp['Work Permit'] || 0,
+      sPass: bp['S Pass'] || 0,
+      employmentPass: bp['Employment Pass'] || 0,
+    });
+    drc = { current: drcComputed.ratio, limit: '1:' + drcComputed.config.foreignPerLocal, compliant: drcComputed.compliant };
+  }
   const drcSection = document.getElementById('r-drc-section');
   drcSection.classList.remove('alert', 'ok');
   drcSection.classList.add(drc.compliant ? 'ok' : 'alert');
@@ -213,8 +227,16 @@ function buildReport(d) {
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Limit</div>
       <div class="drc-ratio">${drc.limit || '—'}</div>
     </div>
+    ${drcComputed ? `<div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Quota headroom</div>
+      <div class="drc-ratio" style="color:${drcComputed.headroom < 0 ? 'var(--red)' : 'var(--green)'}">${drcComputed.headroom < 0 ? 'Over by ' + (-drcComputed.headroom) : drcComputed.headroom + ' more'}</div>
+    </div>` : ''}
     <span class="drc-badge ${drc.compliant ? 'ok' : 'bad'}">${drc.compliant ? 'Compliant' : 'Non-compliant'}</span>
   `;
+  if (drcComputed && !drcComputed.sPassWithin) {
+    document.getElementById('r-drc-card').insertAdjacentHTML('beforeend',
+      `<span class="drc-badge bad" title="S Pass holders exceed the sub-cap">S Pass over cap</span>`);
+  }
 
   const permits = d.byPermitType || {};
   const permitEntries = Object.entries(permits);
@@ -223,7 +245,14 @@ function buildReport(d) {
     .map(([type, count]) => `<div class="permit-pill"><span>${type}</span><span class="ct">${count}</span></div>`)
     .join('');
 
-  const expiring = d.expiringPermits || [];
+  // Recompute days-to-expiry from the actual dates (don't trust AI arithmetic).
+  let expiring = d.expiringPermits || [];
+  if (window.HRCompliance) {
+    const today = new Date().toISOString().slice(0, 10);
+    expiring = expiring
+      .map((e) => ({ ...e, daysUntilExpiry: window.HRCompliance.daysUntil(e.expiryDate, today) ?? e.daysUntilExpiry }))
+      .sort((a, b) => (a.daysUntilExpiry ?? Infinity) - (b.daysUntilExpiry ?? Infinity));
+  }
   document.getElementById('r-expiring').style.display = expiring.length ? 'block' : 'none';
   document.getElementById('r-expiring-rows').innerHTML = expiring.map(e => `
     <tr>
@@ -292,6 +321,12 @@ function loadSavedReport(id) {
   buildReport(r);
   document.getElementById('saved-panel').style.display = 'none';
 }
+</script>
+
+<!-- Deterministic HR compliance engine (DRC + permit expiry), pure ESM -->
+<script type="module">
+import { computeDRC, classifyPermits, daysUntil } from '/lib/hr-compliance.js';
+window.HRCompliance = { computeDRC, classifyPermits, daysUntil };
 </script>
 </body>
 </html>
