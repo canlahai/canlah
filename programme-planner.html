@@ -147,6 +147,7 @@
       </div>
       <div class="rh-actions">
         <button class="act-btn" onclick="toggleSavedReports()">Saved Reports</button>
+        <button class="act-btn" onclick="toggleDurations()">Edit durations</button>
         <button class="act-btn" onclick="exportMSP()">Export MS Project</button>
         <button class="act-btn" onclick="saveReport()">Save Report</button>
         <button class="act-btn primary" onclick="CanLah.showPage('upload')">New Programme</button>
@@ -159,6 +160,14 @@
         <button class="act-btn" onclick="toggleSavedReports()">Close</button>
       </div>
       <div id="saved-list"></div>
+    </div>
+
+    <div class="saved-panel" id="durations-panel" style="display:none">
+      <div class="sp-header">
+        <div>Edit task durations (working days) — critical path recomputes live</div>
+        <button class="act-btn" onclick="toggleDurations()">Close</button>
+      </div>
+      <div id="durations-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;margin-top:10px"></div>
     </div>
 
     <div class="vitals" id="r-vitals"></div>
@@ -431,6 +440,22 @@ async function saveReport() {
   }
 }
 
+function toggleDurations() {
+  const panel = document.getElementById('durations-panel');
+  if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+  const p = window._lastProgramme;
+  if (!p || !p.tasks) { CanLah.showToast('Generate a programme first', 'err'); return; }
+  panel.style.display = 'block';
+  const work = p.tasks.filter(t => (t.durationDays || 0) > 0);
+  document.getElementById('durations-list').innerHTML = work.map(t => `
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--g2)">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</span>
+      <input type="number" min="1" value="${t.durationDays}" data-task="${t.id}"
+        style="width:72px;background:var(--g8);border:1px solid var(--g7);border-radius:8px;color:var(--paper);padding:6px 8px;font-family:'JetBrains Mono',monospace"
+        onchange="window.recomputeProgramme(this.getAttribute('data-task'), this.value)">
+    </label>`).join('');
+}
+
 async function toggleSavedReports() {
   const panel = document.getElementById('saved-panel');
   if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
@@ -466,6 +491,27 @@ function loadSavedReport(id) {
 <script type="module">
 import { generateProgramme } from '/lib/programme-generator.js';
 import { toMSProjectXML, exportFilename } from '/lib/msp-export.js';
+import { computeSchedule } from '/lib/cpm.js';
+import { makeCalendar } from '/lib/calendar.js';
+
+// Re-run CPM after a duration edit and re-render. _lastProgramme.tasks keep
+// their durationDays + predecessors, so computeSchedule recomputes cleanly.
+window.recomputeProgramme = function (taskId, value) {
+  const p = window._lastProgramme;
+  if (!p || !p.tasks) return;
+  const t = p.tasks.find((x) => x.id === taskId);
+  if (t) t.durationDays = Math.max(1, parseInt(value, 10) || 1);
+  const sched = computeSchedule(p.tasks, { startDate: p.project.startDate, calendar: makeCalendar() });
+  p.tasks = sched.tasks;
+  p.criticalPathTaskIds = sched.criticalPathTaskIds;
+  p.projectStart = sched.projectStart;
+  p.projectEnd = sched.projectEnd;
+  p.projectDurationDays = sched.projectDurationDays;
+  p.milestones = sched.tasks.filter((x) => x.kind === 'regulatory')
+    .map((x) => ({ id: x.id, name: x.name, kind: 'regulatory', date: x.start, onCriticalPath: x.onCriticalPath }));
+  window.buildReport(adapt(p));
+  window.CanLah.showToast('Recomputed · ' + sched.projectDurationDays + ' working days', 'ok');
+};
 
 const PALETTE = ['amber', 'orange', 'blue', 'green', 'yellow'];
 
