@@ -142,6 +142,7 @@
       </div>
       <div class="rh-actions">
         <button class="act-btn" onclick="toggleSavedReports()">Saved Reports</button>
+        <button class="act-btn" onclick="exportMSP()">Export MS Project</button>
         <button class="act-btn" onclick="saveReport()">Save Report</button>
         <button class="act-btn primary" onclick="CanLah.showPage('upload')">New Programme</button>
       </div>
@@ -402,6 +403,7 @@ function loadSavedReport(id) {
 <!-- Programme generator — pure isomorphic ES modules (lib/*.js), runs in-browser -->
 <script type="module">
 import { generateProgramme } from '/lib/programme-generator.js';
+import { toMSProjectXML, exportFilename } from '/lib/msp-export.js';
 
 const PALETTE = ['amber', 'orange', 'blue', 'green', 'yellow'];
 
@@ -434,6 +436,7 @@ window.runGenerate = function () {
   if (!Number.isInteger(storeys) || storeys < 1) { window.CanLah.showToast('Storeys must be at least 1', 'err'); return; }
   try {
     const p = generateProgramme({ name: name || 'Untitled project', storeys, structuralSystem, contractForm, startDate });
+    window._lastProgramme = p;   // full generator output, for MS Project export
     window.buildReport(adapt(p));
     window.CanLah.showPage('report');
     window.CanLah.showToast('Programme generated · ' + p.projectDurationDays + ' working days', 'ok');
@@ -441,6 +444,26 @@ window.runGenerate = function () {
   } catch (err) {
     console.error(err);
     window.CanLah.showToast('Generate failed: ' + err.message, 'err');
+  }
+};
+
+window.exportMSP = function () {
+  const p = window._lastProgramme;
+  if (!p) { window.CanLah.showToast('MS Project export is available for generated programmes', 'err'); return; }
+  try {
+    const xml = toMSProjectXML(p);
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = exportFilename(p);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    window.CanLah.showToast('MS Project XML exported · ' + a.download, 'ok');
+  } catch (err) {
+    console.error(err);
+    window.CanLah.showToast('Export failed: ' + err.message, 'err');
   }
 };
 
