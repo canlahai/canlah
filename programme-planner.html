@@ -73,9 +73,14 @@
             <div class="file-meta" id="selected-meta">—</div>
           </div>
         </div>
-        <button class="analyse-btn" id="analyse-btn" onclick="event.stopPropagation();startAnalysis()">
-          Decode Programme
-        </button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+          <button class="analyse-btn" id="profile-btn" onclick="event.stopPropagation();extractProfile()" title="Read Prelims / Specs / Scope and fill the generate form">
+            Extract project details →
+          </button>
+          <button class="act-btn" id="analyse-btn" onclick="event.stopPropagation();startAnalysis()" title="Digitise an existing programme into a Gantt">
+            Decode existing programme
+          </button>
+        </div>
       </div>
     </div>
 
@@ -233,6 +238,63 @@ async function startAnalysis() {
     CanLah.showPage('upload');
   }
 }
+
+// ── Doc -> project profile -> fill the generate form ──────────────
+const PROFILE_PROMPT = `You are a construction planning analyst for Singapore projects. Read the uploaded project documents (Preliminaries, Specifications, Scope of Works, BQ, or tender drawings) and extract the parameters needed to draft a construction programme.
+
+Return ONLY valid JSON in this exact structure:
+\`\`\`json
+{
+  "projectName": "best guess at project name",
+  "projectRef": "contract / drawing reference if visible, else ''",
+  "storeys": 0,
+  "structuralSystem": "insitu_rc | ppvc | steel | unknown",
+  "contractForm": "PSSCOC | SIA | REDAS | unknown",
+  "notes": "1-2 sentence summary of the scope"
+}
+\`\`\`
+
+Rules:
+- storeys = number of building storeys/levels (best estimate; 0 if unclear).
+- structuralSystem: in-situ reinforced concrete = "insitu_rc"; Prefabricated Prefinished Volumetric Construction = "ppvc"; structural steel = "steel"; else "unknown".
+- contractForm: PSSCOC for public/government, SIA or REDAS for private; "unknown" if not stated.
+- Extract raw facts only — do NOT invent a schedule. Return ONLY the JSON. No preamble.`;
+
+async function extractProfile() {
+  if (!CanLah.state.uploadedFile) { CanLah.showToast('Pick a file first', 'err'); return; }
+  CanLah.showPage('processing');
+  try {
+    const d = await CanLah.uploadAndAnalyse({ prompt: PROFILE_PROMPT, reportType: 'programme-profile' });
+    applyProfileToForm(d);
+    CanLah.showPage('upload');
+    CanLah.showToast('Details extracted — review and Generate', 'ok');
+    const form = document.querySelector('.gen-form');
+    if (form) form.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    console.error(err);
+    CanLah.showToast('Error: ' + err.message, 'err');
+    CanLah.showPage('upload');
+  }
+}
+
+// Exposed so it can be unit-checked with mock data without an API call.
+function applyProfileToForm(d) {
+  d = d || {};
+  if (d.projectName) document.getElementById('gen-name').value = d.projectName;
+  if (d.storeys) document.getElementById('gen-storeys').value = d.storeys;
+  const sys = String(d.structuralSystem || '').toLowerCase();
+  if (sys.includes('ppvc') || sys.includes('steel')) {
+    // Thin slice only models in-situ RC; keep the select on RC but tell the user.
+    document.getElementById('gen-system').value = 'insitu_rc';
+    CanLah.showToast(`${sys.includes('ppvc') ? 'PPVC' : 'Steel'} detected — v1 models in-situ RC sequencing; adjust after generating`, 'warn');
+  } else {
+    document.getElementById('gen-system').value = 'insitu_rc';
+  }
+  const cf = String(d.contractForm || '').toUpperCase();
+  if (['PSSCOC', 'SIA', 'REDAS'].includes(cf)) document.getElementById('gen-contract').value = cf;
+}
+window.extractProfile = extractProfile;
+window.applyProfileToForm = applyProfileToForm;
 
 // ── Gantt rendering ───────────────────────────────────────────────
 const PHASE_COLOR_MAP = {
