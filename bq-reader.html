@@ -510,6 +510,7 @@ input,select,textarea{font-family:'Syne',sans-serif}
           <button class="act-btn" onclick="window.print()">Print</button>
           <button class="act-btn" onclick="exportCSV()">Export CSV</button>
           <button class="act-btn" onclick="exportJSON()">Export JSON</button>
+          <button class="act-btn" onclick="buildTenderFromTakeoff()">Build Tender →</button>
           <button class="act-btn" onclick="toggleSavedReports()">Saved Reports</button>
           <button class="act-btn" onclick="saveReport()">Save Report</button>
           <button class="act-btn primary" onclick="showPage('upload')">New Drawing</button>
@@ -1282,6 +1283,43 @@ function sortRegister(col) {
 // ══════════════════════════════════════════════════════════
 //  EXPORT CSV
 // ══════════════════════════════════════════════════════════
+// Hand the take-off to the Tender Builder: aggregate the per-tree register into
+// priced-able line items (by girth band + replacement planting), stash in
+// sessionStorage, and open /tender which preloads it.
+function buildTenderFromTakeoff() {
+  if (!allTrees || !allTrees.length) { showToast('No take-off to send', 'err'); return; }
+  const gb = { S: 0, M: 0, L: 0, XL: 0 };
+  let heritage = 0;
+  allTrees.forEach(t => {
+    if (t.girth === null || t.girth === -1) return;
+    if (t.girth < 0.5) gb.S++;
+    else if (t.girth < 1.0) gb.M++;
+    else if (t.girth < 2.0) gb.L++;
+    else gb.XL++;
+    if ((t.flags || []).includes('heritage_candidate')) heritage++;
+  });
+  const repl = gb.S * 1 + gb.M * 2 + gb.L * 3 + gb.XL * 5;
+  const rows = [
+    { id: 'TO-S', description: 'Tree felling — small girth (<0.5m)', unit: 'nr', qty: gb.S },
+    { id: 'TO-M', description: 'Tree felling — medium girth (0.5–1.0m)', unit: 'nr', qty: gb.M },
+    { id: 'TO-L', description: 'Tree felling — large girth (1.0–2.0m)', unit: 'nr', qty: gb.L },
+    { id: 'TO-XL', description: 'Tree felling — very large girth (>2.0m)', unit: 'nr', qty: gb.XL },
+    { id: 'TO-HER', description: 'Heritage tree careful removal', unit: 'nr', qty: heritage },
+    { id: 'TO-REP', description: 'Replacement planting', unit: 'nr', qty: repl },
+  ].filter(r => r.qty > 0);
+  if (!rows.length) { showToast('No measurable trees in take-off', 'err'); return; }
+  try {
+    sessionStorage.setItem('canlah_takeoff', JSON.stringify({
+      rows,
+      source: (document.getElementById('r-title') || {}).textContent || 'Tree felling take-off',
+      ts: Date.now(),
+    }));
+    window.location.href = '/tender';
+  } catch (e) {
+    showToast('Could not pass take-off: ' + e.message, 'err');
+  }
+}
+
 function exportCSV() {
   const headers = ['Tree No.','Girth (m)','Height (m)','Species','Girth Band','Sheet','Flags'];
   const rows = allTrees.map(t => [

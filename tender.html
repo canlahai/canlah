@@ -232,6 +232,21 @@ window.buildTenderTable = function () {
   toast('Tender built · $' + tender.total.toLocaleString('en-SG'), 'ok');
 };
 
+// Preload a take-off handed over from the BQ Reader ("Build Tender →").
+(function preloadTakeoff() {
+  try {
+    const raw = sessionStorage.getItem('canlah_takeoff');
+    if (!raw) return;
+    sessionStorage.removeItem('canlah_takeoff'); // one-shot
+    const data = JSON.parse(raw);
+    if (data && Array.isArray(data.rows) && data.rows.length) {
+      S.takeoff = data.rows.map((r, i) => ({ id: r.id || ('t' + i), description: r.description, unit: r.unit || 'nr', qty: Number(r.qty) || 0 }));
+      $('takeoff-status').textContent = `${S.takeoff.length} take-off rows from BQ Reader${data.source ? ' · ' + data.source : ''}`;
+      toast('Take-off received from BQ Reader · now upload your BQ', 'ok');
+    }
+  } catch (_) { /* ignore */ }
+})();
+
 window.exportTenderCsv = function () {
   if (!S.tender) { toast('Build a tender first', 'err'); return; }
   const csv = tenderToCsv(S.tender);
