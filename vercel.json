@@ -1,7 +1,6 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "buildCommand": "npm run build || echo 'no build script'",
   "functions": {
     "api/process.js": {
       "maxDuration": 60
