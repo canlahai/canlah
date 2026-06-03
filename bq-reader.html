@@ -666,6 +666,8 @@ const bufferToBase64 = (buf) => CanLah.bufferToBase64(buf);
 
 document.addEventListener('DOMContentLoaded', () => CanLah.init());
 
+import('/lib/tree-felling.js').then(m => { window.TreeFelling = m; }).catch(() => {});
+
 // ══════════════════════════════════════════════════════════
 //  ANALYSIS — CALLS CLAUDE API
 // ══════════════════════════════════════════════════════════
@@ -1288,25 +1290,11 @@ function sortRegister(col) {
 // sessionStorage, and open /tender which preloads it.
 function buildTenderFromTakeoff() {
   if (!allTrees || !allTrees.length) { showToast('No take-off to send', 'err'); return; }
-  const gb = { S: 0, M: 0, L: 0, XL: 0 };
-  let heritage = 0;
-  allTrees.forEach(t => {
-    if (t.girth === null || t.girth === -1) return;
-    if (t.girth < 0.5) gb.S++;
-    else if (t.girth < 1.0) gb.M++;
-    else if (t.girth < 2.0) gb.L++;
-    else gb.XL++;
-    if ((t.flags || []).includes('heritage_candidate')) heritage++;
-  });
-  const repl = gb.S * 1 + gb.M * 2 + gb.L * 3 + gb.XL * 5;
-  const rows = [
-    { id: 'TO-S', description: 'Tree felling — small girth (<0.5m)', unit: 'nr', qty: gb.S },
-    { id: 'TO-M', description: 'Tree felling — medium girth (0.5–1.0m)', unit: 'nr', qty: gb.M },
-    { id: 'TO-L', description: 'Tree felling — large girth (1.0–2.0m)', unit: 'nr', qty: gb.L },
-    { id: 'TO-XL', description: 'Tree felling — very large girth (>2.0m)', unit: 'nr', qty: gb.XL },
-    { id: 'TO-HER', description: 'Heritage tree careful removal', unit: 'nr', qty: heritage },
-    { id: 'TO-REP', description: 'Replacement planting', unit: 'nr', qty: repl },
-  ].filter(r => r.qty > 0);
+  // Aggregate via the deterministic engine: girth bands + heritage (computed
+  // from girth, not AI flags) + replacement planting.
+  const rows = (window.TreeFelling && window.TreeFelling.aggregateTakeoff)
+    ? window.TreeFelling.aggregateTakeoff(allTrees)
+    : [];
   if (!rows.length) { showToast('No measurable trees in take-off', 'err'); return; }
   try {
     sessionStorage.setItem('canlah_takeoff', JSON.stringify({
