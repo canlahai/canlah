@@ -49,7 +49,7 @@
   <div class="upload-screen">
     <div class="eyebrow">Construction Schedule Intelligence</div>
     <h1 class="hero"><span class="yl">Programme.</span> <span class="og">Decoded.</span></h1>
-    <p class="sub">Upload your construction programme (MS Project export, Asta plot, or hand-drawn schedule). Claude extracts phases, tasks, durations, milestones, and the critical path into an interactive Gantt.</p>
+    <p class="sub">Generate a Singapore Master Programme from your project details: standard WBS, construction sequencing, BCA/SCDF/TOP/CSC gateways, and a computed critical path. Or upload an existing programme (PDF, plot, photo) to digitise it.</p>
 
     <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
       <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png">
@@ -77,6 +77,50 @@
           Decode Programme
         </button>
       </div>
+    </div>
+
+    <style>
+      .gen-divider{margin:30px auto 20px;max-width:560px;display:flex;align-items:center;gap:14px;color:var(--g5);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+      .gen-divider::before,.gen-divider::after{content:'';flex:1;height:1px;background:var(--g7)}
+      .gen-form{max-width:560px;margin:0 auto;display:grid;gap:14px;text-align:left}
+      .gen-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .gen-form label{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.06em}
+      .gen-form input,.gen-form select{width:100%;margin-top:6px;padding:10px 12px;background:var(--g8);border:1px solid var(--g7);border-radius:var(--r);color:var(--paper);font-size:14px;font-family:inherit}
+      .gen-form input::placeholder{color:var(--g5)}
+      .gen-note{color:var(--g5);font-size:12px;line-height:1.5}
+    </style>
+
+    <div class="gen-divider">or generate from project details</div>
+    <div class="gen-form">
+      <label>Project name
+        <input id="gen-name" placeholder="e.g. Pioneer Road RC Block">
+      </label>
+      <div class="gen-row">
+        <label>Storeys
+          <input id="gen-storeys" type="number" min="1" value="8">
+        </label>
+        <label>Structural system
+          <select id="gen-system">
+            <option value="insitu_rc">In-situ RC</option>
+            <option value="ppvc" disabled>PPVC — coming soon</option>
+            <option value="steel" disabled>Steel — coming soon</option>
+          </select>
+        </label>
+      </div>
+      <div class="gen-row">
+        <label>Contract form
+          <select id="gen-contract">
+            <option value="PSSCOC">PSSCOC (public sector)</option>
+            <option value="SIA">SIA (private)</option>
+            <option value="REDAS">REDAS (private)</option>
+          </select>
+        </label>
+        <label>Start date
+          <input id="gen-start" type="date">
+        </label>
+      </div>
+      <button class="analyse-btn" onclick="runGenerate()">Generate programme</button>
+      <div class="gen-note">Drafts a draft Master Programme and computes the critical path. Durations are benchmark placeholders you refine — pricing and final logic stay yours.</div>
     </div>
   </div>
 </div>
@@ -353,6 +397,61 @@ function loadSavedReport(id) {
   buildReport(r);
   document.getElementById('saved-panel').style.display = 'none';
 }
+</script>
+
+<!-- Programme generator — pure isomorphic ES modules (lib/*.js), runs in-browser -->
+<script type="module">
+import { generateProgramme } from '/lib/programme-generator.js';
+
+const PALETTE = ['amber', 'orange', 'blue', 'green', 'yellow'];
+
+// Map generator output -> the shape buildReport()/buildGantt() expect.
+function adapt(p) {
+  return {
+    projectName: p.project.name,
+    projectRef: p.project.ref,
+    startDate: p.projectStart,
+    endDate: p.projectEnd,
+    totalDurationDays: p.projectDurationDays,
+    phases: p.wbs.map((w, i) => ({ id: w.id, name: w.name, color: PALETTE[i % PALETTE.length] })),
+    tasks: p.tasks.map(t => ({
+      id: t.id, name: t.name, phaseId: t.wbsId,
+      start: t.start, end: t.end, onCriticalPath: t.onCriticalPath, durationBasis: t.durationBasis,
+    })),
+    criticalPathTaskIds: p.criticalPathTaskIds,
+    milestones: p.milestones.map(m => ({ name: m.name, date: m.date })),
+    _generated: true,
+  };
+}
+
+window.runGenerate = function () {
+  const name = document.getElementById('gen-name').value.trim();
+  const storeys = parseInt(document.getElementById('gen-storeys').value, 10);
+  const structuralSystem = document.getElementById('gen-system').value;
+  const contractForm = document.getElementById('gen-contract').value;
+  const startDate = document.getElementById('gen-start').value;
+  if (!startDate) { window.CanLah.showToast('Pick a start date', 'err'); return; }
+  if (!Number.isInteger(storeys) || storeys < 1) { window.CanLah.showToast('Storeys must be at least 1', 'err'); return; }
+  try {
+    const p = generateProgramme({ name: name || 'Untitled project', storeys, structuralSystem, contractForm, startDate });
+    window.buildReport(adapt(p));
+    window.CanLah.showPage('report');
+    window.CanLah.showToast('Programme generated · ' + p.projectDurationDays + ' working days', 'ok');
+    if (p.warnings.length) console.warn('Programme warnings:', p.warnings);
+  } catch (err) {
+    console.error(err);
+    window.CanLah.showToast('Generate failed: ' + err.message, 'err');
+  }
+};
+
+// Default the start date to a few days out so the field isn't empty.
+(function () {
+  const el = document.getElementById('gen-start');
+  if (!el) return;
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  el.value = d.toISOString().slice(0, 10);
+})();
 </script>
 </body>
 </html>
