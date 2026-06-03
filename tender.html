@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanLah.ai — Tender Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/canlah.css">
+<style>
+  .tb-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:24px auto 0}
+  .tb-drop{background:var(--g8);border:1px dashed var(--g7);border-radius:var(--rl,12px);padding:22px;text-align:center}
+  .tb-drop h3{font-size:14px;margin:0 0 4px;color:var(--paper)}
+  .tb-drop p{font-size:12px;color:var(--g5);margin:0 0 12px}
+  .tb-status{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);min-height:14px;margin-top:8px}
+  table.tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  table.tb th{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--g7)}
+  table.tb td{padding:8px 10px;border-bottom:1px solid var(--g7);color:var(--g2);vertical-align:middle}
+  table.tb td.num,table.tb th.num{text-align:right;font-family:'JetBrains Mono',monospace}
+  table.tb select{background:var(--g8);border:1px solid var(--g7);border-radius:8px;color:var(--paper);padding:6px 8px;font-size:12px;max-width:320px}
+  .conf{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;border-radius:6px;text-transform:uppercase;letter-spacing:.06em}
+  .conf.high{background:var(--gbg,#13311f);color:var(--glt,#5ad17e)}
+  .conf.medium{background:#3a2f12;color:var(--yellow)}
+  .conf.low{background:var(--rbg,#3a1717);color:var(--red)}
+  .tb-warn{background:#3a2f12;border:1px solid var(--yellow);border-radius:var(--r,8px);padding:12px 14px;margin:14px 0;font-size:13px;color:#e8c98a}
+  .tb-warn ul{margin:6px 0 0;padding-left:18px}
+  .tb-totals{display:flex;justify-content:flex-end;gap:30px;margin-top:14px;font-family:'JetBrains Mono',monospace}
+  .tb-totals .tt-row{text-align:right}
+  .tb-totals .tt-label{font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.06em}
+  .tb-totals .tt-val{font-size:20px;font-weight:800;color:var(--paper)}
+  .tb-totals .tt-val.total{color:var(--yellow)}
+  .markup-in{width:70px;background:var(--g8);border:1px solid var(--g7);border-radius:8px;color:var(--paper);padding:6px 8px;font-size:13px;font-family:'JetBrains Mono',monospace}
+  .unmatched-row{opacity:.55}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="brand-name" style="text-decoration:none;cursor:pointer" title="Back to home"><span>Can</span><em>Lah</em>.ai</a>
+  <a href="/" class="topbar-tag" style="text-decoration:none;cursor:pointer">← Home</a>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-tag">Tender Builder</div>
+</div>
+
+<!-- ══ STEP 1: UPLOAD ══ -->
+<div class="page active" id="page-upload">
+  <div class="upload-screen">
+    <div class="eyebrow">Take-off × your rates</div>
+    <h1 class="hero"><span class="yl">Quantities in.</span> <span class="og">Tender out.</span></h1>
+    <p class="sub">Upload the drawing take-off (quantities) and your own BQ (rates). CanLah suggests how they match, you approve, and it tabulates the tender. Your rates, your call — CanLah never prices for you.</p>
+
+    <div class="tb-grid">
+      <div class="tb-drop">
+        <h3>1 · Drawing take-off</h3>
+        <p>CSV with description, unit, qty columns. (Export this from the BQ Reader.)</p>
+        <input type="file" id="takeoff-file" accept=".csv,text/csv">
+        <div class="tb-status" id="takeoff-status"></div>
+      </div>
+      <div class="tb-drop">
+        <h3>2 · Your BQ</h3>
+        <p>CSV with ref, description, unit, rate columns.</p>
+        <input type="file" id="bq-file" accept=".csv,text/csv">
+        <div class="tb-status" id="bq-status"></div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <button class="act-btn" onclick="loadSample()">Use sample data</button>
+      <button class="act-btn primary" onclick="buildMatches()">Suggest matches →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STEP 2: MATCH ══ -->
+<div class="page" id="page-match">
+  <div class="report-screen">
+    <div class="rh-top">
+      <div>
+        <div class="rh-eyebrow" style="color:var(--orange);font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em">Step 2 of 3 · Approve matches</div>
+        <div class="rh-title" style="font-size:26px;font-weight:800;color:var(--paper)">Match take-off to BQ</div>
+      </div>
+      <div class="rh-actions" style="display:flex;gap:10px;align-items:center">
+        <span style="font-size:12px;color:var(--g5)">Markup</span>
+        <input class="markup-in" id="markup" type="number" min="0" value="0"><span style="color:var(--g5)">%</span>
+        <button class="act-btn" onclick="CanLah.showPage('upload')">Back</button>
+        <button class="act-btn primary" onclick="buildTenderTable()">Build tender →</button>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:6px">CanLah suggested a BQ line for each take-off row. Approve or re-link. The AI suggests the pairing only — the quantity is yours and the rate is your BQ's.</p>
+    <div class="section">
+      <table class="tb" id="match-table"></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STEP 3: TENDER ══ -->
+<div class="page" id="page-tender">
+  <div class="report-screen">
+    <div class="rh-top">
+      <div>
+        <div class="rh-eyebrow" style="color:var(--orange);font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em">Tender · CanLah.ai</div>
+        <div class="rh-title" id="t-title" style="font-size:26px;font-weight:800;color:var(--paper)">Tender</div>
+      </div>
+      <div class="rh-actions" style="display:flex;gap:10px">
+        <button class="act-btn" onclick="CanLah.showPage('match')">Back to matches</button>
+        <button class="act-btn" onclick="exportTenderCsv()">Export CSV</button>
+        <button class="act-btn primary" onclick="CanLah.showPage('upload')">New tender</button>
+      </div>
+    </div>
+    <div id="tender-warnings"></div>
+    <div class="section">
+      <table class="tb" id="tender-table"></table>
+      <div class="tb-totals" id="tender-totals"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/canlah.js"></script>
+<script>
+CanLah.init();
+</script>
+
+<script type="module">
+import { parseBqCsv } from '/lib/bq-parse.js';
+import { suggestMatches, suggestionsToMappings, buildTender, tenderToCsv } from '/lib/tender.js';
+
+const S = { takeoff: [], bq: [], tender: null };
+const $ = (id) => document.getElementById(id);
+const toast = (m, t) => window.CanLah.showToast(m, t);
+
+function readFile(input, kind) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  f.text().then((text) => {
+    const { lines, warnings } = parseBqCsv(text);
+    if (kind === 'takeoff') {
+      S.takeoff = lines.map((l, i) => ({ id: l.ref || ('t' + i), description: l.description, unit: l.unit, qty: l.qty || 0 }));
+      $('takeoff-status').textContent = `${S.takeoff.length} take-off rows` + (warnings.length ? ' · ' + warnings[0] : '');
+    } else {
+      S.bq = lines.map((l) => ({ ref: l.ref, description: l.description, unit: l.unit, rate: l.rate }));
+      $('bq-status').textContent = `${S.bq.length} BQ lines` + (warnings.length ? ' · ' + warnings[0] : '');
+    }
+  });
+}
+$('takeoff-file').addEventListener('change', (e) => readFile(e.target, 'takeoff'));
+$('bq-file').addEventListener('change', (e) => readFile(e.target, 'bq'));
+
+window.loadSample = function () {
+  S.takeoff = [
+    { id: 'T1', description: 'Tree felling small girth (<1m)', unit: 'nr', qty: 146 },
+    { id: 'T2', description: 'Tree felling medium girth (1-2m)', unit: 'nr', qty: 113 },
+    { id: 'T3', description: 'Tree felling large girth (>2m)', unit: 'nr', qty: 52 },
+    { id: 'T4', description: 'Heritage tree careful removal', unit: 'nr', qty: 3 },
+    { id: 'T5', description: 'Replacement planting', unit: 'nr', qty: 220 },
+  ];
+  S.bq = [
+    { ref: 'TF-01', description: 'Fell and remove tree, small girth', unit: 'nr', rate: 80 },
+    { ref: 'TF-02', description: 'Fell and remove tree, medium girth', unit: 'nr', rate: 120 },
+    { ref: 'TF-03', description: 'Fell and remove tree, large girth', unit: 'nr', rate: 220 },
+    { ref: 'TF-04', description: 'Heritage tree removal with arborist', unit: 'nr', rate: 950 },
+    { ref: 'TF-05', description: 'Supply and plant replacement sapling', unit: 'nr', rate: 65 },
+  ];
+  $('takeoff-status').textContent = S.takeoff.length + ' take-off rows (sample)';
+  $('bq-status').textContent = S.bq.length + ' BQ lines (sample)';
+  toast('Sample data loaded', 'ok');
+};
+
+function bqOptions(selectedRef) {
+  return ['<option value="">— no BQ line —</option>'].concat(
+    S.bq.map((b) => `<option value="${b.ref}"${b.ref === selectedRef ? ' selected' : ''}>${b.ref} · ${escapeHtml(b.description)}</option>`)
+  ).join('');
+}
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+window.buildMatches = function () {
+  if (!S.takeoff.length || !S.bq.length) { toast('Load both a take-off and a BQ first', 'err'); return; }
+  const sugg = suggestMatches(S.takeoff, S.bq);
+  const byT = Object.fromEntries(sugg.map((s) => [s.takeoffId, s]));
+  $('match-table').innerHTML = `
+    <thead><tr><th>Take-off item</th><th>Unit</th><th class="num">Qty</th><th>Match to BQ line</th><th>Confidence</th></tr></thead>
+    <tbody>${S.takeoff.map((tr) => {
+      const s = byT[tr.id] || {};
+      return `<tr>
+        <td>${escapeHtml(tr.description)}</td>
+        <td>${escapeHtml(tr.unit)}</td>
+        <td class="num">${tr.qty}</td>
+        <td><select data-takeoff="${tr.id}">${bqOptions(s.suggestedRef)}</select></td>
+        <td><span class="conf ${s.confidence || 'low'}">${s.confidence || 'low'}</span></td>
+      </tr>`;
+    }).join('')}</tbody>`;
+  window.CanLah.showPage('match');
+};
+
+function readMappings() {
+  const m = {};
+  document.querySelectorAll('#match-table select[data-takeoff]').forEach((sel) => {
+    if (sel.value) m[sel.getAttribute('data-takeoff')] = sel.value;
+  });
+  return m;
+}
+
+window.buildTenderTable = function () {
+  const mappings = readMappings();
+  const markupPct = Number($('markup').value) || 0;
+  const tender = buildTender({ takeoffRows: S.takeoff, bqLines: S.bq, mappings, markupPct });
+  S.tender = tender;
+
+  $('tender-table').innerHTML = `
+    <thead><tr><th>Ref</th><th>Description</th><th>Unit</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+    <tbody>${tender.rows.map((r) => `
+      <tr class="${r.unmatched ? 'unmatched-row' : ''}">
+        <td>${escapeHtml(r.ref)}</td>
+        <td>${escapeHtml(r.description)}${r.unitMismatch ? ' <span class="conf low">unit?</span>' : ''}</td>
+        <td>${escapeHtml(r.unit)}</td>
+        <td class="num">${r.qty}</td>
+        <td class="num">${r.rate == null ? '—' : r.rate.toLocaleString('en-SG', { minimumFractionDigits: 2 })}</td>
+        <td class="num">${r.amount == null ? '—' : r.amount.toLocaleString('en-SG', { minimumFractionDigits: 2 })}</td>
+      </tr>`).join('')}</tbody>`;
+
+  $('tender-totals').innerHTML = `
+    <div class="tt-row"><div class="tt-label">Subtotal</div><div class="tt-val">$${tender.subtotal.toLocaleString('en-SG', { minimumFractionDigits: 2 })}</div></div>
+    <div class="tt-row"><div class="tt-label">Markup ${tender.markupPct}%</div><div class="tt-val">$${tender.markupAmount.toLocaleString('en-SG', { minimumFractionDigits: 2 })}</div></div>
+    <div class="tt-row"><div class="tt-label">Tender total</div><div class="tt-val total">$${tender.total.toLocaleString('en-SG', { minimumFractionDigits: 2 })}</div></div>`;
+
+  const warns = tender.warnings || [];
+  $('tender-warnings').innerHTML = warns.length
+    ? `<div class="tb-warn"><strong>Before you trust this tender:</strong><ul>${warns.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`
+    : '';
+
+  window.CanLah.showPage('tender');
+  toast('Tender built · $' + tender.total.toLocaleString('en-SG'), 'ok');
+};
+
+window.exportTenderCsv = function () {
+  if (!S.tender) { toast('Build a tender first', 'err'); return; }
+  const csv = tenderToCsv(S.tender);
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tender.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  toast('Tender CSV exported', 'ok');
+};
+</script>
+</body>
+</html>
