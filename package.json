@@ -6,9 +6,11 @@
     "local": "node dev-server.js",
     "dev": "node dev-server.js",
     "start": "node dev-server.js",
+    "eval": "node eval/run.mjs",
+    "eval:test": "node eval/test/score.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:supabase": "PLAYWRIGHT_SUPABASE_MODE=1 npx playwright test e2e/supabase-persistence.spec.js",
-    "test:unit": "node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs && node test/unit/reports.test.mjs && node test/unit/pdf.test.mjs"
+    "test:unit": "node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs && node test/unit/reports.test.mjs && node test/unit/pdf.test.mjs && node eval/test/score.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
