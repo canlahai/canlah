@@ -5,7 +5,7 @@ import path from 'node:path';
 // PDF generation moved to lib/pdf.js
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
-import { getSupabaseConfig } from './lib/supabase.js';
+import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { getSentryStatus } from './lib/sentry.js';
 import { loadReports, saveReport, deleteReport, updateReport, getReportsByIds } from './lib/reports.js';
 import { initSentry, captureException } from './lib/sentry.js';
@@ -726,16 +726,27 @@ const server = http.createServer((req, res) => {
   }
 
   if (parsedUrl.pathname === '/api/health' && req.method === 'GET') {
-    return send(res, 200, JSON.stringify({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      nodeEnv: process.env.NODE_ENV || 'development',
-      demoMode: DEMO_MODE,
-      blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
-      anthropicKey: !!process.env.ANTHROPIC_API_KEY,
-      supabase: getSupabaseConfig(),
-      sentry: getSentryStatus(),
-    }), { 'Content-Type': 'application/json' });
+    (async () => {
+      const deep = parsedUrl.searchParams.get('deep') === '1';
+      let supabase = getSupabaseConfig();
+      let degraded = false;
+      if (deep) {
+        const ping = await pingSupabase();
+        supabase = { ...supabase, ...ping };
+        if (ping.configured && !ping.reachable) degraded = true;
+      }
+      return send(res, degraded ? 503 : 200, JSON.stringify({
+        status: degraded ? 'degraded' : 'ok',
+        timestamp: new Date().toISOString(),
+        nodeEnv: process.env.NODE_ENV || 'development',
+        demoMode: DEMO_MODE,
+        blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+        anthropicKey: !!process.env.ANTHROPIC_API_KEY,
+        supabase,
+        sentry: getSentryStatus(),
+      }), { 'Content-Type': 'application/json' });
+    })();
+    return;
   }
 
   if (parsedUrl.pathname === '/api/report-pdf' && req.method === 'GET') {
