@@ -1,0 +1,16 @@
+{
+  "id": "hr-drc-spass-subceiling",
+  "status": "synthetic",
+  "basis": "MOM S Pass sub-DRC: S Pass holders capped at 18% of total workforce. Here total=60, S Pass cap=floor(60*0.18)=10, but 30 S Pass → breaches sub-ceiling even though the overall 7x quota is fine. VERIFY current MOM %.",
+  "engine": "computeDRC",
+  "input": { "localWorkers": 10, "workPermit": 20, "sPass": 30, "employmentPass": 0 },
+  "expect": {
+    "foreign": 50,
+    "quotaMax": 70,
+    "withinQuota": true,
+    "totalWorkforce": 60,
+    "sPassMax": 10,
+    "sPassWithin": false,
+    "compliant": false
+  }
+}

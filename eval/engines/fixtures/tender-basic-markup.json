@@ -1,0 +1,18 @@
+{
+  "id": "tender-basic-markup",
+  "status": "synthetic",
+  "basis": "Tender = quantity x rate, then markup. 100 m3 x $12.50 = $1,250 subtotal; 10% markup = $125; total $1,375. CanLah supplies qty, QS supplies rate.",
+  "engine": "buildTender",
+  "input": {
+    "takeoffRows": [{ "id": "t1", "description": "Excavate topsoil", "unit": "m3", "qty": 100 }],
+    "bqLines": [{ "ref": "B1", "description": "Excavate topsoil", "unit": "m3", "rate": 12.5 }],
+    "mappings": { "t1": "B1" },
+    "markupPct": 10
+  },
+  "expect": {
+    "subtotal": 1250,
+    "markupPct": 10,
+    "markupAmount": 125,
+    "total": 1375
+  }
+}

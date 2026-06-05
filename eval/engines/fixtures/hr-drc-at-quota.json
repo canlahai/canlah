@@ -1,0 +1,15 @@
+{
+  "id": "hr-drc-at-quota",
+  "status": "synthetic",
+  "basis": "MOM Construction sector DRC: foreign (WP+S Pass) capped at 7x local. 10 local supports exactly 70 foreign. EP excluded from the DRC base. VERIFY against current MOM rules.",
+  "engine": "computeDRC",
+  "input": { "localWorkers": 10, "workPermit": 70, "sPass": 0, "employmentPass": 5 },
+  "expect": {
+    "foreign": 70,
+    "quotaMax": 70,
+    "withinQuota": true,
+    "headroom": 0,
+    "totalWorkforce": 80,
+    "compliant": true
+  }
+}
