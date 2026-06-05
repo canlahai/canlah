@@ -1,0 +1,14 @@
+{
+  "id": "hr-drc-ep-excluded",
+  "status": "synthetic",
+  "basis": "Employment Pass holders are excluded from the DRC base (per MOM). 50 EP with 2 local and zero WP/S Pass is fully compliant: foreign=0. VERIFY against current MOM rules.",
+  "engine": "computeDRC",
+  "input": { "localWorkers": 2, "workPermit": 0, "sPass": 0, "employmentPass": 50 },
+  "expect": {
+    "foreign": 0,
+    "totalWorkforce": 2,
+    "withinQuota": true,
+    "foreignPercent": 0,
+    "compliant": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "hr-drc-over-quota",
+  "status": "synthetic",
+  "basis": "MOM Construction DRC: 5 local supports 35 foreign; 40 foreign is over by 5. VERIFY against current MOM rules.",
+  "engine": "computeDRC",
+  "input": { "localWorkers": 5, "workPermit": 40, "sPass": 0, "employmentPass": 0 },
+  "expect": {
+    "foreign": 40,
+    "quotaMax": 35,
+    "withinQuota": false,
+    "headroom": -5,
+    "compliant": false
+  }
+}

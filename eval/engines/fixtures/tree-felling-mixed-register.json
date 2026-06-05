@@ -1,0 +1,24 @@
+{
+  "id": "tree-felling-mixed-register",
+  "status": "synthetic",
+  "basis": "NParks girth bands S<0.5 / M 0.5-1.0 / L 1.0-2.0 / XL>2.0; protected girth>1.0m; heritage candidate girth>3.0m; replacement ratio S:1 M:2 L:3 XL:5. Cluster (-1) and unknown (null) excluded from replacement. VERIFY against current NParks guidelines.",
+  "engine": "summarizeTrees",
+  "input": {
+    "trees": [
+      { "girth": 0.4 },
+      { "girth": 0.8 },
+      { "girth": 1.5 },
+      { "girth": 2.5 },
+      { "girth": 3.5 },
+      { "girth": null },
+      { "girth": -1 }
+    ]
+  },
+  "expect": {
+    "total": 7,
+    "byBand": { "S": 1, "M": 1, "L": 1, "XL": 2, "cluster": 1, "unknown": 1 },
+    "protected": 3,
+    "heritage": 1,
+    "replacement": 16
+  }
+}
