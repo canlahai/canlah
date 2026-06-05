@@ -78,4 +78,39 @@ assert.ok(out.startsWith('Ref,Description,Unit,Qty,Rate,Amount'), 'csv header');
 assert.ok(out.includes('Total,' + tender.total), 'csv includes total');
 assert.ok(out.includes('"Fell and remove tree, small girth"'), 'csv escapes commas in description');
 
+// ── markup coercion (regression) ──────────────────────────────────────
+// A valid numeric markup applies normally.
+const mkOk = buildTender({
+  takeoffRows: [{ id: 'x', description: 'd', unit: 'nr', qty: 2 }],
+  bqLines: [{ ref: 'B1', description: 'd', unit: 'nr', rate: 100 }],
+  mappings: { x: 'B1' },
+  markupPct: 10,
+});
+assert.equal(mkOk.subtotal, 200, 'subtotal = 2 x 100');
+assert.equal(mkOk.markupAmount, 20, '10% markup applied');
+assert.equal(mkOk.total, 220, 'total includes markup');
+
+// A non-numeric markup must NOT poison the total with NaN — falls back to 0%.
+const mkBad = buildTender({
+  takeoffRows: [{ id: 'x', description: 'd', unit: 'nr', qty: 2 }],
+  bqLines: [{ ref: 'B1', description: 'd', unit: 'nr', rate: 100 }],
+  mappings: { x: 'B1' },
+  markupPct: 'abc',
+});
+assert.equal(mkBad.markupPct, 0, 'non-numeric markup coerced to 0');
+assert.equal(mkBad.markupAmount, 0, 'no markup amount');
+assert.equal(mkBad.total, 200, 'total stays finite (= subtotal)');
+assert.ok(Number.isFinite(mkBad.total), 'total is a finite number, not NaN');
+assert.ok(mkBad.warnings.some((w) => /non-numeric markup/.test(w)), 'warns about ignored markup');
+
+// Numeric string markup is accepted (forms often submit strings).
+const mkStr = buildTender({
+  takeoffRows: [{ id: 'x', description: 'd', unit: 'nr', qty: 1 }],
+  bqLines: [{ ref: 'B1', description: 'd', unit: 'nr', rate: 100 }],
+  mappings: { x: 'B1' },
+  markupPct: '15',
+});
+assert.equal(mkStr.markupAmount, 15, 'numeric string markup "15" applies as 15%');
+assert.equal(mkStr.warnings.filter((w) => /non-numeric/.test(w)).length, 0, 'numeric string does not warn');
+
 console.log('tender.test.mjs — all assertions passed');

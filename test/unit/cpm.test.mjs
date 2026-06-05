@@ -69,4 +69,19 @@ const ss = computeSchedule(
 );
 assert.ok(ss.warnings.some((w) => /treated as FS/.test(w)), 'SS link produces a warning');
 
+// Regression: a network of only zero-duration milestones must not crash on
+// projectEnd (was workingDayDate(start, -1) -> "index must be >= 0").
+const milestonesOnly = computeSchedule(
+  [{ id: 'm1', durationDays: 0 }, { id: 'm2', durationDays: 0, predecessors: [{ id: 'm1' }] }],
+  { startDate: '2026-01-05', calendar: open },
+);
+assert.equal(milestonesOnly.projectDurationDays, 0, 'all-milestone network has 0 duration');
+assert.equal(milestonesOnly.projectStart, '2026-01-05', 'projectStart is the start day');
+assert.equal(milestonesOnly.projectEnd, '2026-01-05', 'projectEnd does not underflow to -1');
+assert.deepEqual(milestonesOnly.criticalPathTaskIds, ['m1', 'm2'], 'milestones are on the critical path');
+
+// A single milestone alone also holds.
+const oneMs = computeSchedule([{ id: 'g', durationDays: 0 }], { startDate: '2026-03-02', calendar: open });
+assert.equal(oneMs.projectEnd, '2026-03-02', 'single milestone projectEnd = start');
+
 console.log('cpm.test.mjs — all assertions passed');
