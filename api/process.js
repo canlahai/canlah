@@ -15,6 +15,8 @@
 
 import { createMultipartUpload, completeMultipartUpload } from '@vercel/blob';
 import { requireAuth } from '../lib/auth.js';
+import { enforceRateLimit } from '../lib/rate-limit.js';
+import { isAllowedBlobUrl } from '../lib/blob-url.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
@@ -134,6 +136,8 @@ async function uploadBufferToBlob(filename, buffer, contentType) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!requireAuth(req, res).ok) return;
+  // Each analyse/upload call can spend real Anthropic/Blob money — throttle per IP.
+  if (!enforceRateLimit(req, res, { id: 'process', limit: 30, windowMs: 60_000 })) return;
 
   const action = (req.headers['x-action'] || req.body?.action || '').toString();
   const body = req.body || {};
@@ -252,6 +256,11 @@ export default async function handler(req, res) {
     const { fileId, blobUrl, prompt } = body;
     if (!fileId && (!blobUrl || !prompt)) {
       return res.status(400).json({ error: 'fileId or blobUrl + prompt are required' });
+    }
+    // Don't let the endpoint become an open LLM proxy: only analyse documents
+    // hosted on our own Vercel Blob, never an arbitrary attacker-supplied URL.
+    if (!fileId && !isAllowedBlobUrl(blobUrl)) {
+      return res.status(400).json({ error: 'blobUrl must be a Vercel Blob URL' });
     }
 
     try {

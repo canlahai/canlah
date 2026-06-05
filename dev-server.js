@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
+import { isAllowedBlobUrl } from './lib/blob-url.js';
 import { getSentryStatus } from './lib/sentry.js';
 import { loadReports, saveReport, deleteReport, updateReport, getReportsByIds } from './lib/reports.js';
 import { initSentry, captureException } from './lib/sentry.js';
@@ -456,6 +457,10 @@ async function handleApi(req, res) {
           totalRetain: 340,
         };
         return send(res, 200, JSON.stringify({ data: demoData }), { 'Content-Type': 'application/json' });
+      }
+      // Parity with api/process.js: only analyse documents on our own Blob.
+      if (!fileId && !isAllowedBlobUrl(blobUrl)) {
+        return send(res, 400, JSON.stringify({ error: 'blobUrl must be a Vercel Blob URL' }), { 'Content-Type': 'application/json' });
       }
       const content = [];
       if (fileId) {

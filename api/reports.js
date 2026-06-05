@@ -1,4 +1,5 @@
 import { requireAuth, authCheck, getSession } from '../lib/auth.js';
+import { enforceRateLimit } from '../lib/rate-limit.js';
 import { loadReports, deleteReport, updateReport, getReportsByIds, deleteReports } from '../lib/reports.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
@@ -7,6 +8,7 @@ initSentry();
 
 export default async function handler(req, res) {
   try {
+    if (!enforceRateLimit(req, res, { id: 'reports', limit: 60, windowMs: 60_000 })) return;
     if (req.method === 'GET') {
       const auth = requireAuth(req, res);
       if (!auth.ok) return;

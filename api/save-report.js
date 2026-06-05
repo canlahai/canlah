@@ -1,4 +1,5 @@
 import { requireAuth, getSession } from '../lib/auth.js';
+import { enforceRateLimit } from '../lib/rate-limit.js';
 import { saveReport } from '../lib/reports.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
@@ -8,6 +9,7 @@ initSentry();
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!requireAuth(req, res).ok) return;
+  if (!enforceRateLimit(req, res, { id: 'save-report', limit: 30, windowMs: 60_000 })) return;
 
   try {
     const body = req.body || {};
