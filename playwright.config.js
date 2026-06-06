@@ -4,6 +4,9 @@ const PORT = Number(process.env.E2E_PORT || 3030);
 
 export default defineConfig({
   testDir: './e2e',
+  // The supabase-persistence suite needs a live backend (PLAYWRIGHT_SUPABASE_MODE).
+  // Skip it in the default/demo run so `npx playwright test` is green without one.
+  testIgnore: process.env.PLAYWRIGHT_SUPABASE_MODE ? [] : ['**/supabase-persistence.spec.js'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

@@ -6,69 +6,22 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Demo-mode e2e gates real user flows (upload→analyse→save→list→export), auth,
+# admin, and the deep-health check — all in demo mode, with NO external creds and
+# NO writes to any real database.
+#
+# The supabase-persistence suite is intentionally NOT run here. It needs a live
+# backend, and pointing it at the production Supabase project would write/delete
+# test rows in prod on every PR. To run it in CI, stand up a DEDICATED test
+# Supabase project, set its creds as repo secrets, rework the spec to seed reports
+# via the save API (not the real Anthropic analyse flow), then add a gated job.
+# Until then, persistence is covered by: lib reports unit tests, /api/health?deep=1
+# reachability, and manual save→list→delete canaries. Run locally with
+# `npm run test:e2e:supabase` against a test project.
 jobs:
-  test:
+  e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        node-version: [18, 20]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Cache playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-browser-cache-${{ matrix.node-version }}-${{ runner.os }}
-          restore-keys: |
-            playwright-browser-cache-${{ matrix.node-version }}-
-            playwright-browser-cache-
-
-      - name: Restore env
-        run: |
-          if [ -f .env ]; then echo ".env already present"; else echo "# secrets provided via GitHub Actions" > .env; fi
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Start dev server
-        run: |
-          node dev-server.js &
-          npx wait-on http://localhost:3000 --timeout 15000
-
-      - name: Run Playwright e2e (JUnit)
-        env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          npx playwright test --reporter=dot --reporter=junit
-
-      - name: Upload Playwright JUnit results
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-junit
-          path: test-results
-          retention-days: 7
-
-  test-supabase:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_KEY != ''
+    timeout-minutes: 20
     strategy:
       matrix:
         node-version: [20]
@@ -85,57 +38,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Cache playwright browsers
+      - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-browser-cache-supabase-${{ runner.os }}
-          restore-keys: |
-            playwright-browser-cache-
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
 
-      - name: Create .env
-        run: |
-          cat > .env << EOF
-          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
-          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-          BLOB_READ_WRITE_TOKEN=${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          SESSION_SECRET=ci-test-secret-do-not-use-in-prod
-          EOF
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
 
-      - name: Validate Supabase Connection
-        run: |
-          node -e "
-          const { createClient } = require('@supabase/supabase-js');
-          const url = process.env.SUPABASE_URL;
-          const key = process.env.SUPABASE_SERVICE_KEY;
-          if (!url || !key) {
-            console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY');
-            process.exit(1);
-          }
-          const client = createClient(url, key);
-          console.log('✓ Supabase client initialized');
-          "
+      - name: Run demo e2e (Playwright manages the dev server)
+        run: npx playwright test --reporter=dot --reporter=junit
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Run Supabase E2E Tests
-        env:
-          PLAYWRIGHT_SUPABASE_MODE: '1'
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          ACCESS_PASSWORD: canberra
-          SESSION_SECRET: ci-test-secret-do-not-use-in-prod
-        run: |
-          npx playwright test e2e/supabase-persistence.spec.js --reporter=dot --reporter=junit
-
-      - name: Upload Supabase E2E Results
-        uses: actions/upload-artifact@v4
+      - name: Upload JUnit results
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: playwright-supabase-junit
+          name: playwright-junit
           path: test-results
           retention-days: 7
