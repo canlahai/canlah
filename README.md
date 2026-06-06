@@ -148,7 +148,7 @@ In `DEMO_MODE=true`, saved report endpoints can also be used without an admin ke
 | `/api/save-report` | 30 / min |
 | `/api/reports` | 60 / min |
 
-(The limiter is in-memory/per-instance — see the note in `lib/rate-limit.js`; a durable store is the follow-up for bulletproof login throttling.) The local `dev-server.js` uses a separate per-IP limiter set by `RATE_LIMIT_PER_MIN` (default `60`).
+By default the limiter is in-memory/per-instance. For cross-instance throttling, set `RATE_LIMIT_DURABLE=true` and run `db/rate-limit.sql` once in Supabase — requests then count through an atomic Postgres function (`check_rate_limit`), falling back to in-memory if Supabase is unreachable. The local `dev-server.js` uses a separate per-IP limiter set by `RATE_LIMIT_PER_MIN` (default `60`).
 
 **`analyse` URL allowlist.** `/api/process` with `action:"analyse"` only accepts a `blobUrl` on the Vercel Blob host (`lib/blob-url.js`). This stops the endpoint being used as an open LLM proxy / SSRF vector with our Anthropic key on an attacker-supplied URL.
 

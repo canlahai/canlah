@@ -74,7 +74,7 @@ All core infrastructure is complete. Awaiting only live Supabase credentials and
 - [x] `/api/health?deep=1` surfaces a dead Supabase as `503` for monitors
 - [x] Secure Blob token scoping
 - [x] `.gitignore` — prevents accidental secret commits
-- [ ] Durable (cross-instance) rate-limit store — limiter is in-memory/per-instance today
+- [x] Durable (cross-instance) rate-limit store — opt-in: `RATE_LIMIT_DURABLE=true` + run `db/rate-limit.sql` (atomic Postgres `check_rate_limit`, falls back to in-memory)
 - [ ] Per-user accounts — auth is a single shared `ACCESS_PASSWORD`; report ownership is self-asserted (not RLS-enforced; server uses the service_role key)
 
 ---

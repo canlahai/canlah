@@ -42,17 +42,18 @@ function mockRes() {
     setHeader(k, v) { this._headers[k] = v; },
   };
 }
+// enforceRateLimit is async (durable backend does I/O); default env uses in-memory.
 const req = { headers: { 'x-forwarded-for': '1.1.1.1' } };
 let res = mockRes();
-assert.equal(enforceRateLimit(req, res, { id: 'x', limit: 1 }), true, 'first call allowed');
+assert.equal(await enforceRateLimit(req, res, { id: 'x', limit: 1 }), true, 'first call allowed');
 res = mockRes();
-assert.equal(enforceRateLimit(req, res, { id: 'x', limit: 1 }), false, 'second call blocked');
+assert.equal(await enforceRateLimit(req, res, { id: 'x', limit: 1 }), false, 'second call blocked');
 assert.equal(res._status, 429, 'writes 429');
 assert.ok(res._headers['Retry-After'], 'sets Retry-After header');
 
 // different route id is a separate bucket
 res = mockRes();
-assert.equal(enforceRateLimit(req, res, { id: 'y', limit: 1 }), true, 'separate route id has own budget');
+assert.equal(await enforceRateLimit(req, res, { id: 'y', limit: 1 }), true, 'separate route id has own budget');
 
 _resetRateLimitForTests();
 console.log('rate-limit.test.mjs — all assertions passed');

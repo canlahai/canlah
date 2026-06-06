@@ -137,7 +137,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!requireAuth(req, res).ok) return;
   // Each analyse/upload call can spend real Anthropic/Blob money — throttle per IP.
-  if (!enforceRateLimit(req, res, { id: 'process', limit: 30, windowMs: 60_000 })) return;
+  if (!(await enforceRateLimit(req, res, { id: 'process', limit: 30, windowMs: 60_000 }))) return;
 
   const action = (req.headers['x-action'] || req.body?.action || '').toString();
   const body = req.body || {};
