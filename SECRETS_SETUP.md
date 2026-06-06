@@ -4,22 +4,22 @@ This file documents where each secret goes and what each service needs.
 
 ## 1. GitHub Actions (CI/CD Pipeline)
 
-Add these **Organization or Repository Secrets** so CI/CD can validate Supabase integration.
+CI does **not** require any secrets today. Two workflows run on every push/PR:
 
-Navigate: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+- `unit-tests.yml` — `npm run test:unit` (Node 18 + 20).
+- `ci.yml` — the demo-mode Playwright e2e suite (no external creds, no DB writes).
 
-| Secret Name | Value | Purpose | Required |
-|-------------|-------|---------|----------|
-| `SUPABASE_URL` | `https://your-project.supabase.co` | Database connection URL | ✅ For Supabase E2E tests |
-| `SUPABASE_SERVICE_KEY` | Your service role key | Server-side database access | ✅ For Supabase E2E tests |
+There is **no `test-supabase` CI job** — the Supabase-backed e2e suite is excluded
+from CI because the only creds available are production, and running it there would
+write/delete rows in the prod database. So you do **not** need to add `SUPABASE_*`
+secrets to GitHub Actions. (If you previously added them for the old job, you can
+remove them — they're unused.)
 
-**When configured:** CI job `test-supabase` activates on all commits → runs E2E tests + validates persistence
+If you later want the persistence e2e in CI, provision a **dedicated test Supabase
+project**, add ITS creds as repo secrets (never prod), rework the spec to seed via
+the save API, and add a gated job. See `.github/workflows/ci.yml` and `SUPABASE_SETUP.md`.
 
-**How to get these:**
-1. Visit your Supabase project dashboard
-2. Click **Settings** → **API**
-3. Copy **Project URL** → `SUPABASE_URL`
-4. Copy **Service role secret** → `SUPABASE_SERVICE_KEY` (⚠️ keep private!)
+Repo secrets live at: **Settings → Secrets and variables → Actions**.
 
 ## 2. Vercel (Production Deployment)
 
@@ -80,21 +80,17 @@ DEMO_MODE=false
 
 ## 5. Verification Checklist
 
-### After adding to GitHub Actions:
+### CI sanity check:
 
 ```bash
-# 1. Push a change to trigger CI
-git commit --allow-empty -m "Test CI with secrets"
-git push origin main
+# Push a change and watch CI
+git commit --allow-empty -m "ci: trigger" && git push origin main
+# → Actions tab → expect ✅ unit (18) / unit (20) and ✅ e2e (20)
 
-# 2. Watch CI run
-# → Go to Actions tab → select your push
-# → Wait for "test-supabase" job to start
-# → Should see: ✅ test-supabase passed
-
-# OR manually run E2E locally:
-export SUPABASE_URL=...
-export SUPABASE_SERVICE_KEY=...
+# Persistence E2E is local-only — run against a DEDICATED TEST project (not prod):
+export SUPABASE_URL=...            # test project
+export SUPABASE_SERVICE_KEY=...    # test project service_role key
+export PLAYWRIGHT_SUPABASE_MODE=1
 npm run test:e2e:supabase
 ```
 

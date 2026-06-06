@@ -33,21 +33,22 @@ All core infrastructure is complete. Awaiting only live Supabase credentials and
 - [x] `POST /api/login` — Session creation
 - [x] `POST /api/logout` — Session cleanup
 - [x] `GET /api/config` — Runtime metadata + Sentry status
-- [x] `GET /api/health` — Production health check (5s timeout)
+- [x] `GET /api/health` — Health check (5s timeout); `?deep=1` pings Supabase → `503` `degraded` when unreachable
 - [x] `POST /api/report-pdf` — Export to PDF (60s timeout)
 
 ### Testing Infrastructure
-- [x] Unit tests for auth, persistence, PDF generation
-- [x] E2E tests with Playwright (4 pillars + login)
-- [x] Supabase-specific E2E tests (8 test cases)
+- [x] Unit tests: engines, auth, rate-limit, blob-url, bq-parse, health, persistence, PDF
+- [x] Eval harnesses: `npm run eval` (programme) + `npm run eval:engines` (DRC/tender/tree-felling)
+- [x] E2E tests with Playwright (4 pillars + login + admin + deep-health) — runs in CI (demo mode)
+- [x] Supabase-specific E2E (`e2e/supabase-persistence.spec.js`) — local-only; not in CI (would write to prod). Needs a dedicated test project.
 - [x] Demo mode for local testing without credentials
-- [x] CI/CD matrix (demo + conditional Supabase)
 
 ### Deployment Configuration
 - [x] `vercel.json` — Function timeouts (5–60s), cache headers
-- [x] `.github/workflows/ci.yml` — GitHub Actions CI/CD
-- [x] `playwright.config.js` — E2E with Supabase mode support
-- [x] `package.json` — Scripts for test, dev, e2e, e2e:supabase
+- [x] `.github/workflows/unit-tests.yml` — unit tests (Node 18 + 20, required)
+- [x] `.github/workflows/ci.yml` — demo-mode Playwright e2e (no external creds)
+- [x] `playwright.config.js` — E2E; `testIgnore`s the supabase suite unless `PLAYWRIGHT_SUPABASE_MODE`
+- [x] `package.json` — Scripts: test:unit, dev, test:e2e, test:e2e:supabase, eval, eval:engines
 
 ### Monitoring & Error Tracking
 - [x] Sentry integration (`lib/sentry.js`)
@@ -67,10 +68,14 @@ All core infrastructure is complete. Awaiting only live Supabase credentials and
 ### Security
 - [x] Stateless HMAC authentication (no session DB)
 - [x] Environment variables for all secrets (no hardcoding)
-- [x] Rate limiting per IP (configurable)
-- [x] Supabase RLS policies (per-user data isolation)
+- [x] Per-route rate limiting on prod endpoints (`lib/rate-limit.js`): login 10/min, process 30/min, save-report 30/min, reports 60/min (per IP, → 429)
+- [x] `analyse` URL allowlist (`lib/blob-url.js`) — only Vercel Blob URLs; blocks open-LLM-proxy / SSRF
+- [x] Ownership checks on report update/delete/transfer (admin override)
+- [x] `/api/health?deep=1` surfaces a dead Supabase as `503` for monitors
 - [x] Secure Blob token scoping
 - [x] `.gitignore` — prevents accidental secret commits
+- [ ] Durable (cross-instance) rate-limit store — limiter is in-memory/per-instance today
+- [ ] Per-user accounts — auth is a single shared `ACCESS_PASSWORD`; report ownership is self-asserted (not RLS-enforced; server uses the service_role key)
 
 ---
 

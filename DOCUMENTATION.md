@@ -87,7 +87,7 @@ Quick reference to find the right guide for your task.
 1. Read: [DEPLOYMENT.md#step-5-enable-monitoring](DEPLOYMENT.md#step-5-enable-monitoring)
 2. Create Sentry project
 3. Add `SENTRY_DSN` to Vercel secrets
-4. Set up UptimeRobot for `/api/health`
+4. Set up UptimeRobot for `/api/health?deep=1` (use `?deep=1` so a dead Supabase trips the alert)
 
 **Total time:** 15 minutes
 
