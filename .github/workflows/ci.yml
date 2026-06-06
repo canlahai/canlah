@@ -6,11 +6,19 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Demo-mode e2e gates real user flows (upload→analyse→save→list→export), auth,
+# admin, and the deep-health check — all in demo mode, with NO external creds and
+# NO writes to any real database.
+#
+# The supabase-persistence suite is intentionally NOT run here. It needs a live
+# backend, and pointing it at the production Supabase project would write/delete
+# test rows in prod on every PR. To run it in CI, stand up a DEDICATED test
+# Supabase project, set its creds as repo secrets, rework the spec to seed reports
+# via the save API (not the real Anthropic analyse flow), then add a gated job.
+# Until then, persistence is covered by: lib reports unit tests, /api/health?deep=1
+# reachability, and manual save→list→delete canaries. Run locally with
+# `npm run test:e2e:supabase` against a test project.
 jobs:
-  # Demo-mode e2e: runs every spec except the supabase-persistence suite (which
-  # is excluded via testIgnore unless PLAYWRIGHT_SUPABASE_MODE is set). NO Supabase
-  # secrets in this job — dev-server loads .env/env at startup, so leaking creds
-  # here would push the demo specs into a half-configured Supabase state.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -48,72 +56,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-junit
-          path: test-results
-          retention-days: 7
-
-  # `secrets` can't be referenced in a job-level `if:`, so surface presence as a
-  # job output first, then gate the supabase job on it. (This is what previously
-  # made the whole workflow file invalid and fail in 0s.)
-  check-secrets:
-    runs-on: ubuntu-latest
-    outputs:
-      has_supabase: ${{ steps.check.outputs.has_supabase }}
-    steps:
-      - id: check
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: |
-          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_SERVICE_KEY" ]; then
-            echo "has_supabase=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_supabase=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  # Supabase-mode e2e: only runs when the secrets exist.
-  test-supabase:
-    needs: check-secrets
-    if: needs.check-secrets.outputs.has_supabase == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: playwright-${{ runner.os }}-
-
-      - name: Install Playwright (chromium)
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Supabase-mode e2e
-        env:
-          PLAYWRIGHT_SUPABASE_MODE: '1'
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          ACCESS_PASSWORD: ci-test-access-password
-          SESSION_SECRET: ci-test-secret-do-not-use-in-prod
-        run: npx playwright test e2e/supabase-persistence.spec.js --reporter=dot --reporter=junit
-
-      - name: Upload Supabase JUnit results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-supabase-junit
           path: test-results
           retention-days: 7
