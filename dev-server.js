@@ -5,6 +5,7 @@ import path from 'node:path';
 // PDF generation moved to lib/pdf.js
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
+import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled } from './lib/users.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
 import { getSentryStatus } from './lib/sentry.js';
@@ -567,12 +568,23 @@ const server = http.createServer((req, res) => {
     (async () => {
       try {
         if (!rateLimitCheck(req, res)) return;
+        const body = await parseBody(req);
+        const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
+
+        // AUTH_MODE=users: verify email + password against the users store.
+        if (usersAuthEnabled()) {
+          if (!body || !body.email || !body.password) return send(res, 400, JSON.stringify({ error: 'email and password required' }), { 'Content-Type': 'application/json' });
+          const user = await verifyCredentials(body.email, body.password);
+          if (!user) return send(res, 401, JSON.stringify({ error: 'Invalid email or password' }), { 'Content-Type': 'application/json' });
+          const payload = { role: user.role || 'user', id: user.id, exp };
+          if (user.name) payload.name = user.name;
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json', 'Set-Cookie': setSessionCookie(payload) });
+        }
+
         const expected = process.env.ACCESS_PASSWORD;
         if (!expected) return send(res, 503, JSON.stringify({ error: 'Access not configured (set ACCESS_PASSWORD)' }), { 'Content-Type': 'application/json' });
-        const body = await parseBody(req);
         if (!body || typeof body.password !== 'string') return send(res, 400, JSON.stringify({ error: 'password required' }), { 'Content-Type': 'application/json' });
         if (body.password !== expected) return send(res, 401, JSON.stringify({ error: 'Invalid password' }), { 'Content-Type': 'application/json' });
-        const exp = Date.now() + 7 * 24 * 60 * 60 * 1000;
         const id = 'u-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         const name = typeof body.name === 'string' ? body.name.trim() : '';
         const payload = { role: 'user', id, exp };
@@ -580,6 +592,39 @@ const server = http.createServer((req, res) => {
         return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json', 'Set-Cookie': setSessionCookie(payload) });
       } catch (err) {
         return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/users') {
+    (async () => {
+      try {
+        if (!rateLimitCheck(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
+        const caller = authCheck(req);
+        if (caller.role !== 'admin') return send(res, 403, JSON.stringify({ error: 'Admin only' }), { 'Content-Type': 'application/json' });
+        if (!usersAuthEnabled()) return send(res, 409, JSON.stringify({ error: 'AUTH_MODE is not "users"' }), { 'Content-Type': 'application/json' });
+        if (req.method === 'GET') {
+          return send(res, 200, JSON.stringify({ users: await listUsers() }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'POST') {
+          const body = await parseBody(req) || {};
+          const user = await createUser(body);
+          return send(res, 200, JSON.stringify({ ok: true, user }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'PATCH') {
+          const body = await parseBody(req) || {};
+          if (!body.id || typeof body.disabled !== 'boolean') return send(res, 400, JSON.stringify({ error: 'id and disabled (boolean) required' }), { 'Content-Type': 'application/json' });
+          const changed = await setUserDisabled(body.id, body.disabled);
+          if (!changed) return send(res, 404, JSON.stringify({ error: 'user not found' }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+        return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
+      } catch (err) {
+        const msg = err?.message || 'Internal server error';
+        const status = /required|already registered|at least|role must/.test(msg) ? 400 : 500;
+        return send(res, status, JSON.stringify({ error: status === 400 ? msg : 'Internal server error' }), { 'Content-Type': 'application/json' });
       }
     })();
     return;
@@ -721,6 +766,7 @@ const server = http.createServer((req, res) => {
     return send(res, 200, JSON.stringify({
       publicApiKey: PUBLIC_API_KEY || null,
       demoMode: DEMO_MODE,
+      authMode: usersAuthEnabled() ? 'users' : 'shared',
       blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
       anthropicKey: !!process.env.ANTHROPIC_API_KEY,
       supabase: getSupabaseConfig(),
@@ -809,6 +855,23 @@ const server = http.createServer((req, res) => {
   return handleStatic(req, res);
 });
 
-server.listen(PORT, () => {
-  console.log(`Dev server running at http://127.0.0.1:${PORT}`);
+// Optional bootstrap: seed the first admin from env at startup (AUTH_MODE=users).
+// Handy for local dev / e2e. Idempotent — skips if the email already exists.
+async function maybeSeedAdmin() {
+  if (!usersAuthEnabled()) return;
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!email || !password) return;
+  try {
+    await createUser({ email, password, name: process.env.SEED_ADMIN_NAME || 'Admin', role: 'admin' });
+    console.log(`[canlah] seeded admin ${email}`);
+  } catch (e) {
+    if (!/already registered/.test(e?.message || '')) console.warn('[canlah] admin seed skipped:', e?.message || e);
+  }
+}
+
+maybeSeedAdmin().finally(() => {
+  server.listen(PORT, () => {
+    console.log(`Dev server running at http://127.0.0.1:${PORT}`);
+  });
 });

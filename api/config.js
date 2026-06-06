@@ -1,5 +1,6 @@
 import { authCheck, getSession } from '../lib/auth.js';
 import { getSupabaseConfig } from '../lib/supabase.js';
+import { usersAuthEnabled } from '../lib/users.js';
 import { getSentryStatus } from '../lib/sentry.js';
 
 export default function handler(req, res) {
@@ -11,6 +12,7 @@ export default function handler(req, res) {
   return res.status(200).json({
     publicApiKey: process.env.PUBLIC_API_KEY || null,
     demoMode,
+    authMode: usersAuthEnabled() ? 'users' : 'shared',
     blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
     anthropicKey: !!process.env.ANTHROPIC_API_KEY,
     supabase: getSupabaseConfig(),
