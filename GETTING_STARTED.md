@@ -313,8 +313,8 @@ After local setup:
 
 1. **Deploy to Vercel** → Follow [DEPLOYMENT.md](DEPLOYMENT.md)
 2. **Set up error tracking** → Add Sentry DSN (see [SECRETS_SETUP.md](SECRETS_SETUP.md))
-3. **Enable rate limiting** → Set `RATE_LIMIT_PER_MIN` in `.env`
-4. **Add monitoring** → Use UptimeRobot to monitor `/api/health`
+3. **Rate limiting** → Prod endpoints are rate-limited by default (`lib/rate-limit.js`); `RATE_LIMIT_PER_MIN` tunes only the local `dev-server.js`
+4. **Add monitoring** → Use UptimeRobot to monitor `/api/health?deep=1` (catches a dead Supabase; plain `/api/health` stays 200)
 5. **Domain setup** → Custom domain in Vercel Settings
 
 ## 10. Support & Documentation

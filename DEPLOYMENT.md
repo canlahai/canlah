@@ -104,7 +104,7 @@ Set up a periodic health check in:
 - **AWS CloudWatch** (paid)
 
 Example UptimeRobot setup:
-- **URL**: `https://your-canlah.vercel.app/api/health`
+- **URL**: `https://your-canlah.vercel.app/api/health?deep=1` (use `?deep=1` so a dead/paused Supabase project actually trips the monitor — it returns `503` `status:"degraded"` then, vs the shallow check which stays `200`)
 - **Check interval**: 5 minutes
 - **Alert on**: Status ≠ 200 OR response time > 5s
 
@@ -121,14 +121,14 @@ Example UptimeRobot setup:
 
 ## Step 7: CI/CD Pipeline
 
-The GitHub Actions workflow automatically:
+Two GitHub Actions workflows run on push to `main` and on PRs:
 
-1. Runs on push to `main` and PRs
-2. Executes all unit + E2E tests in demo mode
-3. Runs Supabase E2E tests if `SUPABASE_*` secrets available
-4. Reports results to GitHub
+1. `unit-tests.yml` — `npm run test:unit` on Node 18 + 20 (required check).
+2. `ci.yml` — the demo-mode Playwright e2e suite (no external creds, no DB writes).
 
-Vercel auto-redeploys on successful CI run to `main`.
+The Supabase-backed persistence E2E is **not** run in CI (it would write to the prod
+DB). Run it locally against a dedicated test project with `npm run test:e2e:supabase`.
+Vercel deploys via its own GitHub integration (preview per PR, production on `main`).
 
 ## Troubleshooting
 

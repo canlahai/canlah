@@ -81,13 +81,32 @@ npx playwright install chromium # one-time, downloads ~90MB
 npm run test:e2e
 ```
 
-A dedicated Supabase-backed E2E test exists for production persistence validation:
+The test suite lives in `e2e/` and auto-starts the dev server on port 3030. See [playwright.config.js](playwright.config.js). CI (`.github/workflows/ci.yml`) runs this demo suite on every push/PR.
+
+A dedicated Supabase-backed E2E suite exists for persistence validation:
 
 ```bash
-npm run test:e2e:supabase
+npm run test:e2e:supabase   # needs PLAYWRIGHT_SUPABASE_MODE + a reachable backend
 ```
 
-The test suite lives in `e2e/` and auto-starts the dev server on port 3030. See [playwright.config.js](playwright.config.js).
+It is **excluded from the default run** (`playwright.config.js` `testIgnore`s it unless `PLAYWRIGHT_SUPABASE_MODE` is set) and is **not run in CI** — pointing it at the prod project would write/delete test rows in production. To run it in CI, stand up a dedicated *test* Supabase project (see `.github/workflows/ci.yml` notes).
+
+## Evals (deterministic engine acceptance)
+
+The regulatory/compute engines have eval harnesses that score generated output against reference fixtures, separate from unit tests:
+
+```bash
+npm run eval           # programme generator vs a real approved Master Programme
+npm run eval:engines   # computeDRC / buildTender / summarizeTrees vs MOM/NParks rule fixtures
+```
+
+Fixtures are plain JSON citing the rule basis (`eval/**/fixtures/`). They gate CI only on `status:"real"` fixtures (authority worked-examples); `synthetic` ones are informational. See `eval/README.md` and `eval/engines/README.md`.
+
+### Unit tests
+
+```bash
+npm run test:unit   # engines, auth, rate-limit, blob-url, bq-parse, health, eval scorers
+```
 
 ## Saving reports
 
@@ -95,7 +114,7 @@ The dev server supports saving and listing analysis reports in Supabase when `SU
 
 - Save a report: POST `/api/save-report` with JSON `{ "report": { ... } }`. Returns `{ ok: true, id }`.
 - List reports: GET `/api/reports` returns `{ reports: [...] }`.
-- Health check: GET `/api/health` returns runtime status for `supabase`, `sentry`, `demoMode`, and deployment readiness.
+- Health check: GET `/api/health` returns runtime status for `supabase`, `sentry`, `demoMode`, and deployment readiness. Add `?deep=1` to actually **ping** Supabase — it returns HTTP `503` `status:"degraded"` with `supabase.reachable:false` when the backend is configured but unreachable (deleted/paused project, bad key), so uptime monitors fire instead of the outage hiding behind a passing shallow check.
 
 If you configure Supabase, the app will persist saved reports in the specified table with server-side storage.
 
@@ -112,7 +131,7 @@ create table canlah_reports (
 
 Use the `SUPABASE_REPORTS_TABLE` env var to override the table name if needed.
 
-## Admin auth and rate limiting
+## Auth, rate limiting & input hardening
 
 For local dev you can configure an admin API key to protect sensitive endpoints. Add `ADMIN_API_KEY` to `.env` and the server will require the same key in the `x-api-key` request header for `/api/save-report` and `/api/reports`.
 
@@ -120,7 +139,18 @@ If `PUBLIC_API_KEY` is configured, browser uploads and analysis requests to `/ap
 
 In `DEMO_MODE=true`, saved report endpoints can also be used without an admin key so the browser UI can list and load reports during local development.
 
-Rate limiting is enforced per IP using `RATE_LIMIT_PER_MIN` (default `60`) in `.env`.
+**Rate limiting.** The production `api/*.js` functions enforce per-IP, per-route limits via `lib/rate-limit.js` (returns `429` + `Retry-After`):
+
+| Endpoint | Limit |
+|----------|-------|
+| `/api/login` | 10 / min (blunts brute-force against the single shared password) |
+| `/api/process` | 30 / min (each `analyse` spends Anthropic credits) |
+| `/api/save-report` | 30 / min |
+| `/api/reports` | 60 / min |
+
+(The limiter is in-memory/per-instance — see the note in `lib/rate-limit.js`; a durable store is the follow-up for bulletproof login throttling.) The local `dev-server.js` uses a separate per-IP limiter set by `RATE_LIMIT_PER_MIN` (default `60`).
+
+**`analyse` URL allowlist.** `/api/process` with `action:"analyse"` only accepts a `blobUrl` on the Vercel Blob host (`lib/blob-url.js`). This stops the endpoint being used as an open LLM proxy / SSRF vector with our Anthropic key on an attacker-supplied URL.
 
 Example curl to fetch saved reports (with admin key):
 
@@ -145,14 +175,16 @@ This project is production-ready for Vercel deployment with full Supabase persis
 For Supabase schema, RLS policies, and CI/CD pipeline setup, also see [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 
 Quick reference:
-- Health check: `GET /api/health` (no auth required, 200 = ready)
+- Health check: `GET /api/health` (no auth, 200 = ready) · `GET /api/health?deep=1` (pings Supabase, 503 if unreachable)
 - Config: `GET /api/config` (runtime status including Supabase + Sentry)
 - Function timeouts: 5–60s per endpoint (defined in `vercel.json`)
 - Cache headers: Non-caching for health/config, standard for others
 
 ## Next steps (recommended)
-- Add persistent storage for analysis results (Vercel KV, Supabase, or a small DB) so users can revisit past reports.
-- Add minimal authentication (API key or session) and rate limiting before allowing public uploads.
+- Durable rate-limit store (Upstash/Supabase) so login throttling holds across serverless instances.
+- Per-user accounts (current auth is a single shared `ACCESS_PASSWORD`; report ownership is self-asserted).
+- Dedicated test Supabase project so the persistence E2E can run in CI without touching prod.
+- Real eval fixtures (an approved Master Programme; MOM/NParks worked examples) to turn the eval harnesses into live gates.
 
 ## Troubleshooting
 - If `debug` shows `ANTHROPIC_API_KEY: missing` you are in demo mode. Add a real key to `.env` and restart the server.
@@ -161,6 +193,5 @@ Quick reference:
 ## Files to inspect
 - `bq-reader.html` — frontend JS contains the upload chunking, retry/backoff, progress bar and export functions.
 - `api/process.js` — server side: `upload-start`, `upload-part`, `upload-complete`, `analyse` flows.
-
----
-If you want, I can now add a simple persistence layer (SQLite or Supabase) and a minimal README section describing a production checklist. Which would you prefer next?
+- `lib/rate-limit.js`, `lib/blob-url.js` — per-route rate limiting and the `analyse` URL allowlist.
+- `eval/` — deterministic engine acceptance harnesses (`npm run eval`, `npm run eval:engines`).
