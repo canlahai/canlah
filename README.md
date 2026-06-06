@@ -22,9 +22,17 @@ structured report → save/list pattern:
 
 ## Auth
 
-In production, protected endpoints (`/api/process`, `/api/save-report`,
-`/api/reports`) require a signed-cookie session. Users sign in at `/login`
-with `ACCESS_PASSWORD`. In `DEMO_MODE=true`, auth is bypassed for local dev.
+Protected endpoints (`/api/process`, `/api/save-report`, `/api/reports`,
+`/api/users`) require a signed-cookie HMAC session. In `DEMO_MODE=true`, auth is
+bypassed for local dev. Two modes (set `AUTH_MODE`):
+
+- **`shared`** (default) — one `ACCESS_PASSWORD`; everyone signs in with it. Report
+  ownership is self-asserted. Fine for a single trusted firm.
+- **`users`** — per-user accounts (`canlah_users`, scrypt-hashed). Admin-managed,
+  no open signup. To enable: run `db/users.sql` (or it uses `data/users.json`
+  locally), seed the first admin with `npm run seed:admin -- <email> <password> [name]`,
+  set `AUTH_MODE=users`. Admins manage accounts at `/api/users` (create/list/disable).
+  The login page shows an email field automatically (driven by `/api/config.authMode`).
 
 ## What this repo contains
 - Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`,
@@ -65,6 +73,8 @@ Notes:
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob read/write token (required for real uploads)
 - `ANTHROPIC_API_KEY` — Anthropic API key to run live analysis (optional for demo)
 - `DEMO_MODE` — `true` to force demo behaviour (useful for offline testing)
+- `AUTH_MODE` — `shared` (default, single `ACCESS_PASSWORD`) or `users` (per-user accounts)
+- `RATE_LIMIT_DURABLE` — `true` to use the Supabase-backed cross-instance rate limiter (run `db/rate-limit.sql`)
 - `PUBLIC_API_KEY` — optional public key for browser-based uploads and analysis requests in production
 - `SUPABASE_URL` — your Supabase project URL for saved report storage
 - `SUPABASE_SERVICE_KEY` — Supabase service role key for server-side persistence
