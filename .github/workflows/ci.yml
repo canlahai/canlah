@@ -7,68 +7,13 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test:
+  # Demo-mode e2e: runs every spec except the supabase-persistence suite (which
+  # is excluded via testIgnore unless PLAYWRIGHT_SUPABASE_MODE is set). NO Supabase
+  # secrets in this job — dev-server loads .env/env at startup, so leaking creds
+  # here would push the demo specs into a half-configured Supabase state.
+  e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        node-version: [18, 20]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Cache playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-browser-cache-${{ matrix.node-version }}-${{ runner.os }}
-          restore-keys: |
-            playwright-browser-cache-${{ matrix.node-version }}-
-            playwright-browser-cache-
-
-      - name: Restore env
-        run: |
-          if [ -f .env ]; then echo ".env already present"; else echo "# secrets provided via GitHub Actions" > .env; fi
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Start dev server
-        run: |
-          node dev-server.js &
-          npx wait-on http://localhost:3000 --timeout 15000
-
-      - name: Run Playwright e2e (JUnit)
-        env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          npx playwright test --reporter=dot --reporter=junit
-
-      - name: Upload Playwright JUnit results
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-junit
-          path: test-results
-          retention-days: 7
-
-  test-supabase:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_KEY != ''
+    timeout-minutes: 20
     strategy:
       matrix:
         node-version: [20]
@@ -85,56 +30,89 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Cache playwright browsers
+      - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-browser-cache-supabase-${{ runner.os }}
-          restore-keys: |
-            playwright-browser-cache-
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
 
-      - name: Create .env
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run demo e2e (Playwright manages the dev server)
+        run: npx playwright test --reporter=dot --reporter=junit
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-junit
+          path: test-results
+          retention-days: 7
+
+  # `secrets` can't be referenced in a job-level `if:`, so surface presence as a
+  # job output first, then gate the supabase job on it. (This is what previously
+  # made the whole workflow file invalid and fail in 0s.)
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has_supabase: ${{ steps.check.outputs.has_supabase }}
+    steps:
+      - id: check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
-          cat > .env << EOF
-          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
-          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-          BLOB_READ_WRITE_TOKEN=${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          SESSION_SECRET=ci-test-secret-do-not-use-in-prod
-          EOF
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_SERVICE_KEY" ]; then
+            echo "has_supabase=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_supabase=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Validate Supabase Connection
-        run: |
-          node -e "
-          const { createClient } = require('@supabase/supabase-js');
-          const url = process.env.SUPABASE_URL;
-          const key = process.env.SUPABASE_SERVICE_KEY;
-          if (!url || !key) {
-            console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY');
-            process.exit(1);
-          }
-          const client = createClient(url, key);
-          console.log('✓ Supabase client initialized');
-          "
+  # Supabase-mode e2e: only runs when the secrets exist.
+  test-supabase:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has_supabase == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
 
-      - name: Run Supabase E2E Tests
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Supabase-mode e2e
         env:
           PLAYWRIGHT_SUPABASE_MODE: '1'
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          ACCESS_PASSWORD: canberra
+          ACCESS_PASSWORD: ci-test-access-password
           SESSION_SECRET: ci-test-secret-do-not-use-in-prod
-        run: |
-          npx playwright test e2e/supabase-persistence.spec.js --reporter=dot --reporter=junit
+        run: npx playwright test e2e/supabase-persistence.spec.js --reporter=dot --reporter=junit
 
-      - name: Upload Supabase E2E Results
-        uses: actions/upload-artifact@v4
+      - name: Upload Supabase JUnit results
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: playwright-supabase-junit
           path: test-results
