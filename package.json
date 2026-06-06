@@ -12,7 +12,7 @@
     "eval:engines:test": "node eval/engines/test/score.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:supabase": "PLAYWRIGHT_SUPABASE_MODE=1 npx playwright test e2e/supabase-persistence.spec.js",
-    "test:unit": "node test/unit/auth.test.mjs && node test/unit/rate-limit.test.mjs && node test/unit/blob-url.test.mjs && node test/unit/bq-parse.test.mjs && node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs && node test/unit/reports.test.mjs && node test/unit/pdf.test.mjs && node test/unit/health.test.mjs && node eval/test/score.test.mjs && node eval/engines/test/score.test.mjs"
+    "test:unit": "node test/unit/auth.test.mjs && node test/unit/rate-limit.test.mjs && node test/unit/blob-url.test.mjs && node test/unit/bq-parse.test.mjs && node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs && node test/unit/reports.test.mjs && node test/unit/pdf.test.mjs && node test/unit/health.test.mjs && node test/unit/frontend-helpers.test.mjs && node eval/test/score.test.mjs && node eval/engines/test/score.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",

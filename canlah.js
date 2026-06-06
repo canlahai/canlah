@@ -25,6 +25,8 @@ const CanLah = {
           this.state.caller = cfg.caller || null;
         }
     } catch {}
+    // Shared pure helpers (single source, unit-tested in lib/frontend-helpers.js).
+    try { this._h = await import('/lib/frontend-helpers.js'); } catch { this._h = null; }
     this._startDotsAnimation();
     this.renderUserStatus();
     return this;
@@ -205,15 +207,14 @@ const CanLah = {
     const file = this.state.uploadedFile;
     if (!file) throw new Error('No file selected');
 
-    const ext = file.name.split('.').pop().toLowerCase();
-    const mime = ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' })[ext] || 'application/octet-stream';
+    const H = this._h || await import('/lib/frontend-helpers.js');
+    const mime = H.extToMime(file.name);
 
     const { key, uploadId } = await this.apiProcess({ action: 'upload-start', filename: file.name, mimeType: mime });
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const totalChunks = H.chunkCount(file.size, CHUNK_SIZE);
     const parts = [];
     for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(file.size, start + CHUNK_SIZE);
+      const { start, end } = H.chunkRange(i, file.size, CHUNK_SIZE);
       const chunkBuf = await file.slice(start, end).arrayBuffer();
       this.showToast(`Uploading chunk ${i + 1}/${totalChunks}…`, 'info');
       const part = await this.apiProcess({ action: 'upload-part', key, uploadId, partNumber: i + 1, data: this.bufferToBase64(chunkBuf), mimeType: mime });
@@ -274,7 +275,9 @@ const CanLah = {
   },
 
   downloadReport(report) {
-    const filename = `${(report.reportTitle || report.projectName || report.siteName || report.companyName || 'canlah-report').replace(/[^a-zA-Z0-9-_]/g, '_')}-${report.id || 'report'}.json`;
+    const filename = this._h
+      ? this._h.reportFilename(report)
+      : `${(report.reportTitle || report.projectName || report.siteName || report.companyName || 'canlah-report').replace(/[^a-zA-Z0-9-_]/g, '_')}-${report.id || 'report'}.json`;
     const data = JSON.stringify(report, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const a = document.createElement('a');
