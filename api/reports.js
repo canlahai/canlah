@@ -8,7 +8,7 @@ initSentry();
 
 export default async function handler(req, res) {
   try {
-    if (!enforceRateLimit(req, res, { id: 'reports', limit: 60, windowMs: 60_000 })) return;
+    if (!(await enforceRateLimit(req, res, { id: 'reports', limit: 60, windowMs: 60_000 }))) return;
     if (req.method === 'GET') {
       const auth = requireAuth(req, res);
       if (!auth.ok) return;

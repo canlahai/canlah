@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   // Strict throttle: the whole app is behind one shared password, so cap
   // login attempts per IP to blunt brute-force.
-  if (!enforceRateLimit(req, res, { id: 'login', limit: 10, windowMs: 60_000 })) return;
+  if (!(await enforceRateLimit(req, res, { id: 'login', limit: 10, windowMs: 60_000 }))) return;
 
   try {
     const expected = process.env.ACCESS_PASSWORD;
