@@ -663,8 +663,17 @@ const server = http.createServer((req, res) => {
         if (!requireAuthDev(req, res)) return;
 
         if (req.method === 'GET') {
-          const reports = await loadReports();
-          return send(res, 200, JSON.stringify({ reports }), { 'Content-Type': 'application/json' });
+          const idsParam = parsedUrl.searchParams.get('ids');
+          if (idsParam) {
+            const ids = String(idsParam).split(',').filter(Boolean);
+            const items = await getReportsByIds(ids);
+            return send(res, 200, JSON.stringify({ reports: items }), { 'Content-Type': 'application/json' });
+          }
+          const page = Number(parsedUrl.searchParams.get('page') || 0);
+          const perPage = Number(parsedUrl.searchParams.get('perPage') || parsedUrl.searchParams.get('per_page') || 50);
+          const q = parsedUrl.searchParams.get('q') || undefined;
+          const reports = await loadReports({ limit: perPage, offset: page * perPage, q });
+          return send(res, 200, JSON.stringify({ reports, page, perPage }), { 'Content-Type': 'application/json' });
         }
 
         if (req.method === 'DELETE') {

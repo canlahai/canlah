@@ -31,11 +31,19 @@ test.describe('Supabase Persistence Integration', () => {
     return id;
   }
 
-  test('config: real Supabase, not demo mode', async ({ request }) => {
+  test('config: real Supabase, reachable, not demo mode', async ({ request }) => {
     const cfg = await (await request.get('/api/config')).json();
     expect(cfg.demoMode).toBe(false);
     expect(cfg.supabase?.configured).toBe(true);
     expect(cfg.supabase?.table).toBeTruthy();
+    // Fail fast + loud if the backend isn't actually reachable. Without this the
+    // server silently falls back to local JSON (each op ~5s) and the suite dies
+    // by cumulative timeout instead of telling you the secrets are wrong.
+    const health = await (await request.get('/api/health?deep=1')).json();
+    expect(
+      health.supabase?.reachable,
+      `Supabase not reachable — check the TEST project SUPABASE_URL/SUPABASE_SERVICE_KEY secrets. Server error: ${health.supabase?.error}`,
+    ).toBe(true);
   });
 
   test('unauthenticated read is rejected (401)', async ({ request }) => {
