@@ -40,7 +40,7 @@ All core infrastructure is complete. Awaiting only live Supabase credentials and
 - [x] Unit tests: engines, auth, rate-limit, blob-url, bq-parse, health, persistence, PDF
 - [x] Eval harnesses: `npm run eval` (programme) + `npm run eval:engines` (DRC/tender/tree-felling)
 - [x] E2E tests with Playwright (4 pillars + login + admin + deep-health) — runs in CI (demo mode)
-- [x] Supabase persistence E2E (`e2e/supabase-persistence.spec.js`) — API-driven; runs in the secret-gated `test-supabase` CI job against a DEDICATED TEST project (never prod)
+- [x] Supabase persistence E2E (`e2e/supabase-persistence.spec.js`) — API-driven; local-only (`npm run test:e2e:supabase` against a throwaway test project, Node 22+). Not in CI (would write to prod; no dedicated test project yet)
 - [x] Demo mode for local testing without credentials
 
 ### Deployment Configuration

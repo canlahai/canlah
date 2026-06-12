@@ -234,18 +234,22 @@ Workflows run on push to `main`/`master` and on pull requests:
 
 1. **`unit-tests.yml`** — `npm run test:unit` on Node 18 + 20 (required check).
 2. **`ci.yml` → `e2e`** — the demo-mode Playwright suite (no external creds, no DB writes).
-3. **`ci.yml` → `test-supabase`** — API-driven persistence e2e against Supabase.
-   Secret-gated: runs only when `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` repo
-   secrets exist (via a `check-secrets` job, since `secrets` can't be used in a
-   job-level `if:`).
 
-> ⚠️ **Those repo secrets must point at a DEDICATED TEST project, never prod.**
-> The suite creates and deletes report rows. Set up the test project with
-> `db/reports.sql`, then add its `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` as repo
-> secrets. The suite is API-driven (login → save → list → search → delete), so it
-> needs no Anthropic/Blob. Locally: `PLAYWRIGHT_SUPABASE_MODE=1 SUPABASE_URL=…
-> SUPABASE_SERVICE_KEY=… npm run test:e2e:supabase` (test project only). Without
-> the secrets the job is skipped and the file is `testIgnore`d from the demo run.
+The **`supabase-persistence` suite is NOT run in CI.** It creates and deletes
+report rows, so it must never point at prod — and there's no dedicated test
+project. It's API-driven (login → save → list → search → delete) and runnable
+**locally against a throwaway test project** (set up with `db/reports.sql`):
+
+```bash
+PLAYWRIGHT_SUPABASE_MODE=1 \
+  SUPABASE_URL=https://<test-ref>.supabase.co SUPABASE_SERVICE_KEY=<test-key> \
+  ACCESS_PASSWORD=ci-test-access-password npm run test:e2e:supabase
+```
+
+It needs Node **22+** (`@supabase/supabase-js` requires native WebSocket). To gate
+it in CI later: stand up a dedicated TEST project, add its creds as repo secrets
+(never prod), and add a secret-gated job. Persistence is otherwise covered by the
+`reports` unit tests, `/api/health?deep=1`, and manual save→list→delete canaries.
 
 ## Data Backup & Recovery
 
