@@ -17,13 +17,17 @@ This guide covers setting up CanLah for production deployment with Supabase pers
 CREATE TABLE canlah_reports (
   id TEXT PRIMARY KEY,
   report JSONB NOT NULL,
-  savedAt TEXT NOT NULL,
+  "savedAt" TEXT NOT NULL,   -- QUOTED: app queries `savedAt` (case-sensitive via PostgREST)
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()
 );
 
-CREATE INDEX idx_canlah_reports_saved_at ON canlah_reports(savedAt DESC);
+CREATE INDEX idx_canlah_reports_saved_at ON canlah_reports("savedAt" DESC);
 ```
+
+> ⚠️ Keep `"savedAt"` **quoted**. Unquoted, Postgres folds it to lowercase
+> `savedat`, but the app inserts/orders by `savedAt` — every persistence call
+> would then fail with `column "savedAt" does not exist`.
 
 Alternatively, use the **Table Editor** UI to create a table named `canlah_reports` with:
 - `id` (TEXT, primary key)
