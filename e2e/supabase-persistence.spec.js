@@ -24,8 +24,9 @@ test.describe('Supabase Persistence Integration', () => {
 
   async function saveReport(request, report) {
     const res = await request.post('/api/save-report', { data: { report } });
-    expect(res.status()).toBe(200);
-    const { id } = await res.json();
+    const text = await res.text();
+    expect(res.status(), `save-report failed (${res.status()}): ${text}`).toBe(200);
+    const { id } = JSON.parse(text);
     createdIds.push(id);
     return id;
   }
