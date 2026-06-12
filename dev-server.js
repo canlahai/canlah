@@ -1,3 +1,4 @@
+
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -667,6 +668,7 @@ const server = http.createServer((req, res) => {
         }
 
         if (req.method === 'DELETE') {
+          const body = await parseBody(req);
           const id = parsedUrl.searchParams.get('id') || (body && body.id);
           if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
 
