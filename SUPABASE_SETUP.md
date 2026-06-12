@@ -226,21 +226,22 @@ npm run test:e2e
 
 ## CI/CD Pipeline
 
-Two workflows run on push to `main`/`master` and on pull requests:
+Workflows run on push to `main`/`master` and on pull requests:
 
 1. **`unit-tests.yml`** — `npm run test:unit` on Node 18 + 20 (required check).
-2. **`ci.yml`** — the demo-mode Playwright e2e suite (no external creds, no DB writes).
+2. **`ci.yml` → `e2e`** — the demo-mode Playwright suite (no external creds, no DB writes).
+3. **`ci.yml` → `test-supabase`** — API-driven persistence e2e against Supabase.
+   Secret-gated: runs only when `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` repo
+   secrets exist (via a `check-secrets` job, since `secrets` can't be used in a
+   job-level `if:`).
 
-> **Note:** the Supabase-backed e2e suite (`e2e/supabase-persistence.spec.js`) is
-> **not run in CI**. The only credentials available point at production, and running
-> it there would write/delete test rows in the prod database on every PR. It's
-> excluded from the default Playwright run via `testIgnore` (unless
-> `PLAYWRIGHT_SUPABASE_MODE` is set). To run it in CI, provision a **dedicated test
-> Supabase project**, add its creds as repo secrets (not prod), rework the spec to
-> seed reports via the save API (not the real Anthropic analyse flow), then add a
-> gated job. Run locally against a test project with `npm run test:e2e:supabase`.
-> Persistence is otherwise covered by `reports` unit tests, `/api/health?deep=1`
-> reachability, and manual save→list→delete canaries.
+> ⚠️ **Those repo secrets must point at a DEDICATED TEST project, never prod.**
+> The suite creates and deletes report rows. Set up the test project with
+> `db/reports.sql`, then add its `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` as repo
+> secrets. The suite is API-driven (login → save → list → search → delete), so it
+> needs no Anthropic/Blob. Locally: `PLAYWRIGHT_SUPABASE_MODE=1 SUPABASE_URL=…
+> SUPABASE_SERVICE_KEY=… npm run test:e2e:supabase` (test project only). Without
+> the secrets the job is skipped and the file is `testIgnore`d from the demo run.
 
 ## Data Backup & Recovery
 

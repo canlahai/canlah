@@ -4,22 +4,23 @@ This file documents where each secret goes and what each service needs.
 
 ## 1. GitHub Actions (CI/CD Pipeline)
 
-CI does **not** require any secrets today. Two workflows run on every push/PR:
-
+Required workflows need **no secrets**:
 - `unit-tests.yml` — `npm run test:unit` (Node 18 + 20).
-- `ci.yml` — the demo-mode Playwright e2e suite (no external creds, no DB writes).
+- `ci.yml → e2e` — demo-mode Playwright suite (no external creds, no DB writes).
 
-There is **no `test-supabase` CI job** — the Supabase-backed e2e suite is excluded
-from CI because the only creds available are production, and running it there would
-write/delete rows in the prod database. So you do **not** need to add `SUPABASE_*`
-secrets to GitHub Actions. (If you previously added them for the old job, you can
-remove them — they're unused.)
+**Optional — to enable the `test-supabase` job** (API-driven persistence e2e), add
+these two repo secrets (**Settings → Secrets and variables → Actions**):
 
-If you later want the persistence e2e in CI, provision a **dedicated test Supabase
-project**, add ITS creds as repo secrets (never prod), rework the spec to seed via
-the save API, and add a gated job. See `.github/workflows/ci.yml` and `SUPABASE_SETUP.md`.
+| Secret | Value | Notes |
+|--------|-------|-------|
+| `SUPABASE_URL` | `https://<test-project>.supabase.co` | ⚠️ a **DEDICATED TEST project**, never prod |
+| `SUPABASE_SERVICE_KEY` | test project's `service_role` key | the suite creates + deletes rows |
 
-Repo secrets live at: **Settings → Secrets and variables → Actions**.
+⚠️ **Never point these at production** — the persistence suite writes and deletes
+report rows. Set up the test project with `db/reports.sql` first. When both secrets
+are present the `test-supabase` job runs (gated via a `check-secrets` job); when
+absent it's skipped. The job uses fixed `ACCESS_PASSWORD`/`SESSION_SECRET` test
+values (not secrets), and needs no Anthropic/Blob.
 
 ## 2. Vercel (Production Deployment)
 

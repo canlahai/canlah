@@ -25,11 +25,14 @@ export default defineConfig({
       PORT: String(PORT),
       DEMO_MODE: process.env.PLAYWRIGHT_SUPABASE_MODE ? 'false' : 'true',
       RATE_LIMIT_PER_MIN: '10000',
-      // Pass through Supabase env vars if testing against live backend
+      // Supabase mode (DEMO_MODE=false) enforces auth, so the persistence suite
+      // logs in — provide creds + a session secret. Pass through the Supabase env.
       ...(process.env.PLAYWRIGHT_SUPABASE_MODE ? {
         SUPABASE_URL: process.env.SUPABASE_URL,
         SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
         SUPABASE_REPORTS_TABLE: process.env.SUPABASE_REPORTS_TABLE,
+        ACCESS_PASSWORD: process.env.ACCESS_PASSWORD || 'ci-test-access-password',
+        SESSION_SECRET: process.env.SESSION_SECRET || 'ci-test-secret-do-not-use-in-prod',
       } : {}),
     },
     url: `http://127.0.0.1:${PORT}/api/config`,
