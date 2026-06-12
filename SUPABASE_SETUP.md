@@ -17,13 +17,17 @@ This guide covers setting up CanLah for production deployment with Supabase pers
 CREATE TABLE canlah_reports (
   id TEXT PRIMARY KEY,
   report JSONB NOT NULL,
-  savedAt TEXT NOT NULL,
+  "savedAt" TEXT NOT NULL,   -- QUOTED: app queries `savedAt` (case-sensitive via PostgREST)
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()
 );
 
-CREATE INDEX idx_canlah_reports_saved_at ON canlah_reports(savedAt DESC);
+CREATE INDEX idx_canlah_reports_saved_at ON canlah_reports("savedAt" DESC);
 ```
+
+> ⚠️ Keep `"savedAt"` **quoted**. Unquoted, Postgres folds it to lowercase
+> `savedat`, but the app inserts/orders by `savedAt` — every persistence call
+> would then fail with `column "savedAt" does not exist`.
 
 Alternatively, use the **Table Editor** UI to create a table named `canlah_reports` with:
 - `id` (TEXT, primary key)
@@ -226,21 +230,26 @@ npm run test:e2e
 
 ## CI/CD Pipeline
 
-Two workflows run on push to `main`/`master` and on pull requests:
+Workflows run on push to `main`/`master` and on pull requests:
 
 1. **`unit-tests.yml`** — `npm run test:unit` on Node 18 + 20 (required check).
-2. **`ci.yml`** — the demo-mode Playwright e2e suite (no external creds, no DB writes).
+2. **`ci.yml` → `e2e`** — the demo-mode Playwright suite (no external creds, no DB writes).
 
-> **Note:** the Supabase-backed e2e suite (`e2e/supabase-persistence.spec.js`) is
-> **not run in CI**. The only credentials available point at production, and running
-> it there would write/delete test rows in the prod database on every PR. It's
-> excluded from the default Playwright run via `testIgnore` (unless
-> `PLAYWRIGHT_SUPABASE_MODE` is set). To run it in CI, provision a **dedicated test
-> Supabase project**, add its creds as repo secrets (not prod), rework the spec to
-> seed reports via the save API (not the real Anthropic analyse flow), then add a
-> gated job. Run locally against a test project with `npm run test:e2e:supabase`.
-> Persistence is otherwise covered by `reports` unit tests, `/api/health?deep=1`
-> reachability, and manual save→list→delete canaries.
+The **`supabase-persistence` suite is NOT run in CI.** It creates and deletes
+report rows, so it must never point at prod — and there's no dedicated test
+project. It's API-driven (login → save → list → search → delete) and runnable
+**locally against a throwaway test project** (set up with `db/reports.sql`):
+
+```bash
+PLAYWRIGHT_SUPABASE_MODE=1 \
+  SUPABASE_URL=https://<test-ref>.supabase.co SUPABASE_SERVICE_KEY=<test-key> \
+  ACCESS_PASSWORD=ci-test-access-password npm run test:e2e:supabase
+```
+
+It needs Node **22+** (`@supabase/supabase-js` requires native WebSocket). To gate
+it in CI later: stand up a dedicated TEST project, add its creds as repo secrets
+(never prod), and add a secret-gated job. Persistence is otherwise covered by the
+`reports` unit tests, `/api/health?deep=1`, and manual save→list→delete canaries.
 
 ## Data Backup & Recovery
 

@@ -4,22 +4,18 @@ This file documents where each secret goes and what each service needs.
 
 ## 1. GitHub Actions (CI/CD Pipeline)
 
-CI does **not** require any secrets today. Two workflows run on every push/PR:
-
+CI needs **no secrets**:
 - `unit-tests.yml` — `npm run test:unit` (Node 18 + 20).
-- `ci.yml` — the demo-mode Playwright e2e suite (no external creds, no DB writes).
+- `ci.yml → e2e` — demo-mode Playwright suite (no external creds, no DB writes).
 
-There is **no `test-supabase` CI job** — the Supabase-backed e2e suite is excluded
-from CI because the only creds available are production, and running it there would
-write/delete rows in the prod database. So you do **not** need to add `SUPABASE_*`
-secrets to GitHub Actions. (If you previously added them for the old job, you can
-remove them — they're unused.)
+The `supabase-persistence` suite is **not** run in CI (it creates/deletes rows and
+there's no dedicated test project), so no `SUPABASE_*` repo secrets are needed.
 
-If you later want the persistence e2e in CI, provision a **dedicated test Supabase
-project**, add ITS creds as repo secrets (never prod), rework the spec to seed via
-the save API, and add a gated job. See `.github/workflows/ci.yml` and `SUPABASE_SETUP.md`.
-
-Repo secrets live at: **Settings → Secrets and variables → Actions**.
+> To bring it into CI later: create a **dedicated TEST Supabase project** (never
+> prod — the suite deletes rows), add its `SUPABASE_URL` + `SUPABASE_SERVICE_KEY`
+> as repo secrets, and add a secret-gated job. Until then, run it locally:
+> `PLAYWRIGHT_SUPABASE_MODE=1 SUPABASE_URL=… SUPABASE_SERVICE_KEY=… npm run test:e2e:supabase`
+> (Node 22+ required for `@supabase/supabase-js` native WebSocket).
 
 ## 2. Vercel (Production Deployment)
 

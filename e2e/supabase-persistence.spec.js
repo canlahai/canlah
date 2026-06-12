@@ -1,155 +1,103 @@
 import { test, expect } from '@playwright/test';
 
-// Skip this entire test suite if Supabase is not configured
+// Persistence integration against a REAL Supabase backend (a dedicated TEST
+// project — never prod). Driven entirely through the API (login → save → list →
+// search → get-by-id → delete), so there's no Anthropic/upload dependency and no
+// UI flakiness. Runs only when SUPABASE_URL + SUPABASE_SERVICE_KEY are set and
+// PLAYWRIGHT_SUPABASE_MODE=1 (testIgnore in playwright.config gates the file).
+//
+// Each test self-cleans the rows it creates; a best-effort afterAll sweeps any
+// leftovers from a mid-test failure.
+
 const SKIP = !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY;
+const PASSWORD = process.env.ACCESS_PASSWORD || 'ci-test-access-password';
 
-test.describe.configure({ mode: SKIP ? 'skip' : 'parallel' });
 test.describe('Supabase Persistence Integration', () => {
-  test.beforeEach(async ({ page }) => {
-    // Verify we're running against Supabase (not demo mode)
-    await page.goto('/');
-    const config = await page.evaluate(() => fetch('/api/config').then(r => r.json()));
-    if (!config.supabase?.configured) {
-      throw new Error('Test suite requires SUPABASE_URL and SUPABASE_SERVICE_KEY');
+  test.skip(SKIP, 'requires SUPABASE_URL + SUPABASE_SERVICE_KEY (a dedicated test project)');
+  test.describe.configure({ mode: 'serial' });
+  const createdIds = [];
+
+  async function login(request) {
+    const res = await request.post('/api/login', { data: { password: PASSWORD } });
+    expect(res.status(), 'login should succeed (ACCESS_PASSWORD set on the test server)').toBe(200);
+  }
+
+  async function saveReport(request, report) {
+    const res = await request.post('/api/save-report', { data: { report } });
+    const text = await res.text();
+    expect(res.status(), `save-report failed (${res.status()}): ${text}`).toBe(200);
+    const { id } = JSON.parse(text);
+    createdIds.push(id);
+    return id;
+  }
+
+  test('config: real Supabase, reachable, not demo mode', async ({ request }) => {
+    const cfg = await (await request.get('/api/config')).json();
+    expect(cfg.demoMode).toBe(false);
+    expect(cfg.supabase?.configured).toBe(true);
+    expect(cfg.supabase?.table).toBeTruthy();
+    // Fail fast + loud if the backend isn't actually reachable. Without this the
+    // server silently falls back to local JSON (each op ~5s) and the suite dies
+    // by cumulative timeout instead of telling you the secrets are wrong.
+    const health = await (await request.get('/api/health?deep=1')).json();
+    expect(
+      health.supabase?.reachable,
+      `Supabase not reachable — check the TEST project SUPABASE_URL/SUPABASE_SERVICE_KEY secrets. Server error: ${health.supabase?.error}`,
+    ).toBe(true);
+  });
+
+  test('unauthenticated read is rejected (401)', async ({ request }) => {
+    const res = await request.get('/api/reports');
+    expect(res.status()).toBe(401);
+  });
+
+  test('save → list → search → get-by-id → delete round-trip persists in Supabase', async ({ request }) => {
+    await login(request);
+    const title = `e2e-persist-${Date.now()}`;
+    const id = await saveReport(request, { reportTitle: title, reportType: 'reports', projectName: 'e2e' });
+
+    // appears in the list, with server-assigned ownership
+    const list = await (await request.get('/api/reports?perPage=50')).json();
+    const mine = list.reports.find((r) => r.id === id);
+    expect(mine, 'saved report appears in the list').toBeTruthy();
+    expect(mine.ownerId, 'ownerId set from the session').toBeTruthy();
+    expect(mine.savedAt).toBeTruthy();
+
+    // full-text search finds it
+    const search = await (await request.get(`/api/reports?q=${encodeURIComponent(title)}`)).json();
+    expect(search.reports.some((r) => r.id === id)).toBe(true);
+
+    // get-by-ids (the export path)
+    const byId = await (await request.get(`/api/reports?ids=${encodeURIComponent(id)}`)).json();
+    expect(byId.reports[0]?.id).toBe(id);
+
+    // delete, then confirm it's gone
+    const del = await request.delete('/api/reports', { data: { id } });
+    expect(del.status()).toBe(200);
+    const after = await (await request.get(`/api/reports?q=${encodeURIComponent(title)}`)).json();
+    expect(after.reports.some((r) => r.id === id)).toBe(false);
+  });
+
+  test('bulk-delete removes multiple reports', async ({ request }) => {
+    await login(request);
+    const ids = [];
+    for (let i = 0; i < 2; i++) {
+      ids.push(await saveReport(request, { reportTitle: `e2e-bulk-${Date.now()}-${i}`, reportType: 'reports' }));
     }
+    const res = await request.post('/api/reports', { data: { action: 'bulk-delete', ids } });
+    expect(res.status()).toBe(200);
+    const list = await (await request.get('/api/reports?perPage=100')).json();
+    expect(ids.every((id) => !list.reports.some((r) => r.id === id))).toBe(true);
   });
 
-  test('should save report with Supabase persistence', async ({ page }) => {
-    // Navigate to BQ reader
-    await page.goto('/bq-reader.html');
-    await page.waitForSelector('#file-input');
-
-    // Upload file
-    await page.locator('#file-input').setInputFiles({
-      name: 'supabase-test-1.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.4 supabase integration test'),
-    });
-
-    // Analyze
-    await page.locator('#analyse-btn').click();
-    await expect(page.locator('#page-report')).toHaveClass(/active/, { timeout: 20_000 });
-
-    // Save
-    await page.getByRole('button', { name: 'Save Report' }).click();
-    await expect(page.locator('.toast').filter({ hasText: /saved/ })).toBeVisible({ timeout: 5_000 });
-
-    // Verify report appears in saved list with owner metadata
-    await page.goto('/saved-reports.html');
-    await page.waitForSelector('.sr-item');
-    const items = page.locator('.sr-item');
-    const count = await items.count();
-    expect(count).toBeGreaterThan(0);
-
-    // Verify ownership info is present (should say "You" for logged-in user)
-    const firstTitle = await items.first().locator('.sr-title').textContent();
-    expect(firstTitle).toBeTruthy();
-  });
-
-  test('should list reports with pagination from Supabase', async ({ page }) => {
-    await page.goto('/admin-reports.html');
-    await page.waitForSelector('#ar-list');
-
-    // Change per-page
-    await page.locator('#ar-perpage').selectOption('25');
-    await expect(page.locator('#ar-perpage')).toHaveValue('25');
-
-    // Verify reports load
-    const list = page.locator('#ar-list');
-    const itemsText = await list.textContent();
-    expect(itemsText).toBeTruthy();
-  });
-
-  test('should support search across Supabase reports', async ({ page }) => {
-    // Save a uniquely-named report first
-    const testName = `Supabase-Search-${Date.now()}`;
-    await page.goto('/site-report.html');
-    await page.locator('#file-input').setInputFiles({
-      name: 'search-test.jpg',
-      mimeType: 'image/jpeg',
-      buffer: Buffer.from('fake jpeg for search test'),
-    });
-    await page.locator('#analyse-btn').click();
-    await expect(page.locator('#page-report')).toHaveClass(/active/, { timeout: 20_000 });
-
-    // Set a custom title before save
-    await page.evaluate((title) => {
-      window._lastReport = window._lastReport || {};
-      window._lastReport.reportTitle = title;
-    }, testName);
-
-    await page.getByRole('button', { name: 'Save Report' }).click();
-    await expect(page.locator('.toast').filter({ hasText: /saved/ })).toBeVisible({ timeout: 5_000 });
-
-    // Go to admin and search for it
-    await page.goto('/admin-reports.html');
-    await page.locator('#ar-search').fill(testName);
-    await page.locator('#ar-refresh').click();
-
-    // Verify result appears
-    const summary = page.locator('#ar-summary');
-    await expect(summary).toContainText(testName, { timeout: 5_000 });
-  });
-
-  test('should validate ownership checks on delete', async ({ page }) => {
-    // This test verifies that non-admin users cannot delete others' reports
-    // In this case, we're testing against the same user, so we should have delete permission
-    await page.goto('/saved-reports.html');
-    await page.waitForSelector('.sr-item');
-
-    // Try to get the first report
-    const firstItem = page.locator('.sr-item').first();
-    const deleteBtn = firstItem.locator('button', { hasText: 'Delete' });
-
-    // Button should exist for owned reports
-    const isVisible = await deleteBtn.isVisible().catch(() => false);
-    if (isVisible) {
-      // Click delete and confirm
-      await deleteBtn.click();
-      const confirmBtn = page.locator('.cm-confirm');
-      await expect(confirmBtn).toContainText(/delete/i);
-    }
-  });
-
-  test('should track report ownership in metadata', async ({ page }) => {
-    await page.goto('/admin-reports.html');
-    await page.waitForSelector('#ar-list');
-
-    // Get the first report and check for owner info
-    const firstItem = page.locator('.sr-item').first();
-    const ownerText = await firstItem.locator('.sr-owner').textContent().catch(() => '');
-
-    // Owner metadata should be present
-    expect(ownerText).toContain('Owner:');
-  });
-
-  test('should handle bulk export from Supabase', async ({ page }) => {
-    await page.goto('/admin-reports.html');
-    await page.waitForSelector('#ar-list');
-
-    // Select all
-    await page.locator('#ar-select-all').check();
-
-    // Wait for export button to be enabled (at least one selected)
-    const exportBtn = page.locator('#ar-export');
-    await expect(exportBtn).toBeEnabled();
-
-    // Start download listener
-    const downloadPromise = page.waitForEvent('download');
-    await exportBtn.click();
-
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/canlah-reports.*\.json/);
-  });
-
-  test('should verify Supabase config endpoint', async ({ page }) => {
-    const config = await page.evaluate(async () => {
-      const res = await fetch('/api/config');
-      return await res.json();
-    });
-
-    expect(config.supabase).toBeDefined();
-    expect(config.supabase.configured).toBe(true);
-    expect(config.supabase.table).toBeTruthy();
+  test.afterAll(async ({ playwright }) => {
+    if (SKIP || createdIds.length === 0) return;
+    // Best-effort sweep of anything a failed test left behind.
+    const ctx = await playwright.request.newContext({ baseURL: `http://127.0.0.1:${process.env.E2E_PORT || 3030}` });
+    try {
+      await ctx.post('/api/login', { data: { password: PASSWORD } });
+      await ctx.post('/api/reports', { data: { action: 'bulk-delete', ids: createdIds } });
+    } catch {}
+    await ctx.dispose();
   });
 });

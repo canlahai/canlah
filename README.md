@@ -129,17 +129,17 @@ The dev server supports saving and listing analysis reports in Supabase when `SU
 If you configure Supabase, the app will persist saved reports in the specified table with server-side storage.
 
 ### Supabase table setup
-Create a table named `canlah_reports` in Supabase with the following minimum schema:
+Run [`db/reports.sql`](db/reports.sql) in the Supabase SQL Editor (canonical schema). Minimum shape:
 
 ```sql
 create table canlah_reports (
   id text primary key,
-  savedAt timestamptz not null,
-  report jsonb not null
+  report jsonb not null,
+  "savedAt" text not null   -- QUOTED: the app queries `savedAt` (case-sensitive via PostgREST)
 );
 ```
 
-Use the `SUPABASE_REPORTS_TABLE` env var to override the table name if needed.
+`"savedAt"` must be quoted (text holding an ISO timestamp) — unquoted it folds to `savedat` and every persistence call fails with `column "savedAt" does not exist`. Use the `SUPABASE_REPORTS_TABLE` env var to override the table name if needed.
 
 ## Auth, rate limiting & input hardening
 

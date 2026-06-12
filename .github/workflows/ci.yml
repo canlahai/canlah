@@ -10,14 +10,13 @@ on:
 # admin, and the deep-health check — all in demo mode, with NO external creds and
 # NO writes to any real database.
 #
-# The supabase-persistence suite is intentionally NOT run here. It needs a live
-# backend, and pointing it at the production Supabase project would write/delete
-# test rows in prod on every PR. To run it in CI, stand up a DEDICATED test
-# Supabase project, set its creds as repo secrets, rework the spec to seed reports
-# via the save API (not the real Anthropic analyse flow), then add a gated job.
-# Until then, persistence is covered by: lib reports unit tests, /api/health?deep=1
-# reachability, and manual save→list→delete canaries. Run locally with
-# `npm run test:e2e:supabase` against a test project.
+# The supabase-persistence suite is NOT run in CI: it creates and deletes report
+# rows, and there is no dedicated test Supabase project (the only creds are prod).
+# It's API-driven and runnable locally against a throwaway project:
+#   PLAYWRIGHT_SUPABASE_MODE=1 SUPABASE_URL=… SUPABASE_SERVICE_KEY=… npm run test:e2e:supabase
+# To bring it into CI later, stand up a dedicated TEST project, add its creds as
+# repo secrets (never prod), and add a secret-gated job. Persistence is otherwise
+# covered by lib reports unit tests, /api/health?deep=1, and manual canaries.
 jobs:
   e2e:
     runs-on: ubuntu-latest
