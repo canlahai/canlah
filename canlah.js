@@ -203,26 +203,41 @@ const CanLah = {
     location.href = '/login?return=' + encodeURIComponent(location.pathname + location.search);
   },
 
-  async uploadAndAnalyse({ prompt, reportType }) {
+  // Upload + analyse. Real path uploads the file DIRECTLY to Vercel Blob (browser
+  // → Blob), bypassing Vercel's 4.5MB request-body proxy limit, then has the
+  // server ingest the blob into Anthropic. Demo mode skips the upload entirely —
+  // the server returns sample data keyed by reportType.
+  async uploadAndAnalyse({ prompt, reportType, onProgress } = {}) {
     const file = this.state.uploadedFile;
     if (!file) throw new Error('No file selected');
 
-    const H = this._h || await import('/lib/frontend-helpers.js');
-    const mime = H.extToMime(file.name);
+    if (this.state.demoMode) {
+      this.showToast('Loading demo data…', 'info');
+      const analyse = await this.apiProcess({ action: 'analyse', prompt, reportType });
+      return analyse.data;
+    }
 
-    const { key, uploadId } = await this.apiProcess({ action: 'upload-start', filename: file.name, mimeType: mime });
-    const totalChunks = H.chunkCount(file.size, CHUNK_SIZE);
-    const parts = [];
-    for (let i = 0; i < totalChunks; i++) {
-      const { start, end } = H.chunkRange(i, file.size, CHUNK_SIZE);
-      const chunkBuf = await file.slice(start, end).arrayBuffer();
-      this.showToast(`Uploading chunk ${i + 1}/${totalChunks}…`, 'info');
-      const part = await this.apiProcess({ action: 'upload-part', key, uploadId, partNumber: i + 1, data: this.bufferToBase64(chunkBuf), mimeType: mime });
-      parts.push({ etag: part.etag, partNumber: i + 1 });
+    const H = this._h || await import('/lib/frontend-helpers.js');
+    this.showToast('Uploading…', 'info');
+    let blob;
+    try {
+      const { upload } = await import('https://esm.sh/@vercel/blob@0.27.3/client');
+      blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-token',
+        contentType: file.type || H.extToMime(file.name),
+        onUploadProgress: onProgress ? (p) => onProgress(p.percentage || 0) : undefined,
+      });
+    } catch (err) {
+      // The token request (/api/upload-token) 401s inside the blob client rather
+      // than via apiProcess — so on failure, if we're not signed in, redirect.
+      const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));
+      if (!cfg.caller) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
+      throw err;
     }
 
     this.showToast('Finalising upload…', 'info');
-    const { fileId } = await this.apiProcess({ action: 'upload-complete', key, uploadId, parts, mimeType: mime });
+    const { fileId } = await this.apiProcess({ action: 'ingest', blobUrl: blob.url });
 
     this.showToast('Analysing with Claude…', 'info');
     const analyse = await this.apiProcess({ action: 'analyse', fileId, prompt, reportType });

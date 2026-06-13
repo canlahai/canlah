@@ -733,45 +733,18 @@ async function startAnalysis() {
       }
     }
 
-    // STEP 1: Start multipart upload to Vercel Blob
-    showToast(`Starting upload for ${formatBytes(uploadedFile.size)}…`, 'info');
-    const { key, uploadId } = await apiProcess({ action: 'upload-start', filename: uploadedFile.name, mimeType: mime });
-    const totalChunks = Math.ceil(uploadedFile.size / CHUNK_SIZE);
-    const parts = [];
-
-    // STEP 2: Upload chunks with retry
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(uploadedFile.size, start + CHUNK_SIZE);
-      const chunk = await uploadedFile.slice(start, end).arrayBuffer();
-      const data = bufferToBase64(chunk);
-      const chunkSizeMB = (chunk.byteLength / 1024 / 1024).toFixed(1);
-      showToast(`Uploading chunk ${i + 1}/${totalChunks} (${chunkSizeMB}MB)…`, 'info');
-      
-      const part = await uploadChunkWithRetry(key, uploadId, i + 1, data, mime);
-      if (!part || !part.etag) {
-        throw new Error(`Upload part ${i + 1} returned invalid response: ${JSON.stringify(part)}`);
-      }
-      parts.push(part);
-      
-      const uploadProgress = 10 + Math.round(((i + 1) / totalChunks) * 30);
-      document.getElementById('proc-bar').style.width = uploadProgress + '%';
-      document.getElementById('proc-pct').textContent = uploadProgress + '%';
-    }
-
-    // STEP 3: Complete upload
-    showToast('Finalising upload…', 'info');
-    const completeRes = await apiProcess({ action: 'upload-complete', key, uploadId, parts, mimeType: mime });
-    const fileId = completeRes.fileId;
-    if (!fileId) {
-      throw new Error(`Upload complete failed: ${JSON.stringify(completeRes)}`);
-    }
-    showToast('Upload complete. Analysing with Claude…', 'info');
-
-    // STEP 4: Run analysis
-    document.getElementById('proc-bar').style.width = '50%';
-    document.getElementById('proc-pct').textContent = '50%';
-    const { data } = await apiProcess({ action: 'analyse', fileId });
+    // Upload (direct browser→Vercel Blob, bypassing the 4.5MB proxy) + analyse,
+    // via the shared helper. reportType drives the server-side extraction prompt.
+    const data = await CanLah.uploadAndAnalyse({
+      reportType: 'tree',
+      onProgress: (pct) => {
+        const p = 10 + Math.round((pct || 0) * 0.4);
+        document.getElementById('proc-bar').style.width = p + '%';
+        document.getElementById('proc-pct').textContent = p + '%';
+      },
+    });
+    document.getElementById('proc-bar').style.width = '60%';
+    document.getElementById('proc-pct').textContent = '60%';
     
     clearInterval(stepTimer);
     const result = data;
