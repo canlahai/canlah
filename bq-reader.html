@@ -369,6 +369,39 @@ input,select,textarea{font-family:'Syne',sans-serif}
   .rh-top{flex-direction:column}
   .rh-stats{grid-template-columns:repeat(2,1fr)}
 }
+
+/* ── document-type selector ── */
+.doctype-row { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 22px; }
+.doctype-chip { display:flex; flex-direction:column; gap:2px; align-items:flex-start; text-align:left; background:var(--slate); border:1px solid var(--g7); border-radius:12px; padding:12px 16px; cursor:pointer; transition:border-color .15s, background .15s; min-width:160px; }
+.doctype-chip:hover:not(.disabled) { border-color:var(--g5); }
+.doctype-chip.active { border-color:var(--yellow); background:var(--yellow-dim); }
+.doctype-chip .dt-name { font-weight:700; font-size:14px; color:var(--paper); }
+.doctype-chip .dt-sub { font-size:11px; color:var(--g4); font-family:'JetBrains Mono',monospace; }
+.doctype-chip.disabled { opacity:.45; cursor:not-allowed; }
+
+/* ── traffic report ── */
+#traffic-report { max-width:1100px; margin:0 auto; padding:2rem; }
+.tr-head { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+.tr-title { font-size:24px; font-weight:800; letter-spacing:-.02em; }
+.tr-ref { color:var(--g4); font-size:13px; margin-top:4px; }
+.tr-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:1.5rem; }
+.tr-stat { background:var(--slate); border:1px solid var(--g7); border-radius:12px; padding:14px 16px; }
+.tr-stat .label { font-size:11px; color:var(--g4); text-transform:uppercase; letter-spacing:.08em; font-family:'JetBrains Mono',monospace; }
+.tr-stat .value { font-size:26px; font-weight:800; margin-top:4px; }
+.tr-stat .sub { font-size:12px; color:var(--g4); }
+.tr-loc { background:var(--slate); border:1px solid var(--g7); border-radius:14px; padding:16px 18px; margin-bottom:14px; }
+.tr-loc-head { display:flex; justify-content:space-between; align-items:baseline; gap:1rem; margin-bottom:12px; }
+.tr-loc-head h3 { font-size:16px; font-weight:700; }
+.tr-loc-head .meta { font-size:12px; color:var(--g4); font-family:'JetBrains Mono',monospace; }
+.tr-bars { display:flex; align-items:flex-end; gap:2px; height:120px; padding-top:8px; }
+.tr-bars .bar { flex:1; background:var(--yellow); border-radius:2px 2px 0 0; position:relative; min-height:2px; transition:background .15s; }
+.tr-bars .bar:hover { background:var(--orange); }
+.tr-bars .bar .tip { display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper); font-size:11px; padding:3px 6px; border-radius:4px; white-space:nowrap; margin-bottom:4px; }
+.tr-bars .bar:hover .tip { display:block; }
+.tr-hours { display:flex; gap:2px; margin-top:4px; }
+.tr-hours span { flex:1; font-size:9px; color:var(--g5); text-align:center; }
+.tr-loc-stats { display:flex; gap:1.5rem; flex-wrap:wrap; margin-top:12px; font-size:13px; color:var(--g3); }
+.tr-loc-stats strong { color:var(--paper); }
 </style>
 </head>
 <body>
@@ -401,10 +434,23 @@ input,select,textarea{font-family:'Syne',sans-serif}
       tree felling plan.<br>
       <span class="yl">Upload your drawings.</span> <span class="og">We confirm the data, lah.</span>
     </h1>
-    <p class="hero-sub">
+    <p class="hero-sub" id="hero-sub">
       Drop any NParks / LTA tree affected plan PDF. Multi-sheet, any format.
       We count every tree, flag every error, and list the quantities in minutes.
     </p>
+
+    <!-- DOCUMENT TYPE SELECTOR -->
+    <div class="doctype-row" id="doctype-row">
+      <button type="button" class="doctype-chip active" data-type="tree" onclick="selectDocType('tree')">
+        <span class="dt-name">Tree felling</span><span class="dt-sub">NParks / LTA tree plans</span>
+      </button>
+      <button type="button" class="doctype-chip" data-type="traffic" onclick="selectDocType('traffic')">
+        <span class="dt-name">Traffic plan</span><span class="dt-sub">Traffic count / impact reports</span>
+      </button>
+      <button type="button" class="doctype-chip disabled" data-type="drain" disabled>
+        <span class="dt-name">Drain drawings</span><span class="dt-sub">Coming soon</span>
+      </button>
+    </div>
 
     <div class="upload-zone" id="upload-zone"
          ondragover="handleDragOver(event)"
@@ -598,6 +644,24 @@ input,select,textarea{font-family:'Syne',sans-serif}
     </div>
 
   </div>
+
+  <!-- Traffic plan report (shown when doc type = traffic; tree report above is hidden) -->
+  <div id="traffic-report" style="display:none">
+    <div class="tr-head">
+      <div>
+        <div class="rh-eyebrow" style="color:var(--orange)">Traffic Plan Report · CanLah.ai</div>
+        <div class="tr-title" id="tr-title">Traffic Report</div>
+        <div class="tr-ref" id="tr-ref"></div>
+      </div>
+      <div class="rh-actions">
+        <button class="act-btn" onclick="window.print()">Print</button>
+        <button class="act-btn" onclick="exportTrafficJSON()">Export JSON</button>
+        <button class="act-btn primary" onclick="showPage('upload')">New Drawing</button>
+      </div>
+    </div>
+    <div class="tr-summary" id="tr-summary"></div>
+    <div id="tr-locations"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -647,6 +711,7 @@ function processFile(file) {
     showToast('File too large — maximum 30MB', 'err'); return;
   }
   uploadedFile = file;
+  CanLah.state.uploadedFile = file; // shared helper (uploadAndAnalyse) reads this
 
   document.getElementById('upload-idle').style.display = 'none';
   document.getElementById('upload-selected').style.display = 'block';
@@ -665,7 +730,11 @@ function formatBytes(b) {
 const apiProcess = (body) => CanLah.apiProcess(body);
 const bufferToBase64 = (buf) => CanLah.bufferToBase64(buf);
 
-document.addEventListener('DOMContentLoaded', () => CanLah.init());
+document.addEventListener('DOMContentLoaded', () => {
+  CanLah.init();
+  const t = new URLSearchParams(location.search).get('type');
+  if (t === 'traffic') selectDocType('traffic');
+});
 
 import('/lib/tree-felling.js').then(m => { window.TreeFelling = m; }).catch(() => {});
 
@@ -721,22 +790,24 @@ async function startAnalysis() {
   const mime = mimeMap[ext] || 'application/pdf';
 
   try {
-    // Validate environment
-    const debugRes = await fetch('/debug').catch(() => null);
-    if (debugRes && debugRes.ok) {
-      const debug = await debugRes.json();
-      if (!debug.blobToken) {
-        throw new Error('Vercel Blob token not configured. Please set BLOB_READ_WRITE_TOKEN in .env');
-      }
-      if (!debug.anthropicKey) {
-        throw new Error('Anthropic API key not configured. Please set ANTHROPIC_API_KEY in .env');
+    // Validate environment (real mode only — demo needs no Blob/Anthropic creds).
+    if (!CanLah.state.demoMode) {
+      const debugRes = await fetch('/debug').catch(() => null);
+      if (debugRes && debugRes.ok) {
+        const debug = await debugRes.json();
+        if (!debug.blobToken) {
+          throw new Error('Vercel Blob token not configured. Please set BLOB_READ_WRITE_TOKEN in .env');
+        }
+        if (!debug.anthropicKey) {
+          throw new Error('Anthropic API key not configured. Please set ANTHROPIC_API_KEY in .env');
+        }
       }
     }
 
     // Upload (direct browser→Vercel Blob, bypassing the 4.5MB proxy) + analyse,
     // via the shared helper. reportType drives the server-side extraction prompt.
     const data = await CanLah.uploadAndAnalyse({
-      reportType: 'tree',
+      reportType: currentDocType,
       onProgress: (pct) => {
         const p = 10 + Math.round((pct || 0) * 0.4);
         document.getElementById('proc-bar').style.width = p + '%';
@@ -763,18 +834,98 @@ async function startAnalysis() {
     document.getElementById('proc-pct').textContent = '100%';
     showToast('Analysis complete!', 'ok');
 
-    setTimeout(() => { buildReport(result); showPage('report'); }, 600);
+    setTimeout(() => { renderByType(result); showPage('report'); }, 600);
 
   } catch(err) {
     clearInterval(stepTimer);
     console.error(err);
     showToast('Error: ' + err.message, 'err');
+    if (currentDocType === 'traffic') return; // no client-side traffic demo fallback
     setTimeout(() => {
       buildReport(getDemoData());
       showPage('report');
       showToast('Showing demo data (check console for error details)', 'wa');
     }, 800);
   }
+}
+
+// ── document type: selector + per-type rendering ──────────────────────
+let currentDocType = 'tree';
+
+function selectDocType(type) {
+  currentDocType = type;
+  document.querySelectorAll('.doctype-chip').forEach(c => c.classList.toggle('active', c.dataset.type === type));
+  const h1 = document.querySelector('.hero-h1');
+  const sub = document.getElementById('hero-sub');
+  const idleTitle = document.querySelector('#upload-idle .uz-title');
+  if (type === 'traffic') {
+    if (h1) h1.innerHTML = 'Upload your<br>traffic plan.<br><span class="yl">Drop the report.</span> <span class="og">We read every count, lah.</span>';
+    if (sub) sub.textContent = 'Drop any traffic count / traffic impact report PDF. We extract every location and hourly volume in minutes.';
+    if (idleTitle) idleTitle.textContent = 'Drop your traffic report here';
+  } else {
+    if (h1) h1.innerHTML = 'Upload your<br>tree felling plan.<br><span class="yl">Upload your drawings.</span> <span class="og">We confirm the data, lah.</span>';
+    if (sub) sub.textContent = 'Drop any NParks / LTA tree affected plan PDF. Multi-sheet, any format. We count every tree, flag every error, and list the quantities in minutes.';
+    if (idleTitle) idleTitle.textContent = 'Drop your tree felling drawing here';
+  }
+}
+
+function renderByType(data) {
+  const treeEl = document.querySelector('#page-report .report-screen');
+  const trafficEl = document.getElementById('traffic-report');
+  if (currentDocType === 'traffic') {
+    if (treeEl) treeEl.style.display = 'none';
+    trafficEl.style.display = '';
+    renderTraffic(data);
+  } else {
+    if (treeEl) treeEl.style.display = '';
+    trafficEl.style.display = 'none';
+    buildReport(data);
+  }
+}
+
+function trFmt(n) { return (n === null || n === undefined || n === '') ? '—' : Number(n).toLocaleString(); }
+
+function renderTraffic(d) {
+  window._trafficData = d;
+  document.getElementById('tr-title').textContent = d.reportTitle || 'Traffic Report';
+  document.getElementById('tr-ref').textContent = d.reportDate ? ('Survey date: ' + d.reportDate) : '';
+  document.getElementById('tr-summary').innerHTML = [
+    { label: 'Report Date', value: d.reportDate || '—', sub: '' },
+    { label: 'Locations', value: d.summary?.totalLocations ?? d.locations?.length ?? '—', sub: 'monitoring points' },
+    { label: 'Total Vehicles', value: trFmt(d.summary?.totalVehicles), sub: 'counted' },
+  ].map(s => `<div class="tr-stat"><div class="label">${s.label}</div><div class="value">${s.value}</div><div class="sub">${s.sub}</div></div>`).join('');
+
+  const lc = document.getElementById('tr-locations');
+  lc.innerHTML = (d.locations || []).map(loc => {
+    const hourly = loc.hourlyData || [];
+    const maxVol = Math.max(...hourly.map(h => h.volume || 0), 1);
+    const bars = hourly.map(h => {
+      const pct = Math.max(2, Math.round(((h.volume || 0) / maxVol) * 100));
+      return `<div class="bar" style="height:${pct}%"><div class="tip">${h.hour}: ${trFmt(h.volume)}</div></div>`;
+    }).join('');
+    const labels = hourly.map((h, i) => `<span>${i % 4 === 0 ? (h.hour || '').slice(0, 5) : ''}</span>`).join('');
+    return `<div class="tr-loc">
+      <div class="tr-loc-head">
+        <h3>${loc.locationName || loc.locationId || 'Location'}</h3>
+        <span class="meta">${[loc.roadName, loc.direction].filter(Boolean).join(' · ')}</span>
+      </div>
+      ${hourly.length ? `<div class="tr-bars">${bars}</div><div class="tr-hours">${labels}</div>` : '<p style="color:var(--g4);font-size:.85rem">No hourly data</p>'}
+      <div class="tr-loc-stats">
+        <div>Daily total <strong>${trFmt(loc.dailyTotal)}</strong></div>
+        ${loc.peakHour ? `<div>Peak <strong>${loc.peakHour} · ${trFmt(loc.peakVolume)} veh</strong></div>` : ''}
+        ${loc.lanes ? `<div>Lanes <strong>${loc.lanes}</strong></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function exportTrafficJSON() {
+  const blob = new Blob([JSON.stringify(window._trafficData || {}, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'traffic-report.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function buildExtractionPrompt() {
