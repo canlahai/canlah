@@ -8,7 +8,7 @@ import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@ver
 import { handleUpload } from '@vercel/blob/client';
 import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
-import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled } from './lib/users.js';
+import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead } from './lib/users.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
 import { getSentryStatus } from './lib/sentry.js';
@@ -519,6 +519,22 @@ async function handleApi(req, res) {
       if (!fileId && !isAllowedBlobUrl(blobUrl)) {
         return send(res, 400, JSON.stringify({ error: 'blobUrl must be a Vercel Blob URL' }), { 'Content-Type': 'application/json' });
       }
+      // Free-tier monthly read quota (per-user auth only; admin/pro unlimited).
+      if (usersAuthEnabled()) {
+        const caller = authCheck(req);
+        if (caller.ok && caller.id) {
+          const limit = Number(process.env.READS_FREE_LIMIT) || 10;
+          let quota;
+          try { quota = await consumeRead(caller.id, { limit }); }
+          catch (e) { quota = { ok: true }; }
+          if (!quota.ok && quota.reason === 'limit') {
+            return send(res, 402, JSON.stringify({
+              error: `Free plan limit reached (${quota.limit} reads this month). Upgrade to Pro for unlimited reads.`,
+              code: 'read_limit', limit: quota.limit,
+            }), { 'Content-Type': 'application/json' });
+          }
+        }
+      }
       const content = [];
       if (fileId) {
         content.push({ type: 'document', source: { type: 'file', file_id: fileId } });
@@ -671,7 +687,14 @@ const server = http.createServer((req, res) => {
         }
         if (req.method === 'PATCH') {
           const body = await parseBody(req) || {};
-          if (!body.id || typeof body.disabled !== 'boolean') return send(res, 400, JSON.stringify({ error: 'id and disabled (boolean) required' }), { 'Content-Type': 'application/json' });
+          if (!body.id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+          if (body.tier !== undefined) {
+            if (body.tier !== 'free' && body.tier !== 'pro') return send(res, 400, JSON.stringify({ error: 'tier must be "free" or "pro"' }), { 'Content-Type': 'application/json' });
+            const changed = await setUserTier(body.id, body.tier);
+            if (!changed) return send(res, 404, JSON.stringify({ error: 'user not found' }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+          }
+          if (typeof body.disabled !== 'boolean') return send(res, 400, JSON.stringify({ error: 'disabled (boolean) or tier required' }), { 'Content-Type': 'application/json' });
           const changed = await setUserDisabled(body.id, body.disabled);
           if (!changed) return send(res, 404, JSON.stringify({ error: 'user not found' }), { 'Content-Type': 'application/json' });
           return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
@@ -856,19 +879,28 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (parsedUrl.pathname === '/api/config' && req.method === 'GET') {
-    const caller = authCheck(req);
-    const session = getSession(req) || null;
-    return send(res, 200, JSON.stringify({
-      publicApiKey: PUBLIC_API_KEY || null,
-      demoMode: DEMO_MODE,
-      authMode: usersAuthEnabled() ? 'users' : 'shared',
-      blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
-      anthropicKey: !!process.env.ANTHROPIC_API_KEY,
-      supabase: getSupabaseConfig(),
-      sentry: getSentryStatus(),
-      session: session ? { id: session.id, role: session.role } : null,
-      caller: caller.ok ? (caller.role || (caller.demo ? 'demo' : 'user')) : null,
-    }), { 'Content-Type': 'application/json' });
+    (async () => {
+      const caller = authCheck(req);
+      const session = getSession(req) || null;
+      let tier = null;
+      if (usersAuthEnabled() && session?.id) {
+        if (session.role === 'admin') tier = 'pro';
+        else { try { const u = await getUserById(session.id); tier = u ? u.tier || 'free' : null; } catch { tier = null; } }
+      }
+      return send(res, 200, JSON.stringify({
+        publicApiKey: PUBLIC_API_KEY || null,
+        demoMode: DEMO_MODE,
+        authMode: usersAuthEnabled() ? 'users' : 'shared',
+        blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+        anthropicKey: !!process.env.ANTHROPIC_API_KEY,
+        supabase: getSupabaseConfig(),
+        sentry: getSentryStatus(),
+        session: session ? { id: session.id, role: session.role, tier } : null,
+        caller: caller.ok ? (caller.role || (caller.demo ? 'demo' : 'user')) : null,
+        tier,
+      }), { 'Content-Type': 'application/json' });
+    })();
+    return;
   }
 
   if (parsedUrl.pathname === '/api/health' && req.method === 'GET') {

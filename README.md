@@ -31,8 +31,16 @@ bypassed for local dev. Two modes (set `AUTH_MODE`):
 - **`users`** — per-user accounts (`canlah_users`, scrypt-hashed). Admin-managed,
   no open signup. To enable: run `db/users.sql` (or it uses `data/users.json`
   locally), seed the first admin with `npm run seed:admin -- <email> <password> [name]`,
-  set `AUTH_MODE=users`. Admins manage accounts at `/api/users` (create/list/disable).
-  The login page shows an email field automatically (driven by `/api/config.authMode`).
+  set `AUTH_MODE=users`. Admins manage accounts at `/api/users` (create/list/disable,
+  and flip tier with `PATCH {id, tier}`). The login page shows an email field
+  automatically (driven by `/api/config.authMode`).
+
+Each per-user account has a **tier** (`free` | `pro`, default `free`). Free accounts
+get `READS_FREE_LIMIT` document reads/month (default `10`, auto-resets each calendar
+month); Pro and admin are unlimited. The quota is enforced server-side in `/api/process`
+`analyse` (returns `402 { code: 'read_limit' }` when exhausted) and the current tier is
+reported by `/api/config.tier`. Promote a pilot user to Pro with
+`PATCH /api/users {id, tier:'pro'}`.
 
 ## What this repo contains
 - Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`,
@@ -74,6 +82,7 @@ Notes:
 - `ANTHROPIC_API_KEY` — Anthropic API key to run live analysis (optional for demo)
 - `DEMO_MODE` — `true` to force demo behaviour (useful for offline testing)
 - `AUTH_MODE` — `shared` (default, single `ACCESS_PASSWORD`) or `users` (per-user accounts)
+- `READS_FREE_LIMIT` — free-tier document reads per month (default `10`; Pro/admin unlimited)
 - `RATE_LIMIT_DURABLE` — `true` to use the Supabase-backed cross-instance rate limiter (run `db/rate-limit.sql`)
 - `PUBLIC_API_KEY` — optional public key for browser-based uploads and analysis requests in production
 - `SUPABASE_URL` — your Supabase project URL for saved report storage

@@ -94,6 +94,42 @@ test('non-admin cannot manage users (403)', async ({ request }) => {
   expect(res.status()).toBe(403);
 });
 
+test('new users default to the free tier; admin shows as pro in config', async ({ request }) => {
+  // Bob (free user) — config reports his tier as free.
+  await request.post(`${BASE}/api/login`, { data: { email: 'bob@firm.com', password: 'password123' } });
+  const bobCfg = await (await request.get(`${BASE}/api/config`)).json();
+  expect(bobCfg.tier).toBe('free');
+
+  // Admin is treated as pro for gating.
+  await request.post(`${BASE}/api/login`, { data: { email: 'admin@firm.com', password: 'password123' } });
+  const adminCfg = await (await request.get(`${BASE}/api/config`)).json();
+  expect(adminCfg.tier).toBe('pro');
+});
+
+test('admin can flip a user to pro; config reflects it', async ({ request }) => {
+  await request.post(`${BASE}/api/login`, { data: { email: 'admin@firm.com', password: 'password123' } });
+  const bob = (await (await request.get(`${BASE}/api/users`)).json()).users.find((u) => u.email === 'bob@firm.com');
+
+  // Invalid tier is rejected.
+  const bad = await request.patch(`${BASE}/api/users`, { data: { id: bob.id, tier: 'platinum' } });
+  expect(bad.status()).toBe(400);
+
+  // Flip to pro.
+  const ok = await request.patch(`${BASE}/api/users`, { data: { id: bob.id, tier: 'pro' } });
+  expect(ok.status()).toBe(200);
+
+  // Bob now reads as pro.
+  await request.post(`${BASE}/api/login`, { data: { email: 'bob@firm.com', password: 'password123' } });
+  const bobCfg = await (await request.get(`${BASE}/api/config`)).json();
+  expect(bobCfg.tier).toBe('pro');
+});
+
+test('non-admin cannot change tiers (403)', async ({ request }) => {
+  await request.post(`${BASE}/api/login`, { data: { email: 'bob@firm.com', password: 'password123' } });
+  const res = await request.patch(`${BASE}/api/users`, { data: { id: 'whatever', tier: 'free' } });
+  expect(res.status()).toBe(403);
+});
+
 test('logged-out request to a protected endpoint is 401', async ({ request }) => {
   const res = await request.get(`${BASE}/api/reports`);
   expect(res.status()).toBe(401);
