@@ -73,6 +73,48 @@ CRITICAL RULES:
 
 Return ONLY the JSON object. No preamble, no explanation.`;
 
+const TRAFFIC_EXTRACTION_PROMPT = `You are an expert traffic-survey analyst. Analyse this Singapore traffic count / traffic impact report and extract the vehicle count data.
+
+Return ONLY valid JSON in this exact structure:
+
+\`\`\`json
+{
+  "reportTitle": "title from the report",
+  "reportDate": "survey date, e.g. 2025-03-14 (or the date range as written)",
+  "summary": { "totalLocations": 3, "totalVehicles": 48213 },
+  "locations": [
+    {
+      "locationId": "e.g. C1",
+      "locationName": "junction / count station name",
+      "roadName": "road or street name",
+      "direction": "e.g. Northbound / NB",
+      "lanes": 2,
+      "dailyTotal": 16500,
+      "peakHour": "08:00",
+      "peakVolume": 1820,
+      "hourlyData": [ { "hour": "00:00", "volume": 120 } ]
+    }
+  ]
+}
+\`\`\`
+
+RULES:
+- Extract EVERY count station / location and ALL hourly rows you can find.
+- "hour" as HH:MM (24h). "volume" = total vehicles that hour (integer).
+- Compute dailyTotal, peakHour, peakVolume per location if not stated.
+- summary.totalVehicles = sum of all daily totals; summary.totalLocations = count of locations.
+- Use null for any field genuinely absent. Do not invent numbers.
+
+Return ONLY the JSON object. No preamble, no explanation.`;
+
+// Server-held extraction prompts keyed by document type (the client sends a
+// reportType, never a raw prompt — keeps big prompts server-side + limits abuse).
+export const PROMPTS = {
+  tree: TREE_EXTRACTION_PROMPT,
+  'tree-felling': TREE_EXTRACTION_PROMPT,
+  traffic: TRAFFIC_EXTRACTION_PROMPT,
+};
+
 const createSafeBlobKey = filename => {
   const safeName = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
   return `uploads/${Date.now()}-${safeName}`;
@@ -252,10 +294,44 @@ export default async function handler(req, res) {
     }
   }
 
+  // Hand an already-uploaded Blob (from the browser direct upload) to Anthropic's
+  // Files API and return a file_id. This is the large-file path: the browser
+  // uploaded straight to Blob via /api/upload-token, bypassing the 4.5MB proxy.
+  if (action === 'ingest') {
+    const { blobUrl } = body;
+    if (!blobUrl) return res.status(400).json({ error: 'blobUrl required' });
+    if (!isAllowedBlobUrl(blobUrl)) return res.status(400).json({ error: 'blobUrl must be a Vercel Blob URL' });
+    try {
+      const fileRes = await fetch(blobUrl);
+      if (!fileRes.ok) throw new Error(`Failed to fetch blob: ${fileRes.status}`);
+      const bytes = await fileRes.arrayBuffer();
+      const contentType = fileRes.headers.get('content-type') || 'application/pdf';
+      const form = new FormData();
+      form.append('file', new Blob([bytes], { type: contentType }), 'upload');
+      const upRes = await fetch('https://api.anthropic.com/v1/files', {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'files-api-2025-04-14',
+        },
+        body: form,
+      });
+      if (!upRes.ok) throw new Error(`Anthropic upload failed: ${await upRes.text()}`);
+      const upData = await upRes.json();
+      try { const { del } = await import('@vercel/blob'); await del(blobUrl); } catch (_) {}
+      return res.status(200).json({ fileId: upData.id });
+    } catch (err) {
+      captureException(err);
+      log.error('[api/process] ingest failed', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   if (action === 'analyse') {
-    const { fileId, blobUrl, prompt } = body;
-    if (!fileId && (!blobUrl || !prompt)) {
-      return res.status(400).json({ error: 'fileId or blobUrl + prompt are required' });
+    const { fileId, blobUrl, prompt, reportType } = body;
+    if (!fileId && !blobUrl) {
+      return res.status(400).json({ error: 'fileId or blobUrl is required' });
     }
     // Don't let the endpoint become an open LLM proxy: only analyse documents
     // hosted on our own Vercel Blob, never an arbitrary attacker-supplied URL.
@@ -270,8 +346,9 @@ export default async function handler(req, res) {
       } else {
         content.push({ type: 'document', source: { type: 'url', url: blobUrl } });
       }
-      // Use default tree extraction prompt if no prompt provided for fileId
-      const finalPrompt = prompt || (fileId ? TREE_EXTRACTION_PROMPT : '');
+      // Prompt resolution: explicit client prompt (pillars) → server prompt by
+      // reportType (readers) → tree default for a bare fileId.
+      const finalPrompt = prompt || PROMPTS[reportType] || (fileId ? TREE_EXTRACTION_PROMPT : '');
       if (!finalPrompt) {
         return res.status(400).json({ error: 'No prompt provided for analysis' });
       }

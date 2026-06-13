@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 // PDF generation moved to lib/pdf.js
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
+import { handleUpload } from '@vercel/blob/client';
+import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled } from './lib/users.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
@@ -339,9 +341,35 @@ async function handleApi(req, res) {
       }
     }
 
+    // Hand a browser-uploaded Blob to Anthropic Files → fileId (large-file path).
+    if (action === 'ingest') {
+      const { blobUrl } = body;
+      if (!blobUrl) throw new Error('blobUrl required');
+      if (DEMO_MODE) return send(res, 200, JSON.stringify({ fileId: 'demo-file' }), { 'Content-Type': 'application/json' });
+      if (!isAllowedBlobUrl(blobUrl)) return send(res, 400, JSON.stringify({ error: 'blobUrl must be a Vercel Blob URL' }), { 'Content-Type': 'application/json' });
+      const fileRes = await fetch(blobUrl);
+      if (!fileRes.ok) throw new Error(`Failed to fetch blob: ${fileRes.status}`);
+      const bytes = await fileRes.arrayBuffer();
+      const contentType = fileRes.headers.get('content-type') || 'application/pdf';
+      const form = new FormData();
+      form.append('file', new Blob([bytes], { type: contentType }), 'upload');
+      const upRes = await fetch('https://api.anthropic.com/v1/files', {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'files-api-2025-04-14',
+        },
+        body: form,
+      });
+      if (!upRes.ok) throw new Error(`Anthropic upload failed: ${await upRes.text()}`);
+      const upData = await upRes.json();
+      try { const { del } = await import('@vercel/blob'); await del(blobUrl); } catch (_) {}
+      return send(res, 200, JSON.stringify({ fileId: upData.id }), { 'Content-Type': 'application/json' });
+    }
+
     if (action === 'analyse') {
       const { fileId, blobUrl, prompt, reportType } = body;
-      if (!fileId && (!blobUrl || !prompt)) throw new Error('fileId or blobUrl + prompt are required');
       if (DEMO_MODE) {
         if (reportType === 'programme-plan') {
           const demoProg = {
@@ -427,6 +455,32 @@ async function handleApi(req, res) {
           };
           return send(res, 200, JSON.stringify({ data: demoSite }), { 'Content-Type': 'application/json' });
         }
+        if (reportType === 'traffic') {
+          const hours = Array.from({ length: 24 }, (_, h) => {
+            const peak = (h >= 7 && h <= 9) || (h >= 17 && h <= 19);
+            const mid = h >= 10 && h <= 16;
+            const base = peak ? 1500 : mid ? 850 : h < 6 ? 120 : 400;
+            return { hour: String(h).padStart(2, '0') + ':00', volume: base + Math.round(Math.sin(h) * 60) };
+          });
+          const mk = (id, name, road, dir, lanes, mult) => {
+            const hourly = hours.map((x) => ({ hour: x.hour, volume: Math.round(x.volume * mult) }));
+            const daily = hourly.reduce((s, x) => s + x.volume, 0);
+            const pk = hourly.reduce((a, b) => (b.volume > a.volume ? b : a));
+            return { locationId: id, locationName: name, roadName: road, direction: dir, lanes, dailyTotal: daily, peakHour: pk.hour, peakVolume: pk.volume, hourlyData: hourly };
+          };
+          const locations = [
+            mk('C1', 'Pioneer Rd / Jln Ahmad Jct', 'Pioneer Road', 'Northbound', 3, 1.0),
+            mk('C2', 'Pioneer Rd / Jln Ahmad Jct', 'Pioneer Road', 'Southbound', 3, 0.9),
+            mk('C3', 'Jurong West Ave 5', 'Jurong West Ave 5', 'Eastbound', 2, 0.6),
+          ];
+          const demoTraffic = {
+            reportTitle: 'Traffic Impact Assessment — Pioneer Road Viaduct',
+            reportDate: new Date().toISOString().slice(0, 10),
+            summary: { totalLocations: locations.length, totalVehicles: locations.reduce((s, l) => s + l.dailyTotal, 0) },
+            locations,
+          };
+          return send(res, 200, JSON.stringify({ data: demoTraffic }), { 'Content-Type': 'application/json' });
+        }
         const demoData = {
           projectName: 'Construction of Road Viaduct Along Pioneer Road',
           drawingRef: 'L/RC216/RR/WSCL/0014–0017',
@@ -460,6 +514,7 @@ async function handleApi(req, res) {
         };
         return send(res, 200, JSON.stringify({ data: demoData }), { 'Content-Type': 'application/json' });
       }
+      if (!fileId && !blobUrl) throw new Error('fileId or blobUrl is required');
       // Parity with api/process.js: only analyse documents on our own Blob.
       if (!fileId && !isAllowedBlobUrl(blobUrl)) {
         return send(res, 400, JSON.stringify({ error: 'blobUrl must be a Vercel Blob URL' }), { 'Content-Type': 'application/json' });
@@ -470,7 +525,7 @@ async function handleApi(req, res) {
       } else {
         content.push({ type: 'document', source: { type: 'url', url: blobUrl } });
       }
-      content.push({ type: 'text', text: prompt || '' });
+      content.push({ type: 'text', text: prompt || PROMPTS[reportType] || '' });
       const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -767,6 +822,35 @@ const server = http.createServer((req, res) => {
         return handleApi(req, res);
       } catch (err) {
         return send(res, 500, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
+  }
+
+  // Mint a client token so the browser uploads straight to Vercel Blob (bypasses
+  // the 4.5MB proxy). Mirrors api/upload-token.js.
+  if (parsedUrl.pathname === '/api/upload-token' && req.method === 'POST') {
+    (async () => {
+      try {
+        const body = await parseBody(req);
+        const isCompletion = body?.type === 'blob.upload-completed';
+        if (!isCompletion) {
+          if (!rateLimitCheck(req, res)) return;
+          if (!requireAuthDev(req, res)) return;
+        }
+        const jsonResponse = await handleUpload({
+          body,
+          request: req,
+          onBeforeGenerateToken: async () => ({
+            allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png'],
+            maximumSizeInBytes: 50 * 1024 * 1024,
+            addRandomSuffix: true,
+          }),
+          onUploadCompleted: async () => {},
+        });
+        return send(res, 200, JSON.stringify(jsonResponse), { 'Content-Type': 'application/json' });
+      } catch (err) {
+        return send(res, 400, JSON.stringify({ error: err.message }), { 'Content-Type': 'application/json' });
       }
     })();
     return;

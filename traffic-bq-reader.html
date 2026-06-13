@@ -113,7 +113,11 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks — well under 4.5MB limit
+// Direct browser→Vercel Blob upload bypasses Vercel's 4.5MB request-body proxy
+// limit entirely (server-proxied chunking can't: Blob parts must be ≥5MB but the
+// proxy caps bodies at 4.5MB). Demo mode skips the real upload.
+let DEMO_MODE = true;
+fetch('/api/config').then(r => r.json()).then(c => { DEMO_MODE = !!c.demoMode; }).catch(() => {});
 
 function showStatus(msg, type = 'info') {
   const el = $('status');
@@ -139,14 +143,6 @@ async function api(body) {
   return data;
 }
 
-// Convert ArrayBuffer chunk to base64
-function toBase64(buffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
 // Drag & drop
 const dropZone = $('drop-zone');
 dropZone.addEventListener('click', () => $('file-input').click());
@@ -162,35 +158,30 @@ async function handleFile(file) {
   showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`, 'info');
 
   try {
-    // ── Step 1: start multipart upload ──────────────────────────────────
-    setProgress(5, 'Starting upload…');
-    const { key, uploadId } = await api({ action: 'upload-start', filename: file.name });
+    let fileId;
 
-    // ── Step 2: upload chunks ────────────────────────────────────────────
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const parts = [];
+    if (DEMO_MODE) {
+      // Demo: skip the real upload, server returns sample traffic data.
+      setProgress(60, 'Loading demo data…');
+    } else {
+      // ── Step 1: upload straight to Vercel Blob (no Vercel proxy) ────────
+      setProgress(10, 'Uploading to secure storage…');
+      const { upload } = await import('https://esm.sh/@vercel/blob@0.27.3/client');
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-token',
+        contentType: 'application/pdf',
+        onUploadProgress: (p) => setProgress(10 + Math.round((p.percentage || 0) * 0.5), `Uploading… ${Math.round(p.percentage || 0)}%`),
+      });
 
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = await file.slice(start, end).arrayBuffer();
-      const data = toBase64(chunk);
-
-      const pct = Math.round(10 + ((i / totalChunks) * 45));
-      setProgress(pct, `Uploading part ${i + 1} of ${totalChunks}…`);
-
-      const part = await api({ action: 'upload-part', key, uploadId, partNumber: i + 1, data });
-      parts.push(part);
+      // ── Step 2: hand the blob to Anthropic (server fetches it) ─────────
+      setProgress(62, 'Finalising upload…');
+      ({ fileId } = await api({ action: 'ingest', blobUrl: blob.url }));
     }
 
-    // ── Step 3: complete upload → Anthropic ─────────────────────────────
-    setProgress(60, 'Finalising upload…');
-    const { fileId } = await api({ action: 'upload-complete', key, uploadId, parts });
-    showStatus('Upload done — AI is reading the report…', 'info');
-
-    // ── Step 4: analyse ──────────────────────────────────────────────────
-    setProgress(75, 'AI analysing traffic data…');
-    const { data } = await api({ action: 'analyse', fileId });
+    // ── Step 3: analyse (server holds the traffic prompt) ────────────────
+    setProgress(78, 'AI analysing traffic data…');
+    const { data } = await api({ action: 'analyse', fileId, reportType: 'traffic' });
 
     setProgress(100, 'Done!');
     setTimeout(() => { $('progress-area').style.display = 'none'; }, 800);
