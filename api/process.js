@@ -14,9 +14,10 @@
 //     → runs Claude analysis for any prompt using a public blob URL, returns full Anthropic response
 
 import { createMultipartUpload, completeMultipartUpload } from '@vercel/blob';
-import { requireAuth } from '../lib/auth.js';
+import { requireAuth, authCheck } from '../lib/auth.js';
 import { enforceRateLimit } from '../lib/rate-limit.js';
 import { isAllowedBlobUrl } from '../lib/blob-url.js';
+import { usersAuthEnabled, consumeRead } from '../lib/users.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
@@ -337,6 +338,29 @@ export default async function handler(req, res) {
     // hosted on our own Vercel Blob, never an arbitrary attacker-supplied URL.
     if (!fileId && !isAllowedBlobUrl(blobUrl)) {
       return res.status(400).json({ error: 'blobUrl must be a Vercel Blob URL' });
+    }
+
+    // Free-tier monthly read quota (per-user auth only; admin/pro are unlimited).
+    if (usersAuthEnabled()) {
+      const caller = authCheck(req);
+      if (caller.ok && caller.id) {
+        const limit = Number(process.env.READS_FREE_LIMIT) || 10;
+        let quota;
+        try {
+          quota = await consumeRead(caller.id, { limit });
+        } catch (e) {
+          captureException(e);
+          log.error('[api/process] consumeRead failed', e?.message || e);
+          quota = { ok: true }; // fail open — don't block paid work on a counter glitch
+        }
+        if (!quota.ok && quota.reason === 'limit') {
+          return res.status(402).json({
+            error: `Free plan limit reached (${quota.limit} reads this month). Upgrade to Pro for unlimited reads.`,
+            code: 'read_limit',
+            limit: quota.limit,
+          });
+        }
+      }
     }
 
     try {

@@ -165,7 +165,12 @@ const CanLah = {
     const res = await fetch('/api/process', { method: 'POST', headers, body: JSON.stringify(body) });
     if (res.status === 401) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+    if (!res.ok || data.error) {
+      const err = new Error(data.error || res.statusText);
+      if (data.code) err.code = data.code; // e.g. 'read_limit' (402) so callers can upsell
+      err.status = res.status;
+      throw err;
+    }
     return data;
   },
 

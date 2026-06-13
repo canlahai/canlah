@@ -3,7 +3,7 @@
 
 import { requireAuth, authCheck } from '../lib/auth.js';
 import { enforceRateLimit } from '../lib/rate-limit.js';
-import { createUser, listUsers, setUserDisabled, usersAuthEnabled } from '../lib/users.js';
+import { createUser, listUsers, setUserDisabled, setUserTier, usersAuthEnabled } from '../lib/users.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
@@ -30,8 +30,15 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
-      const { id, disabled } = req.body || {};
-      if (!id || typeof disabled !== 'boolean') return res.status(400).json({ error: 'id and disabled (boolean) required' });
+      const { id, disabled, tier } = req.body || {};
+      if (!id) return res.status(400).json({ error: 'id required' });
+      if (tier !== undefined) {
+        if (tier !== 'free' && tier !== 'pro') return res.status(400).json({ error: 'tier must be "free" or "pro"' });
+        const changed = await setUserTier(id, tier);
+        if (!changed) return res.status(404).json({ error: 'user not found' });
+        return res.status(200).json({ ok: true });
+      }
+      if (typeof disabled !== 'boolean') return res.status(400).json({ error: 'disabled (boolean) or tier required' });
       const changed = await setUserDisabled(id, disabled);
       if (!changed) return res.status(404).json({ error: 'user not found' });
       return res.status(200).json({ ok: true });
@@ -43,7 +50,7 @@ export default async function handler(req, res) {
     log.error('[api/users] failed', error?.message || error);
     // Surface validation errors (400) but not internal details.
     const msg = error?.message || 'Internal server error';
-    const status = /required|already registered|at least|role must/.test(msg) ? 400 : 500;
+    const status = /required|already registered|at least|role must|tier must/.test(msg) ? 400 : 500;
     return res.status(status).json({ error: status === 400 ? msg : 'Internal server error' });
   }
 }

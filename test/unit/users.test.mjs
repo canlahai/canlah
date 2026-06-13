@@ -11,6 +11,7 @@ process.env.DEV_USERS_DIR = mkdtempSync(join(tmpdir(), 'canlah-users-'));
 const {
   hashPassword, verifyPassword,
   createUser, verifyCredentials, listUsers, setUserDisabled, usersAuthEnabled,
+  getUserById, setUserTier, consumeRead,
 } = await import('../../lib/users.js');
 
 // --- password hashing -------------------------------------------------------
@@ -52,6 +53,57 @@ assert.equal(await verifyCredentials('bob@example.com', 'password123'), null, 'd
 const all = await listUsers();
 assert.equal(all.length, 2, 'two users listed');
 assert.ok(all.every((u) => !('password_hash' in u)), 'list never leaks hashes');
+
+// --- tier defaults ----------------------------------------------------------
+const carol = await createUser({ email: 'carol@example.com', password: 'password123', name: 'Carol' });
+assert.equal(carol.tier, 'free', 'new user defaults to free tier');
+assert.equal(carol.readsThisMonth, 0, 'new user starts at 0 reads');
+
+// --- getUserById ------------------------------------------------------------
+assert.equal((await getUserById(carol.id)).email, 'carol@example.com', 'getUserById returns the user');
+assert.equal(await getUserById('does-not-exist'), null, 'unknown id -> null');
+
+// --- setUserTier ------------------------------------------------------------
+await assert.rejects(() => setUserTier(carol.id, 'platinum'), /free.*pro|tier must/, 'invalid tier rejected');
+assert.equal(await setUserTier('ghost-id', 'pro'), false, 'unknown id -> false');
+assert.equal(await setUserTier(carol.id, 'pro'), true, 'set tier returns true');
+assert.equal((await getUserById(carol.id)).tier, 'pro', 'tier persisted as pro');
+await setUserTier(carol.id, 'free'); // reset for quota test
+
+// --- consumeRead: free-tier quota -------------------------------------------
+const q1 = await consumeRead(carol.id, { limit: 2 });
+assert.deepEqual(q1, { ok: true, remaining: 1 }, 'first read ok, 1 remaining');
+const q2 = await consumeRead(carol.id, { limit: 2 });
+assert.deepEqual(q2, { ok: true, remaining: 0 }, 'second read ok, 0 remaining');
+const q3 = await consumeRead(carol.id, { limit: 2 });
+assert.equal(q3.ok, false, 'third read blocked');
+assert.equal(q3.reason, 'limit', 'blocked reason is limit');
+assert.equal((await getUserById(carol.id)).readsThisMonth, 2, 'counter capped at limit');
+
+// --- consumeRead: pro + admin are unlimited ---------------------------------
+await setUserTier(carol.id, 'pro');
+const qpro = await consumeRead(carol.id, { limit: 2 });
+assert.deepEqual(qpro, { ok: true, unlimited: true }, 'pro is unlimited');
+const adminUser = (await listUsers()).find((u) => u.role === 'admin');
+const qadmin = await consumeRead(adminUser.id, { limit: 0 });
+assert.deepEqual(qadmin, { ok: true, unlimited: true }, 'admin is unlimited even at limit 0');
+
+// --- consumeRead: monthly reset ---------------------------------------------
+await setUserTier(carol.id, 'free');
+// Force the stored period into the past, then a read should reset the counter.
+process.env.DEV_USERS_DIR && (await (async () => {
+  const { readFileSync, writeFileSync } = await import('node:fs');
+  const f = join(process.env.DEV_USERS_DIR, 'users.json');
+  const users = JSON.parse(readFileSync(f, 'utf8'));
+  const c = users.find((u) => u.id === carol.id);
+  c.reads_this_month = 99; c.reads_period = '2000-01';
+  writeFileSync(f, JSON.stringify(users, null, 2));
+})());
+const qreset = await consumeRead(carol.id, { limit: 5 });
+assert.deepEqual(qreset, { ok: true, remaining: 4 }, 'stale period resets counter to 0 then +1');
+
+// --- consumeRead: unknown user ----------------------------------------------
+assert.deepEqual(await consumeRead('nobody', { limit: 5 }), { ok: false, reason: 'not_found' }, 'unknown user not_found');
 
 // --- usersAuthEnabled -------------------------------------------------------
 delete process.env.AUTH_MODE;
