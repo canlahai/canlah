@@ -216,13 +216,10 @@ h2{font-size:clamp(34px,5vw,56px);font-weight:800;line-height:1.02;letter-spacin
   <div class="nav-links">
     <a class="nav-link" href="#platform">Platform</a>
     <a class="nav-link" href="#how">How it works</a>
-    <a class="nav-link" href="/bq-reader">Try BQ Reader</a>
-    <a class="nav-link" href="/traffic-bq-reader">Try Traffic Reader</a>
-    <a class="nav-link" href="/site-report">Try Site Report</a>
-    <a class="nav-link" href="/hr-compliance">Try HR Compliance</a>
-    <a class="nav-link" href="/programme-planner">Try Programme Planner</a>
+    <a class="nav-link" href="#pricing">Pricing</a>
+    <a class="nav-link" href="/login">Sign in</a>
   </div>
-  <button class="nav-cta" onclick="goTo('waitlist')">Get Early Access</button>
+  <button class="nav-cta" onclick="location.href='/bq-reader'">Try BQ Reader →</button>
 </nav>
 
 <!-- HERO -->
@@ -234,14 +231,14 @@ h2{font-size:clamp(34px,5vw,56px);font-weight:800;line-height:1.02;letter-spacin
   <h1>Stop doing<br><span class="yl">BQ work</span><br><span class="og">by hand, lah.</span></h1>
   <p class="hero-sub">CanLah.ai reads your construction drawings and outputs a <strong>complete Bill of Quantities in minutes</strong>. One platform covering BQ reading, site reports, HR compliance, and programme planning.</p>
   <div class="hero-actions">
-    <button class="btn-primary" onclick="goTo('waitlist')">Get Early Access — 3 Free Reads →</button>
-    <button class="btn-ghost" onclick="goTo('how')">See how it works</button>
+    <button class="btn-primary" onclick="location.href='/bq-reader'">Try the BQ Reader — free →</button>
+    <button class="btn-ghost" onclick="goTo('pricing')">See pricing</button>
   </div>
   <div class="pills">
-    <div class="pill live">✓ Tree felling BQ — Live now</div>
+    <div class="pill live">✓ Tree felling BQ — Live</div>
+    <div class="pill live">✓ Traffic plans BQ — Live</div>
     <div class="pill">Drain drawings — Soon</div>
-    <div class="pill">Traffic plans — Soon</div>
-    <div class="pill">HR tracker — Soon</div>
+    <div class="pill">Programme Planner — Pro</div>
   </div>
 </section>
 
@@ -517,6 +514,54 @@ h2{font-size:clamp(34px,5vw,56px);font-weight:800;line-height:1.02;letter-spacin
   </div>
 </div>
 
+<!-- PRICING -->
+<style>
+  .price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:28px;max-width:760px}
+  .price-card{background:var(--slate);border:1px solid var(--g7);border-radius:16px;padding:26px 24px;position:relative}
+  .price-card.pro{border-color:var(--yellow)}
+  .pc-badge{position:absolute;top:18px;right:18px;background:var(--yellow);color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;padding:3px 9px;border-radius:999px}
+  .pc-name{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--g4)}
+  .pc-price{font-size:38px;font-weight:800;letter-spacing:-.02em;margin:6px 0 2px}
+  .pc-tag{color:var(--g4);font-size:13px;margin-bottom:18px}
+  .pc-list{list-style:none;padding:0;margin:0 0 22px;display:flex;flex-direction:column;gap:10px}
+  .pc-list li{font-size:14px;color:var(--g2);line-height:1.4}
+  .pc-btn{display:block;text-align:center;text-decoration:none;border:1px solid var(--g6);color:var(--paper);font-weight:700;padding:12px;border-radius:10px}
+  .pc-btn.primary{background:var(--yellow);color:var(--ink);border-color:var(--yellow)}
+</style>
+<div class="wrap fu" id="pricing">
+  <div class="seg-label">// Pricing</div>
+  <h2>Simple pricing.<br><span class="yl">Start free, lah.</span></h2>
+  <p class="sub">Use the document readers for free. Upgrade to Pro for the collaborative Programme Planner, unlimited reads, and exports.</p>
+  <div class="price-grid">
+    <div class="price-card">
+      <div class="pc-name">Free</div>
+      <div class="pc-price">$0</div>
+      <div class="pc-tag">For trying it out</div>
+      <ul class="pc-list">
+        <li>✓ BQ Reader — tree felling &amp; traffic plans</li>
+        <li>✓ NParks girth classification &amp; data-quality flags</li>
+        <li>✓ CSV / JSON export</li>
+        <li>✓ Limited reads per month</li>
+      </ul>
+      <a class="pc-btn" href="/bq-reader">Try the BQ Reader →</a>
+    </div>
+    <div class="price-card pro">
+      <div class="pc-badge">PRO</div>
+      <div class="pc-name">Pro</div>
+      <div class="pc-price">Let's talk</div>
+      <div class="pc-tag">For QS firms &amp; main contractors</div>
+      <ul class="pc-list">
+        <li>✓ Everything in Free</li>
+        <li>✓ Programme Planner — collaborative scheduling, Gantt + critical path</li>
+        <li>✓ Unlimited document reads</li>
+        <li>✓ Exports — Excel, PDF, MS Project</li>
+        <li>✓ Team roles &amp; access control</li>
+      </ul>
+      <a class="pc-btn primary" href="mailto:hello@canlah.ai?subject=CanLah%20Pro">Talk to us about Pro</a>
+    </div>
+  </div>
+</div>
+
 <!-- WAITLIST -->
 <div class="wl-bg" id="waitlist">
   <div class="seg-label" style="margin-bottom:16px">// Early access</div>
@@ -563,7 +608,11 @@ h2{font-size:clamp(34px,5vw,56px);font-weight:800;line-height:1.02;letter-spacin
   <div class="foot">
     <div class="foot-brand">Can<span>Lah</span>.ai</div>
     <div class="foot-copy">Singapore Construction Intelligence · 2026</div>
-    <a href="/bq-reader" class="foot-link">Try the BQ Reader →</a>
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <a href="/bq-reader" class="foot-link">BQ Reader →</a>
+      <a href="#pricing" class="foot-link">Pricing</a>
+      <a href="/login" class="foot-link">Sign in</a>
+    </div>
   </div>
 </div>
 
