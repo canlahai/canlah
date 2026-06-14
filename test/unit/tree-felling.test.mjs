@@ -1,5 +1,46 @@
 import assert from 'node:assert/strict';
-import { girthBand, classifyTree, summarize, aggregateTakeoff, normalizeStatus, normalizeType } from '../../lib/tree-felling.js';
+import { girthBand, classifyTree, summarize, aggregateTakeoff, normalizeStatus, normalizeType, parseTreeExtraction, expandExtraction } from '../../lib/tree-felling.js';
+
+// ── expandExtraction: compact columnar rows → trees with derived flags ────
+const ex = expandExtraction({
+  treeColumns: ['no', 'girth', 'height', 'species', 'sheet', 'type', 'status'],
+  treeRows: [
+    ['E1', 3.5, 12, 'Rain Tree', '0004', 'tree', 'remove'],
+    ['E1', 0.5, 4, 'Mango', '0004', 'tree', 'retain'],   // duplicate no
+    ['E2', '-', null, '', '0005', 'tree', 'unknown'],     // missing data
+    ['E3', 'Cluster', 5, 'Bamboo', '0005', 'shrub', 'remove'],
+  ],
+});
+assert.equal(ex.trees.length, 4, 'compact rows expanded to objects');
+assert.equal(ex.treeRows, undefined, 'treeRows removed after expansion');
+assert.equal(ex.trees[0].girth, 3.5, 'columns mapped to fields');
+assert.deepEqual(ex.trees[0].flags.sort(), ['duplicate', 'heritage_candidate', 'high_conservation', 'protected'], 'derived flags for big conservation duplicate');
+assert.equal(ex.trees[2].girth, null, '"-" girth → null');
+assert.ok(ex.trees[2].flags.includes('missing_data'), 'missing data flagged');
+assert.equal(ex.trees[3].girth, -1, '"Cluster" girth → -1');
+assert.equal(ex.trees[3].status, 'remove', 'status preserved from compact row');
+
+// ── parseTreeExtraction: clean + truncated (salvage) ──────────────────────
+const clean = parseTreeExtraction('```json\n{"totalRemove":200,"totalRetain":62,"sheets":[{"sheetNo":"0004","removeCount":87,"retainCount":60}],"trees":[{"no":"E1","girth":0.5,"status":"remove"}]}\n```');
+assert.equal(clean.totalRemove, 200, 'clean parse: totalRemove');
+assert.equal(clean.trees.length, 1, 'clean parse: trees');
+assert.ok(!clean._truncated, 'clean parse: not flagged truncated');
+
+// Output cut off mid-way through the trees array (totals/sheets came first).
+const truncated = '{"projectName":"Pioneer Rd","sheets":[{"sheetNo":"0004","removeCount":87,"retainCount":60},{"sheetNo":"0005","removeCount":113,"retainCount":2}],"totalRemove":200,"totalRetain":62,"totals":{"remove":200,"retain":62,"transplant":0},"trees":[{"no":"E7309","girth":0.67,"height":6,"species":"Rain Tree","status":"retain"},{"no":"E7310","girth":0.5,"hei';
+const salv = parseTreeExtraction(truncated);
+assert.ok(salv._truncated, 'truncated: flagged');
+assert.equal(salv.totalRemove, 200, 'truncated: totalRemove recovered');
+assert.equal(salv.totalRetain, 62, 'truncated: totalRetain recovered');
+assert.equal(salv.sheets.length, 2, 'truncated: sheets recovered');
+assert.equal(salv.trees.length, 1, 'truncated: only the complete tree row recovered');
+assert.ok(salv.dataIssues.some((d) => /truncated/i.test(d)), 'truncated: dataIssue added');
+
+// Totally unrecoverable totals → summed from recovered sheet tallies.
+const noTotals = '{"sheets":[{"sheetNo":"0004","removeCount":87,"retainCount":60},{"sheetNo":"0005","removeCount":113,"retainCount":2}],"trees":[{"no":"E1';
+const summed = parseTreeExtraction(noTotals);
+assert.equal(summed.totalRemove, 200, 'summed remove from sheet tallies (87+113)');
+assert.equal(summed.totalRetain, 62, 'summed retain from sheet tallies (60+2)');
 
 // ── girth band boundaries ─────────────────────────────────────────────
 assert.equal(girthBand(0.3).key, 'S', '0.3m -> Small');

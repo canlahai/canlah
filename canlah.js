@@ -223,30 +223,53 @@ const CanLah = {
     }
 
     const H = this._h || await import('/lib/frontend-helpers.js');
+    const mime = file.type || H.extToMime(file.name);
     this.showToast('Uploading…', 'info');
-    let blob;
+
+    let blobUrl;
     try {
+      // Primary: browser → Vercel Blob directly (bypasses Vercel's 4.5MB proxy).
       const { upload } = await import('https://esm.sh/@vercel/blob@0.27.3/client');
-      blob = await upload(file.name, file, {
+      const blob = await upload(file.name, file, {
         access: 'public',
         handleUploadUrl: '/api/upload-token',
-        contentType: file.type || H.extToMime(file.name),
+        contentType: mime,
         onUploadProgress: onProgress ? (p) => onProgress(p.percentage || 0) : undefined,
       });
+      blobUrl = blob.url;
     } catch (err) {
-      // The token request (/api/upload-token) 401s inside the blob client rather
-      // than via apiProcess — so on failure, if we're not signed in, redirect.
+      // If we're simply signed out, redirect (the token request 401s inside the
+      // blob client, not via apiProcess).
       const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));
       if (!cfg.caller) { this._redirectToLogin(); throw new Error('Unauthorized — redirecting'); }
-      throw err;
+      // Otherwise the CDN client failed to load (e.g. esm.sh unreachable) — fall
+      // back to a server-side upload that needs no external module.
+      this.showToast('Upload via server…', 'info');
+      blobUrl = await this._serverUploadToBlobUrl(file, mime);
+    }
+
+    // Tree-felling drawings are multi-sheet → read each sheet separately and sum
+    // the printed tallies (reliable). Other readers use the single-pass path.
+    const perSheet = reportType === 'tree' || reportType === 'tree-felling';
+    if (perSheet) {
+      this.showToast('Reading each sheet…', 'info');
+      const r = await this.apiProcess({ action: 'analyse-doc', blobUrl, reportType });
+      return r.data;
     }
 
     this.showToast('Finalising upload…', 'info');
-    const { fileId } = await this.apiProcess({ action: 'ingest', blobUrl: blob.url });
-
+    const ing = await this.apiProcess({ action: 'ingest', blobUrl });
     this.showToast('Analysing with Claude…', 'info');
-    const analyse = await this.apiProcess({ action: 'analyse', fileId, prompt, reportType });
+    const analyse = await this.apiProcess({ action: 'analyse', fileId: ing.fileId, prompt, reportType });
     return analyse.data;
+  },
+
+  // Fallback upload (no external CDN module): base64 the file straight to our API,
+  // which stores it to Vercel Blob and returns the blob URL. Fine for local dev.
+  async _serverUploadToBlobUrl(file, mime) {
+    const fileData = this.bufferToBase64(await file.arrayBuffer());
+    const { blobUrl } = await this.apiProcess({ action: 'upload', fileData, fileName: file.name, mimeType: mime });
+    return blobUrl;
   },
 
   async saveReport(report, reportType) {

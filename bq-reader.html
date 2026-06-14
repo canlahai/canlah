@@ -302,6 +302,14 @@ input,select,textarea{font-family:'Syne',sans-serif}
 .bq-section-head td{background:var(--ink)!important;font-weight:700;color:var(--g4);font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding:6px 14px;border-top:1px solid var(--g7)!important}
 
 /* Tree register table */
+.reg-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:.85rem}
+.rs-card{flex:1;min-width:130px;background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);padding:.7rem .9rem}
+.rs-card .rs-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;line-height:1.1}
+.rs-card .rs-lbl{font-size:11px;color:var(--g4);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.rs-card.rs-rem{border-left:3px solid #d95f2b}
+.rs-card.rs-ret{border-left:3px solid #2a7a47}
+.rs-card.rs-fell{border-left:3px solid #e8c027}
+.rs-card.rs-unk{border-left:3px solid #888882}
 .reg-section{background:var(--slate);border:1px solid var(--g7);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem}
 .reg-toolbar{display:flex;align-items:center;gap:8px;padding:.75rem 1.25rem;border-bottom:1px solid var(--g7);flex-wrap:wrap}
 .reg-search{
@@ -368,6 +376,18 @@ input,select,textarea{font-family:'Syne',sans-serif}
 @media(max-width:600px){
   .rh-top{flex-direction:column}
   .rh-stats{grid-template-columns:repeat(2,1fr)}
+}
+@media print{
+  body{background:#fff;color:#000}
+  nav,.nav,.doctype-row,.rh-actions,.reg-toolbar,.toast,#page-upload,#page-processing{display:none!important}
+  .act-btn{display:none!important}
+  .reg-section,.rs-card,.report-screen,.girth-grid,.species-panel{border-color:#bbb!important;background:#fff!important}
+  .reg-summary{break-inside:avoid}
+  table{font-size:10px}
+  tr{break-inside:avoid}
+  #reg-tbody td{color:#000}
+  /* keep status + girth pill colours legible in print */
+  a[href]:after{content:''}
 }
 
 /* ── document-type selector ── */
@@ -554,7 +574,8 @@ input,select,textarea{font-family:'Syne',sans-serif}
           <div class="rh-ref" id="r-ref">Drawing Ref: L/RC216/RR/WSCL/0014–0017 · Addendum 1 (Oct 2025) · Generated <span id="r-date"></span></div>
         </div>
         <div class="rh-actions">
-          <button class="act-btn" onclick="window.print()">Print</button>
+          <button class="act-btn" onclick="exportPDF()">Export PDF</button>
+          <button class="act-btn" onclick="exportExcel()">Export Excel</button>
           <button class="act-btn" onclick="exportCSV()">Export CSV</button>
           <button class="act-btn" onclick="exportJSON()">Export JSON</button>
           <button class="act-btn" onclick="buildTenderFromTakeoff()">Build Tender →</button>
@@ -600,6 +621,7 @@ input,select,textarea{font-family:'Syne',sans-serif}
 
     <!-- TREE REGISTER -->
     <div class="sec-label">// Full tree register <span id="reg-count">—</span></div>
+    <div class="reg-summary" id="reg-summary"></div>
     <div class="reg-section">
       <div class="reg-toolbar">
         <input class="reg-search" type="text" placeholder="Search tree no., species..." id="reg-search" oninput="filterRegister(this.value)">
@@ -687,6 +709,30 @@ let filteredTrees = [];
 let savedReportsCache = [];
 let sortCol = 'no';
 let sortDir = 1;
+
+// Status comes from the drawing row colour (legend), never girth. Single source
+// of truth for rendering, summary, filtering and exports.
+function normTreeStatus(t) {
+  const s = (t && t.status || '').toLowerCase();
+  if (/transplant|reloc/.test(s)) return 'transplant';
+  if (/remov|fell|cut/.test(s)) return 'remove';
+  if (/retain|keep|remain|exist/.test(s)) return 'retain';
+  return 'unknown';
+}
+const STATUS_LABEL = { remove: 'Remove', retain: 'Retain', transplant: 'Transplant', unknown: 'Unknown' };
+// A "felled" item is a removed TREE (shrubs are cleared, not felled-and-replaced).
+function isFelledTree(t) { return normTreeStatus(t) === 'remove' && (t.type || '').toLowerCase() !== 'shrub'; }
+
+// Totals over a set of records (used by the summary header + exports).
+function statusTotals(trees) {
+  const o = { total: trees.length, remove: 0, retain: 0, transplant: 0, unknown: 0, felledTrees: 0, removedShrubs: 0 };
+  for (const t of trees) {
+    const st = normTreeStatus(t);
+    o[st]++;
+    if (st === 'remove') { if ((t.type || '').toLowerCase() === 'shrub') o.removedShrubs++; else o.felledTrees++; }
+  }
+  return o;
+}
 
 // ══════════════════════════════════════════════════════════
 //  FILE HANDLING
@@ -848,12 +894,18 @@ async function startAnalysis() {
     clearInterval(stepTimer);
     console.error(err);
     showToast('Error: ' + err.message, 'err');
-    if (currentDocType === 'traffic') return; // no client-side traffic demo fallback
-    setTimeout(() => {
-      buildReport(getDemoData());
-      showPage('report');
-      showToast('Showing demo data (check console for error details)', 'wa');
-    }, 800);
+    // Only fall back to sample data in DEMO mode. In real mode, NEVER show random
+    // demo numbers (that masks extraction failures) — surface the error + retry.
+    if (CanLah.state.demoMode && currentDocType !== 'traffic') {
+      setTimeout(() => {
+        buildReport(getDemoData());
+        showPage('report');
+        showToast('Showing demo data (demo mode)', 'wa');
+      }, 800);
+    } else {
+      showPage('upload');
+      showToast('Analysis failed — please try again. ' + err.message, 'err');
+    }
   }
 }
 
@@ -1012,13 +1064,27 @@ function buildReport(data) {
   const typeOf = t => (t.type||'').toLowerCase()==='shrub' ? 'shrub' : 'tree';
   const statuses = allTrees.map(statusOf);
 
-  // Compute stats — remove/retain grounded in status counts (totals from the
-  // extractor take precedence when present).
+  // Headline Remove/Retain come from the drawing's printed per-sheet tallies
+  // (summed) when available — the authoritative source — falling back to the
+  // extractor totals, then to a count of the coloured rows.
   const totalTrees = allTrees.length;
-  const totalRemove = (data.totals && data.totals.remove != null) ? data.totals.remove
-    : (data.totalRemove != null ? data.totalRemove : statuses.filter(s => s === 'remove').length);
-  const totalRetain = (data.totals && data.totals.retain != null) ? data.totals.retain
-    : (data.totalRetain != null ? data.totalRetain : statuses.filter(s => s === 'retain').length);
+  const sheets = Array.isArray(data.sheets) ? data.sheets : [];
+  const sheetSum = (k) => sheets.reduce((a, s) => a + (Number(s[k]) || 0), 0);
+  const haveSheetTally = sheets.length > 0 && (sheetSum('removeCount') > 0 || sheetSum('retainCount') > 0);
+
+  let countBasis;
+  let totalRemove, totalRetain;
+  if (haveSheetTally) {
+    totalRemove = sheetSum('removeCount'); totalRetain = sheetSum('retainCount');
+    countBasis = `Printed per-sheet tally across ${sheets.length} sheet${sheets.length > 1 ? 's' : ''} (summed)`;
+  } else if (data.totalRemove != null || data.totalRetain != null) {
+    totalRemove = data.totalRemove || 0; totalRetain = data.totalRetain || 0;
+    countBasis = 'Totals reported by the extractor';
+  } else {
+    totalRemove = statuses.filter(s => s === 'remove').length;
+    totalRetain = statuses.filter(s => s === 'retain').length;
+    countBasis = 'Counted from row colours (no printed tally found)';
+  }
   const totalTransplant = (data.totals && data.totals.transplant != null) ? data.totals.transplant
     : statuses.filter(s => s === 'transplant').length;
   const flagged = allTrees.filter(t => t.flags && t.flags.length > 0).length;
@@ -1044,6 +1110,22 @@ function buildReport(data) {
       <div class="rh-stat-lbl">${s.lbl}</div>
     </div>`
   ).join('');
+
+  // Count-basis caption + per-sheet tally breakdown (so the headline is auditable).
+  let basisEl = document.getElementById('count-basis');
+  if (!basisEl) {
+    basisEl = document.createElement('div');
+    basisEl.id = 'count-basis';
+    basisEl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--g4);margin:6px 0 18px;line-height:1.6";
+    document.getElementById('r-stats').insertAdjacentElement('afterend', basisEl);
+  }
+  const sheetRows = sheets.length
+    ? '<div style="margin-top:6px">' + sheets.map(s =>
+        `<span style="display:inline-block;margin:2px 10px 2px 0">${s.sheetNo || '?'}: <span style="color:#e8895f">−${Number(s.removeCount)||0}</span> / <span style="color:#7fd1a0">+${Number(s.retainCount)||0}</span>${s.source && s.source!=='printed tally' ? ' <span style="color:#c97a12">('+s.source+')</span>' : ''}</span>`
+      ).join('') + '</div>'
+    : '';
+  basisEl.innerHTML = `Remove/Retain basis: <strong style="color:var(--paper)">${countBasis}</strong>` + sheetRows
+    + (data._truncated ? '<div style="color:#e8c08c;margin-top:6px">⚠ The full tree list was too long and was truncated — the headline totals above come from the printed per-sheet tallies and are reliable, but the register below may be partial.</div>' : '');
 
   // Flags
   const issues = data.dataIssues || [];
@@ -1355,7 +1437,26 @@ function girthBand(g) {
   return           { code:'XL',  label:'Very Large',cls:'gp-xl' };
 }
 
+function renderRegisterSummary() {
+  const all = statusTotals(allTrees);
+  const shown = statusTotals(filteredTrees);
+  const filtered = filteredTrees.length !== allTrees.length;
+  const sub = (k) => filtered ? `<span style="color:var(--g4);font-weight:400;font-size:13px"> / ${shown[k]} shown</span>` : '';
+  const cards = [
+    { cls: '', val: all.total, lbl: 'Total records', key: 'total' },
+    { cls: 'rs-fell', val: all.felledTrees, lbl: 'Trees to be felled', key: 'felledTrees', color: '#e8c027' },
+    { cls: 'rs-rem', val: all.remove, lbl: 'To remove (yellow)', key: 'remove', color: '#e8895f' },
+    { cls: 'rs-ret', val: all.retain, lbl: 'To retain (green)', key: 'retain', color: '#7fd1a0' },
+  ];
+  if (all.transplant > 0) cards.push({ cls: '', val: all.transplant, lbl: 'To transplant', key: 'transplant', color: '#7fb0e0' });
+  if (all.unknown > 0) cards.push({ cls: 'rs-unk', val: all.unknown, lbl: 'Status unknown', key: 'unknown', color: '#aaa' });
+  document.getElementById('reg-summary').innerHTML = cards.map(c =>
+    `<div class="rs-card ${c.cls}"><div class="rs-val" ${c.color ? `style="color:${c.color}"` : ''}>${c.val}${sub(c.key)}</div><div class="rs-lbl">${c.lbl}</div></div>`
+  ).join('');
+}
+
 function renderRegister() {
+  renderRegisterSummary();
   document.getElementById('reg-count').textContent =
     filteredTrees.length + ' of ' + allTrees.length + ' records';
 
@@ -1480,24 +1581,87 @@ function buildTenderFromTakeoff() {
   }
 }
 
-function exportCSV() {
-  const headers = ['Tree No.','Girth (m)','Height (m)','Species','Girth Band','Sheet','Flags'];
-  const rows = allTrees.map(t => [
+// Shared column model for the register exports.
+const EXPORT_HEADERS = ['Tree No.','Status','Type','Girth (m)','Height (m)','Species','Girth Band','Sheet','Flags'];
+function exportRow(t) {
+  return [
     t.no || '',
-    t.girth === null ? '' : t.girth === -1 ? 'Cluster' : t.girth,
-    t.height === null ? '' : t.height,
+    STATUS_LABEL[normTreeStatus(t)],
+    (t.type || 'tree'),
+    t.girth === null || t.girth === undefined ? '' : t.girth === -1 ? 'Cluster' : t.girth,
+    t.height === null || t.height === undefined ? '' : t.height,
     t.species || '',
     girthBand(t.girth).label,
     t.sheet || '',
-    (t.flags || []).join('; ')
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    (t.flags || []).join('; '),
+  ];
+}
+// Summary rows shared by CSV + Excel exports.
+function summaryPairs() {
+  const s = statusTotals(allTrees);
+  return [
+    ['Project', document.getElementById('r-title').textContent],
+    ['Drawing Ref', document.getElementById('r-ref').textContent.replace(/\s+/g, ' ').trim()],
+    ['Exported', new Date().toLocaleString('en-SG')],
+    ['Total records', s.total],
+    ['Trees to be felled (removed trees)', s.felledTrees],
+    ['Shrubs to be removed', s.removedShrubs],
+    ['Total to remove', s.remove],
+    ['Total to retain', s.retain],
+    ['To transplant', s.transplant],
+    ['Status unknown', s.unknown],
+  ];
+}
+
+function exportCSV() {
+  const summary = summaryPairs().map(([k, v]) => [k, v]);
+  const lines = [
+    ['CanLah.ai — Tree Felling Register'],
+    ...summary,
+    [],
+    EXPORT_HEADERS,
+    ...allTrees.map(exportRow),
+  ];
+  const csv = lines.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'canlah-tree-register.csv';
   a.click();
   showToast('Tree register exported as CSV ✓', 'ok');
+}
+
+// Real .xls (Excel opens an HTML-table workbook natively) with colour-coded status.
+function exportExcel() {
+  const colour = { remove: '#C0492B', retain: '#1E7A3E', transplant: '#2A5E8C', unknown: '#888888' };
+  const headTh = EXPORT_HEADERS.map(h => `<th style="background:#1e1e1b;color:#fff;border:1px solid #999;padding:4px 6px;text-align:left">${h}</th>`).join('');
+  const bodyTr = allTrees.map(t => {
+    const st = normTreeStatus(t);
+    const cells = exportRow(t).map((c, i) => {
+      const style = i === 1 ? `border:1px solid #ccc;padding:3px 6px;color:${colour[st]};font-weight:bold` : 'border:1px solid #ccc;padding:3px 6px';
+      return `<td style="${style}">${String(c ?? '')}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  const summaryRows = summaryPairs().map(([k, v]) =>
+    `<tr><td style="font-weight:bold;border:1px solid #ccc;padding:3px 6px">${k}</td><td style="border:1px solid #ccc;padding:3px 6px">${v}</td></tr>`).join('');
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+  <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Tree Register</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+  <body><h3>CanLah.ai — Tree Felling Register</h3>
+  <table>${summaryRows}</table><br/>
+  <table>${`<tr>${headTh}</tr>`}${bodyTr}</table></body></html>`;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'canlah-tree-register.xls';
+  a.click();
+  showToast('Tree register exported for Excel ✓', 'ok');
+}
+
+// PDF via the browser print dialog (choose "Save as PDF"). Keeps the full styled report.
+function exportPDF() {
+  showToast('Choose "Save as PDF" as the destination', 'ok');
+  setTimeout(() => window.print(), 350);
 }
 
 // ══════════════════════════════════════════════════════════

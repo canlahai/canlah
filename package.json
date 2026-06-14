@@ -16,10 +16,11 @@
     "test:unit": "node test/unit/auth.test.mjs && node test/unit/rate-limit.test.mjs && node test/unit/blob-url.test.mjs && node test/unit/bq-parse.test.mjs && node test/unit/calendar.test.mjs && node test/unit/cpm.test.mjs && node test/unit/programme-generator.test.mjs && node test/unit/msp-export.test.mjs && node test/unit/tender.test.mjs && node test/unit/hr-compliance.test.mjs && node test/unit/tree-felling.test.mjs && node test/unit/reports.test.mjs && node test/unit/pdf.test.mjs && node test/unit/health.test.mjs && node test/unit/frontend-helpers.test.mjs && node test/unit/users.test.mjs && node test/unit/programmes.test.mjs && node eval/test/score.test.mjs && node eval/engines/test/score.test.mjs"
   },
   "dependencies": {
+    "@sentry/node": "^7.11.0",
     "@supabase/supabase-js": "^2.106.1",
     "@vercel/blob": "^0.27.0",
-    "pdfkit": "^0.15.0",
-    "@sentry/node": "^7.11.0"
+    "pdf-lib": "^1.17.1",
+    "pdfkit": "^0.15.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

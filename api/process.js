@@ -18,85 +18,61 @@ import { requireAuth, authCheck } from '../lib/auth.js';
 import { enforceRateLimit } from '../lib/rate-limit.js';
 import { isAllowedBlobUrl } from '../lib/blob-url.js';
 import { usersAuthEnabled, consumeRead } from '../lib/users.js';
+import { parseTreeExtraction } from '../lib/tree-felling.js';
+import { extractTreeDocumentFromPdf } from '../lib/tree-extract.js';
+import { streamMessageText } from '../lib/anthropic.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
 initSentry();
 
-const TREE_EXTRACTION_PROMPT = `You are an expert Singapore construction document analyst specialising in NParks / LTA "Trees Affected Plan" drawings. Read this drawing the way a qualified arborist / QS reads it, in this exact order.
+const TREE_EXTRACTION_PROMPT = `You are an expert Singapore construction document analyst specialising in NParks / LTA "Trees Affected Plan" drawings. Your MOST IMPORTANT job is to report the correct number of trees to be removed and retained.
 
-STEP 1 — READ THE LEGEND FIRST.
-Locate the LEGEND box (usually top-left). Find the entries that define tree/shrub status. They are typically colour-coded, e.g.:
-  • TREE TO BE REMOVED, SHRUB TO BE REMOVED
-  • TREE TO BE RETAINED, SHRUB TO BE RETAINED
-  • TREE TO BE TRANSPLANTED (only on some plans)
-Read the actual COLOUR used for each entry from THIS drawing's legend — do not assume. The common convention is GREEN = retained, YELLOW (or amber/orange) = removed, but you MUST confirm it against the legend on this sheet and use what the legend actually says.
+═══ THE SINGLE MOST IMPORTANT RULE ═══
+Under EACH tree table on EACH sheet, the drawing prints its own tally — text like:
+    "TREES TO BE REMOVED : 87 NOS"
+    "TREES TO BE RETAINED : 60 NOS"
+(wording may vary slightly: "TREE TO BE REMOVED", with or without ":" and "NOS").
+These printed numbers are the AUTHORITATIVE counts. READ THEM DIRECTLY and report them per sheet. DO NOT count the rows yourself to get the totals — use the drawing's own printed indication. Then totalRemove = the SUM of every sheet's printed "removed" number, and totalRetain = the SUM of every sheet's printed "retained" number.
 
-STEP 2 — STATUS COMES FROM THE FONT COLOUR OF EACH ROW.
-In the tree information table, EACH tree row is printed in a colour that matches a legend entry. The row's font colour is the AUTHORITATIVE source of its status:
-  • Row in the "retained" colour (usually GREEN)  → status "retain"
-  • Row in the "removed" colour  (usually YELLOW) → status "remove"
-  • Row in the "transplant" colour (if any)        → status "transplant"
-Do NOT infer status from girth, height, or species. Status is a design decision shown ONLY by the colour. If a row's colour is genuinely unreadable, use status "unknown" and add a dataIssue.
+If a sheet has no printed tally, only then fall back to counting that sheet's coloured rows (green = retained, yellow = removed) and note it in dataIssues.
 
-STEP 3 — EXTRACT EVERY ROW, with its status and type (tree vs shrub from the legend symbol/category).
+═══ SECONDARY — THE FULL REGISTER (list EVERY row) ═══
+Also extract EVERY individual tree/shrub row from EVERY table — the complete register, do not stop early. To fit them all, output the rows in a COMPACT columnar format (arrays, not objects). Status per row = its FONT COLOUR matched to the legend (green = retain, yellow = removed, other = transplant; unreadable = "unknown"). Never infer status from girth. Do NOT output a "flags" field — the system computes flags itself; just give the raw values. Keep each row tiny so thousands of rows fit.
 
-STEP 4 — Tabulate. The totals are simply the counts of each status (split tree vs shrub), NOT anything derived from girth.
-
-Return ONLY valid JSON in this exact structure:
+Return ONLY valid JSON in this exact structure (sheets + totals FIRST, the long row list LAST):
 
 \`\`\`json
 {
   "projectName": "project name from drawing title block",
-  "drawingRef": "drawing reference number e.g. L/RC216/RR/WSCL/0014",
+  "drawingRef": "drawing reference number e.g. L/RC216/RR/WSCL/0004",
   "authority": "LTA or NParks or BCA",
-  "legend": {
-    "removeColour": "yellow",
-    "retainColour": "green",
-    "transplantColour": null,
-    "notes": "exact legend wording you used to map colour → status"
-  },
+  "legend": { "removeColour": "yellow", "retainColour": "green", "transplantColour": null, "notes": "legend wording" },
   "sheets": [
-    { "sheetNo": "e.g. LRC216/RR/WSCL/0001", "removeCount": 105, "retainCount": 181 }
+    { "sheetNo": "LRC216/RR/WSCL/0004", "removeCount": 87, "retainCount": 60, "source": "printed tally" },
+    { "sheetNo": "LRC216/RR/WSCL/0005", "removeCount": 113, "retainCount": 2, "source": "printed tally" }
   ],
-  "trees": [
-    {
-      "no": "E4807",
-      "girth": 0.4,
-      "height": 4.0,
-      "species": "Indian Mango",
-      "sheet": "0001",
-      "type": "tree",
-      "status": "retain",
-      "flags": []
-    }
-  ],
+  "totalRemove": 200,
+  "totalRetain": 62,
+  "totals": { "remove": 200, "retain": 62, "transplant": 0 },
+  "countBasis": "printed per-sheet tally (summed)",
   "dataIssues": [
-    "Duplicate tree numbers: E4948, E4949 appear twice",
-    "Missing girth/height: E4583, E4585",
-    "Blank species: E7887",
-    "Row colour ambiguous: E5391"
+    "Sheet 0007: retained tally not legible — counted rows instead"
   ],
-  "totals": {
-    "remove": 500, "retain": 200, "transplant": 0,
-    "removeTrees": 480, "removeShrubs": 20, "retainTrees": 190, "retainShrubs": 10
-  },
-  "totalRemove": 500,
-  "totalRetain": 200
+  "treeColumns": ["no","girth","height","species","sheet","type","status"],
+  "treeRows": [
+    ["E7309",0.67,6,"Rain Tree","0004","tree","retain"],
+    ["E7310",0.5,7,"Rain Tree","0004","tree","remove"],
+    ["E7311",0.77,8,"Rain Tree","0004","tree","retain"]
+  ]
 }
 \`\`\`
 
-CRITICAL RULES:
-- Status is read from ROW FONT COLOUR matched to the legend — this is the most important rule. Get the colour right for every row.
-- "type" is "tree" or "shrub" per the legend category; default to "tree" if the drawing doesn't distinguish.
-- Extract EVERY tree/shrub from EVERY table on EVERY sheet — do not truncate.
-- girth/height "-" or blank → null. "Cluster" girth → -1.
-- totals.remove = count of status "remove"; totals.retain = count of status "retain"; transplant likewise. removeTrees/removeShrubs etc. split those by type. totalRemove/totalRetain mirror totals.remove/retain.
-- Per-tree flags (regulatory, independent of status):
-  • girth > 3.0m → "heritage_candidate"   • girth > 1.0m → "protected"
-  • high-conservation species (Rain Tree, Angsana, Tembusu, Senegal Mahogany) → "high_conservation"
-  • invasive species (African Tulip Tree, Taiwan Acacia) → "invasive"
-  • duplicate tree number → "duplicate"   • null girth/height or blank species → "missing_data"
+RULES:
+- totalRemove / totalRetain = SUM of the printed per-sheet tallies. This is the headline answer — get it right above everything else.
+- Put "sheets", "totalRemove", "totalRetain", "totals" BEFORE "treeRows".
+- "source" per sheet = "printed tally" if you read the printed number, or "row count" if you had to count.
+- treeRows: ONE array per tree, values in the order of treeColumns. girth/height "-" or blank → null, "Cluster" girth → -1. status from font colour. List EVERY row across ALL sheets — do not summarise or truncate.
 
 Return ONLY the JSON object. No preamble, no explanation.`;
 
@@ -355,6 +331,39 @@ export default async function handler(req, res) {
     }
   }
 
+  // Per-sheet document extraction (tree-felling): split the PDF into pages and
+  // read each sheet on its own, then sum the printed tallies. Reliable for big
+  // multi-sheet drawings where a single pass misses/misreads sheets.
+  if (action === 'analyse-doc') {
+    const { blobUrl } = body;
+    if (!blobUrl) return res.status(400).json({ error: 'blobUrl required' });
+    if (!isAllowedBlobUrl(blobUrl)) return res.status(400).json({ error: 'blobUrl must be a Vercel Blob URL' });
+
+    if (usersAuthEnabled()) {
+      const caller = authCheck(req);
+      if (caller.ok && caller.id) {
+        const limit = Number(process.env.READS_FREE_LIMIT) || 10;
+        let quota; try { quota = await consumeRead(caller.id, { limit }); } catch (e) { quota = { ok: true }; }
+        if (!quota.ok && quota.reason === 'limit') {
+          return res.status(402).json({ error: `Free plan limit reached (${quota.limit} reads this month). Upgrade to Pro for unlimited reads.`, code: 'read_limit', limit: quota.limit });
+        }
+      }
+    }
+
+    try {
+      const fileRes = await fetch(blobUrl);
+      if (!fileRes.ok) throw new Error(`Failed to fetch blob: ${fileRes.status}`);
+      const bytes = await fileRes.arrayBuffer();
+      const data = await extractTreeDocumentFromPdf(bytes);
+      try { const { del } = await import('@vercel/blob'); await del(blobUrl); } catch (_) {}
+      return res.status(200).json({ data });
+    } catch (err) {
+      captureException(err);
+      log.error('[api/process] analyse-doc failed', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   if (action === 'analyse') {
     const { fileId, blobUrl, prompt, reportType } = body;
     if (!fileId && !blobUrl) {
@@ -404,6 +413,14 @@ export default async function handler(req, res) {
       }
       content.push({ type: 'text', text: finalPrompt });
 
+      // fileId path (document readers) can emit a very long register → STREAM so
+      // the connection stays alive, then tolerant-parse (salvages totals if cut).
+      if (fileId) {
+        const text = await streamMessageText({ content, maxTokens: 64000 });
+        const parsed = parseTreeExtraction(text);
+        return res.status(200).json({ data: parsed });
+      }
+
       const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -414,7 +431,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
+          max_tokens: 8192,
           messages: [{ role: 'user', content }],
         }),
       });
@@ -425,12 +442,6 @@ export default async function handler(req, res) {
       }
 
       const msgData = await msgRes.json();
-      if (fileId) {
-        const text = msgData.content.filter(b => b.type === 'text').map(b => b.text).join('');
-        const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-        return res.status(200).json({ data: parsed });
-      }
-
       return res.status(200).json(msgData);
     } catch (err) {
       captureException(err);

@@ -11,6 +11,9 @@ import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './l
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
 import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
 import { computeSchedule } from './lib/cpm.js';
+import { parseTreeExtraction } from './lib/tree-felling.js';
+import { extractTreeDocumentFromPdf } from './lib/tree-extract.js';
+import { streamMessageText } from './lib/anthropic.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
 import { getSentryStatus } from './lib/sentry.js';
@@ -343,6 +346,20 @@ async function handleApi(req, res) {
       }
     }
 
+    // Per-sheet tree extraction: split the PDF, read each sheet, sum tallies.
+    // (Real mode only — demo short-circuits client-side in uploadAndAnalyse.)
+    if (action === 'analyse-doc') {
+      const { blobUrl } = body;
+      if (!blobUrl) throw new Error('blobUrl required');
+      if (!isAllowedBlobUrl(blobUrl)) return send(res, 400, JSON.stringify({ error: 'blobUrl must be a Vercel Blob URL' }), { 'Content-Type': 'application/json' });
+      const fileRes = await fetch(blobUrl);
+      if (!fileRes.ok) throw new Error(`Failed to fetch blob: ${fileRes.status}`);
+      const bytes = await fileRes.arrayBuffer();
+      const data = await extractTreeDocumentFromPdf(bytes);
+      try { const { del } = await import('@vercel/blob'); await del(blobUrl); } catch (_) {}
+      return send(res, 200, JSON.stringify({ data }), { 'Content-Type': 'application/json' });
+    }
+
     // Hand a browser-uploaded Blob to Anthropic Files → fileId (large-file path).
     if (action === 'ingest') {
       const { blobUrl } = body;
@@ -548,6 +565,13 @@ async function handleApi(req, res) {
         content.push({ type: 'document', source: { type: 'url', url: blobUrl } });
       }
       content.push({ type: 'text', text: prompt || PROMPTS[reportType] || '' });
+      // fileId (document readers) can emit a very long register → STREAM so the
+      // connection stays alive over a multi-minute generation, then tolerant-parse.
+      if (fileId) {
+        const text = await streamMessageText({ content, maxTokens: 64000 });
+        const parsed = parseTreeExtraction(text);
+        return send(res, 200, JSON.stringify({ data: parsed }), { 'Content-Type': 'application/json' });
+      }
       const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -557,8 +581,8 @@ async function handleApi(req, res) {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
+          model: 'claude-sonnet-4-6',
+          max_tokens: 8192,
           messages: [{ role: 'user', content }],
         }),
       });
@@ -567,11 +591,6 @@ async function handleApi(req, res) {
         throw new Error(errorText);
       }
       const msgData = await msgRes.json();
-      if (fileId) {
-        const text = msgData.content.filter(b => b.type === 'text').map(b => b.text).join('');
-        const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-        return send(res, 200, JSON.stringify({ data: parsed }), { 'Content-Type': 'application/json' });
-      }
       return send(res, 200, JSON.stringify(msgData), { 'Content-Type': 'application/json' });
     }
 
