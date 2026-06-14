@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { girthBand, classifyTree, summarize, aggregateTakeoff } from '../../lib/tree-felling.js';
+import { girthBand, classifyTree, summarize, aggregateTakeoff, normalizeStatus, normalizeType } from '../../lib/tree-felling.js';
 
 // ── girth band boundaries ─────────────────────────────────────────────
 assert.equal(girthBand(0.3).key, 'S', '0.3m -> Small');
@@ -18,25 +18,60 @@ assert.equal(classifyTree({ girth: 2.5 }).isHeritageCandidate, false, '2.5m not 
 assert.equal(classifyTree({ girth: 3.5 }).isHeritageCandidate, true, '3.5m heritage (>3.0)');
 assert.equal(classifyTree({ girth: null }).isProtected, false, 'unknown girth not protected');
 
-// ── summarise a register ──────────────────────────────────────────────
+// ── status / type normalisation ───────────────────────────────────────
+assert.equal(normalizeStatus('Removed'), 'remove', 'Removed -> remove');
+assert.equal(normalizeStatus('TO BE REMOVED'), 'remove', 'phrase -> remove');
+assert.equal(normalizeStatus('Retain'), 'retain', 'Retain -> retain');
+assert.equal(normalizeStatus('to be retained'), 'retain', 'phrase -> retain');
+assert.equal(normalizeStatus('Transplant'), 'transplant', 'Transplant -> transplant');
+assert.equal(normalizeStatus(''), 'unknown', 'blank -> unknown');
+assert.equal(normalizeStatus(undefined), 'unknown', 'missing -> unknown');
+assert.equal(normalizeType('shrub'), 'shrub', 'shrub -> shrub');
+assert.equal(normalizeType('Tree'), 'tree', 'Tree -> tree');
+assert.equal(normalizeType(undefined), 'tree', 'default -> tree');
+
+// ── summarise: remove/retain from STATUS, girth analysis on REMOVED only ──
 const trees = [
-  { girth: 0.3 }, { girth: 0.4 },   // S x2
-  { girth: 0.7 },                   // M
-  { girth: 1.5 },                   // L (protected)
-  { girth: 2.5 },                   // XL (protected)
-  { girth: 3.5 },                   // XL (protected + heritage)
-  { girth: null },                  // unknown
-  { girth: -1 },                    // cluster
+  { girth: 0.3, status: 'remove' }, { girth: 0.4, status: 'remove' }, // S x2 removed
+  { girth: 0.7, status: 'remove' },                                    // M removed
+  { girth: 1.5, status: 'remove' },                                    // L removed (protected)
+  { girth: 2.5, status: 'remove' },                                    // XL removed (protected)
+  { girth: 3.5, status: 'remove' },                                    // XL removed (protected + heritage)
+  { girth: null, status: 'remove' },                                   // unknown removed
+  { girth: -1, status: 'remove' },                                     // cluster removed
 ];
 const s = summarize(trees);
 assert.equal(s.total, 8, 'total trees');
-assert.deepEqual(s.byBand, { S: 2, M: 1, L: 1, XL: 2, cluster: 1, unknown: 1 }, 'band counts');
+assert.equal(s.remove, 8, 'all 8 removed (by status)');
+assert.equal(s.retain, 0, 'none retained');
+assert.deepEqual(s.removed.byBand, { S: 2, M: 1, L: 1, XL: 2, cluster: 1, unknown: 1 }, 'removed band counts');
 assert.equal(s.protected, 3, 'three protected (1.5, 2.5, 3.5)');
 assert.equal(s.heritage, 1, 'one heritage candidate (3.5)');
-// replacement = S*1 + M*2 + L*3 + XL*5 = 2 + 2 + 3 + 10 = 17
-assert.equal(s.replacement, 17, 'replacement-planting count');
+// replacement (removed) = S*1 + M*2 + L*3 + XL*5 = 2 + 2 + 3 + 10 = 17
+assert.equal(s.removed.replacement, 17, 'replacement-planting count (removed)');
+assert.equal(s.replacement, 17, 'back-compat replacement reflects removed set');
 
-// ── take-off aggregation (drops zero-qty rows) ────────────────────────
+// ── status drives remove/retain, NOT girth; tree/shrub split ──────────────
+const mixed = [
+  { girth: 0.3, status: 'retain', type: 'tree' },  // retained, small
+  { girth: 0.4, status: 'remove', type: 'tree' },  // removed, S
+  { girth: 0.6, status: 'remove', type: 'shrub' }, // removed shrub (not a felled TREE)
+  { girth: 2.5, status: 'retain', type: 'tree' },  // PROTECTED but RETAINED (girth would mislead)
+  { girth: 1.5, status: 'remove', type: 'tree' },  // removed, L (protected)
+];
+const m = summarize(mixed);
+assert.equal(m.remove, 3, 'three removed by status');
+assert.equal(m.retain, 2, 'two retained by status');
+assert.equal(m.removeTrees, 2, 'two removed TREES');
+assert.equal(m.removeShrubs, 1, 'one removed shrub');
+assert.equal(m.retainTrees, 2, 'two retained trees');
+assert.equal(m.removed.total, 2, 'removed-tree girth analysis excludes shrubs');
+assert.deepEqual(m.removed.byBand, { S: 1, M: 0, L: 1, XL: 0, cluster: 0, unknown: 0 }, 'removed tree bands (0.4->S, 1.5->L)');
+assert.equal(m.removed.replacement, 1 + 3, 'replacement only for removed trees (S*1 + L*3)');
+assert.equal(m.protected, 2, 'overall protected counts retained 2.5m too');
+assert.equal(m.removed.protected, 1, 'only the removed protected tree is in the felling set');
+
+// ── take-off aggregation (REMOVED trees only; drops zero-qty rows) ────────
 const rows = aggregateTakeoff(trees);
 const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
 assert.equal(byId['TO-S'].qty, 2, 'small girth qty');
@@ -45,6 +80,9 @@ assert.equal(byId['TO-HER'].qty, 1, 'heritage qty');
 assert.equal(byId['TO-REP'].qty, 17, 'replacement qty');
 assert.ok(rows.every((r) => r.qty > 0), 'no zero-qty rows');
 assert.ok(rows.every((r) => r.unit === 'nr'), 'all units nr');
+
+// retained trees never reach the felling take-off
+assert.equal(aggregateTakeoff([{ girth: 2.5, status: 'retain' }]).length, 0, 'retained tree => empty take-off');
 
 // ── configurable thresholds (verify-against-NParks safety) ────────────
 const strictCfg = {

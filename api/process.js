@@ -23,21 +23,41 @@ import * as log from '../lib/log.js';
 
 initSentry();
 
-const TREE_EXTRACTION_PROMPT = `You are an expert Singapore construction document analyst specialising in NParks / LTA tree felling drawings. Analyse this tree affected plan and extract ALL tree data.
+const TREE_EXTRACTION_PROMPT = `You are an expert Singapore construction document analyst specialising in NParks / LTA "Trees Affected Plan" drawings. Read this drawing the way a qualified arborist / QS reads it, in this exact order.
 
-Extract every tree record from every table on every sheet. Return ONLY valid JSON in this exact structure:
+STEP 1 — READ THE LEGEND FIRST.
+Locate the LEGEND box (usually top-left). Find the entries that define tree/shrub status. They are typically colour-coded, e.g.:
+  • TREE TO BE REMOVED, SHRUB TO BE REMOVED
+  • TREE TO BE RETAINED, SHRUB TO BE RETAINED
+  • TREE TO BE TRANSPLANTED (only on some plans)
+Read the actual COLOUR used for each entry from THIS drawing's legend — do not assume. The common convention is GREEN = retained, YELLOW (or amber/orange) = removed, but you MUST confirm it against the legend on this sheet and use what the legend actually says.
+
+STEP 2 — STATUS COMES FROM THE FONT COLOUR OF EACH ROW.
+In the tree information table, EACH tree row is printed in a colour that matches a legend entry. The row's font colour is the AUTHORITATIVE source of its status:
+  • Row in the "retained" colour (usually GREEN)  → status "retain"
+  • Row in the "removed" colour  (usually YELLOW) → status "remove"
+  • Row in the "transplant" colour (if any)        → status "transplant"
+Do NOT infer status from girth, height, or species. Status is a design decision shown ONLY by the colour. If a row's colour is genuinely unreadable, use status "unknown" and add a dataIssue.
+
+STEP 3 — EXTRACT EVERY ROW, with its status and type (tree vs shrub from the legend symbol/category).
+
+STEP 4 — Tabulate. The totals are simply the counts of each status (split tree vs shrub), NOT anything derived from girth.
+
+Return ONLY valid JSON in this exact structure:
 
 \`\`\`json
 {
   "projectName": "project name from drawing title block",
   "drawingRef": "drawing reference number e.g. L/RC216/RR/WSCL/0014",
   "authority": "LTA or NParks or BCA",
+  "legend": {
+    "removeColour": "yellow",
+    "retainColour": "green",
+    "transplantColour": null,
+    "notes": "exact legend wording you used to map colour → status"
+  },
   "sheets": [
-    {
-      "sheetNo": "e.g. LRC216/RR/WSCL/0001",
-      "removeCount": 105,
-      "retainCount": 181
-    }
+    { "sheetNo": "e.g. LRC216/RR/WSCL/0001", "removeCount": 105, "retainCount": 181 }
   ],
   "trees": [
     {
@@ -46,31 +66,37 @@ Extract every tree record from every table on every sheet. Return ONLY valid JSO
       "height": 4.0,
       "species": "Indian Mango",
       "sheet": "0001",
+      "type": "tree",
+      "status": "retain",
       "flags": []
     }
   ],
   "dataIssues": [
     "Duplicate tree numbers: E4948, E4949 appear twice",
     "Missing girth/height: E4583, E4585",
-    "Blank species: E7887"
+    "Blank species: E7887",
+    "Row colour ambiguous: E5391"
   ],
+  "totals": {
+    "remove": 500, "retain": 200, "transplant": 0,
+    "removeTrees": 480, "removeShrubs": 20, "retainTrees": 190, "retainShrubs": 10
+  },
   "totalRemove": 500,
   "totalRetain": 200
 }
 \`\`\`
 
 CRITICAL RULES:
-- Extract EVERY tree from EVERY table — do not truncate
-- For girth/height = "-" or blank → use null
-- For "Cluster" girth → use -1 (special flag)
-- Detect duplicates (same tree number appearing more than once)
-- Detect missing data (null girth or null height or blank species)
-- Flag trees with girth > 3.0m as potential Heritage Trees in their flags array: ["heritage_candidate"]
-- Flag trees with girth > 1.0m in flags array: ["protected"]
-- Flag high conservation species (Rain Tree, Angsana, Tembusu, Senegal Mahogany) in flags: ["high_conservation"]
-- Flag invasive species (African Tulip Tree, Taiwan Acacia) in flags: ["invasive"]
-- Flag duplicates with: ["duplicate"]
-- Flag missing data with: ["missing_data"]
+- Status is read from ROW FONT COLOUR matched to the legend — this is the most important rule. Get the colour right for every row.
+- "type" is "tree" or "shrub" per the legend category; default to "tree" if the drawing doesn't distinguish.
+- Extract EVERY tree/shrub from EVERY table on EVERY sheet — do not truncate.
+- girth/height "-" or blank → null. "Cluster" girth → -1.
+- totals.remove = count of status "remove"; totals.retain = count of status "retain"; transplant likewise. removeTrees/removeShrubs etc. split those by type. totalRemove/totalRetain mirror totals.remove/retain.
+- Per-tree flags (regulatory, independent of status):
+  • girth > 3.0m → "heritage_candidate"   • girth > 1.0m → "protected"
+  • high-conservation species (Rain Tree, Angsana, Tembusu, Senegal Mahogany) → "high_conservation"
+  • invasive species (African Tulip Tree, Taiwan Acacia) → "invasive"
+  • duplicate tree number → "duplicate"   • null girth/height or blank species → "missing_data"
 
 Return ONLY the JSON object. No preamble, no explanation.`;
 

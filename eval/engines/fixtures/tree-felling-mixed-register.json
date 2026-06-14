@@ -1,24 +1,34 @@
 {
   "id": "tree-felling-mixed-register",
   "status": "synthetic",
-  "basis": "NParks girth bands S<0.5 / M 0.5-1.0 / L 1.0-2.0 / XL>2.0; protected girth>1.0m; heritage candidate girth>3.0m; replacement ratio S:1 M:2 L:3 XL:5. Cluster (-1) and unknown (null) excluded from replacement. VERIFY against current NParks guidelines.",
+  "basis": "Remove/Retain is read from the drawing's row colour (status), NOT from girth. Girth bands S<0.5 / M 0.5-1.0 / L 1.0-2.0 / XL>2.0, protected girth>1.0m, heritage candidate girth>3.0m, and replacement ratio S:1 M:2 L:3 XL:5 apply to REMOVED TREES ONLY (you fell and replace what is removed). Shrubs are excluded from the felled-tree girth analysis. Cluster (-1) and unknown (null) girth excluded from replacement. VERIFY against current NParks guidelines.",
   "engine": "summarizeTrees",
   "input": {
     "trees": [
-      { "girth": 0.4 },
-      { "girth": 0.8 },
-      { "girth": 1.5 },
-      { "girth": 2.5 },
-      { "girth": 3.5 },
-      { "girth": null },
-      { "girth": -1 }
+      { "girth": 0.4, "status": "remove", "type": "tree" },
+      { "girth": 0.8, "status": "remove", "type": "tree" },
+      { "girth": 1.5, "status": "remove", "type": "tree" },
+      { "girth": 2.5, "status": "retain", "type": "tree" },
+      { "girth": 3.5, "status": "retain", "type": "tree" },
+      { "girth": 0.3, "status": "remove", "type": "shrub" },
+      { "girth": null, "status": "remove", "type": "tree" }
     ]
   },
   "expect": {
     "total": 7,
-    "byBand": { "S": 1, "M": 1, "L": 1, "XL": 2, "cluster": 1, "unknown": 1 },
+    "remove": 5,
+    "retain": 2,
+    "removeTrees": 4,
+    "removeShrubs": 1,
+    "retainTrees": 2,
     "protected": 3,
     "heritage": 1,
-    "replacement": 16
+    "removed": {
+      "total": 4,
+      "byBand": { "S": 1, "M": 1, "L": 1, "XL": 0, "cluster": 0, "unknown": 1 },
+      "protected": 1,
+      "heritage": 0,
+      "replacement": 6
+    }
   }
 }
