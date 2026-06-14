@@ -18,12 +18,25 @@ import {
   listProgrammesForUser, getProgramme, createProgramme,
   updateProgramme, setMember, removeMember, deleteProgramme,
 } from '../lib/programmes.js';
+import { computeSchedule } from '../lib/cpm.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
 initSentry();
 
 const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
+
+// Map stored activities to the lib/cpm.js task shape (tolerant of strings from a form).
+function normaliseTasks(activities) {
+  if (!Array.isArray(activities)) throw new Error('activities must be an array');
+  return activities.map((a) => ({
+    id: a.id,
+    name: a.name,
+    durationDays: Math.max(0, Math.round(Number(a.durationDays) || 0)),
+    predecessors: (a.predecessors || []).map((p) =>
+      (typeof p === 'string' ? { id: p } : { id: p.id, type: p.type, lagDays: Number(p.lagDays) || 0 })),
+  }));
+}
 
 export default async function handler(req, res) {
   if (!(await enforceRateLimit(req, res, { id: 'programmes', limit: 60, windowMs: 60_000 }))) return;
@@ -47,8 +60,17 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { name, startDate, activities } = req.body || {};
-      const programme = await createProgramme({ name, ownerId: uid, startDate, activities });
+      const body = req.body || {};
+      // Stateless critical-path compute (no persistence) — powers the live Gantt.
+      if (body.action === 'schedule') {
+        try {
+          const schedule = computeSchedule(normaliseTasks(body.activities), { startDate: body.startDate });
+          return res.status(200).json({ schedule });
+        } catch (e) {
+          return res.status(400).json({ error: e.message });
+        }
+      }
+      const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
       return res.status(200).json({ ok: true, programme });
     }
 
