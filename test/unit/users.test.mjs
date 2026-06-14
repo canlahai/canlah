@@ -11,7 +11,7 @@ process.env.DEV_USERS_DIR = mkdtempSync(join(tmpdir(), 'canlah-users-'));
 const {
   hashPassword, verifyPassword,
   createUser, verifyCredentials, listUsers, setUserDisabled, usersAuthEnabled,
-  getUserById, setUserTier, consumeRead,
+  getUserById, setUserTier, consumeRead, hasProAccess,
 } = await import('../../lib/users.js');
 
 // --- password hashing -------------------------------------------------------
@@ -104,6 +104,19 @@ assert.deepEqual(qreset, { ok: true, remaining: 4 }, 'stale period resets counte
 
 // --- consumeRead: unknown user ----------------------------------------------
 assert.deepEqual(await consumeRead('nobody', { limit: 5 }), { ok: false, reason: 'not_found' }, 'unknown user not_found');
+
+// --- hasProAccess -----------------------------------------------------------
+assert.equal(await hasProAccess({ ok: false }), false, 'no access when not ok');
+assert.equal(await hasProAccess({ ok: true, demo: true }), true, 'demo mode is open');
+delete process.env.AUTH_MODE; // shared mode
+assert.equal(await hasProAccess({ ok: true, id: carol.id }), true, 'shared mode is open');
+process.env.AUTH_MODE = 'users';
+assert.equal(await hasProAccess({ ok: true, role: 'admin', id: 'x' }), true, 'admin always pro');
+await setUserTier(carol.id, 'free');
+assert.equal(await hasProAccess({ ok: true, id: carol.id }), false, 'free user is not pro');
+await setUserTier(carol.id, 'pro');
+assert.equal(await hasProAccess({ ok: true, id: carol.id }), true, 'pro user passes');
+delete process.env.AUTH_MODE;
 
 // --- usersAuthEnabled -------------------------------------------------------
 delete process.env.AUTH_MODE;

@@ -8,7 +8,8 @@ import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@ver
 import { handleUpload } from '@vercel/blob/client';
 import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
-import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead } from './lib/users.js';
+import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
+import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
 import { getSentryStatus } from './lib/sentry.js';
@@ -703,6 +704,60 @@ const server = http.createServer((req, res) => {
       } catch (err) {
         const msg = err?.message || 'Internal server error';
         const status = /required|already registered|at least|role must/.test(msg) ? 400 : 500;
+        return send(res, status, JSON.stringify({ error: status === 400 ? msg : 'Internal server error' }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/programmes') {
+    (async () => {
+      const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
+      try {
+        if (!rateLimitCheck(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
+        const caller = authCheck(req);
+        if (!(await hasProAccess(caller))) {
+          return send(res, 403, JSON.stringify({ error: 'Programme Planner is a Pro feature', code: 'pro_required' }), { 'Content-Type': 'application/json' });
+        }
+        const uid = caller.id;
+
+        if (req.method === 'GET') {
+          const id = parsedUrl.searchParams.get('id');
+          if (id) {
+            const prog = await getProgramme(id, uid);
+            if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ programme: prog }), { 'Content-Type': 'application/json' });
+          }
+          return send(res, 200, JSON.stringify({ programmes: await listProgrammesForUser(uid) }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'POST') {
+          const body = await parseBody(req) || {};
+          const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
+          return send(res, 200, JSON.stringify({ ok: true, programme }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'PATCH') {
+          const body = await parseBody(req) || {};
+          if (!body.id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+          let result;
+          if (body.member) result = await setMember(body.id, uid, body.member);
+          else if (body.removeMember) result = await removeMember(body.id, uid, body.removeMember);
+          else result = await updateProgramme(body.id, uid, body);
+          if (!result.ok) return send(res, reasonStatus[result.reason] || 400, JSON.stringify({ error: result.message || result.reason || 'update failed' }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'DELETE') {
+          const body = await parseBody(req) || {};
+          const id = body.id || parsedUrl.searchParams.get('id');
+          if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+          const result = await deleteProgramme(id, uid);
+          if (!result.ok) return send(res, reasonStatus[result.reason] || 400, JSON.stringify({ error: result.reason || 'delete failed' }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+        return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
+      } catch (err) {
+        const msg = err?.message || 'Internal server error';
+        const status = /required|must be|YYYY-MM-DD/.test(msg) ? 400 : 500;
         return send(res, status, JSON.stringify({ error: status === 400 ? msg : 'Internal server error' }), { 'Content-Type': 'application/json' });
       }
     })();
