@@ -3,34 +3,488 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Programme Planner (Pro) — CanLah.ai</title>
+<title>Programme Planner — CanLah.ai</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{--ink:#0c0c0a;--paper:#f2efe8;--yellow:#e8c027;--orange:#d95f2b;--slate:#1e1e1b;--g7:#363632;--g4:#888882;--green:#2a7a47}
+  :root{--ink:#0c0c0a;--paper:#f2efe8;--yellow:#e8c027;--orange:#d95f2b;--slate:#1e1e1b;--g9:#161614;--g8:#242421;--g7:#363632;--g4:#888882;--green:#2a7a47;--blue:#3a6ea5;--red:#c0492b}
   *{box-sizing:border-box;margin:0}
-  body{font-family:'Syne',sans-serif;background:var(--ink);color:var(--paper);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center}
-  .card{max-width:520px;background:var(--slate);border:1px solid var(--g7);border-radius:16px;padding:2.5rem 2rem}
+  body{font-family:'Syne',sans-serif;background:var(--ink);color:var(--paper);min-height:100vh}
+  a{color:var(--yellow)}
+  .mono{font-family:'JetBrains Mono',monospace}
+  /* top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid var(--g8);position:sticky;top:0;background:var(--ink);z-index:20}
+  .brand{font-weight:800;font-size:19px;text-decoration:none;color:var(--paper)}
+  .brand span{color:var(--yellow)}
+  .topbar .right{display:flex;gap:10px;align-items:center}
+  .pill{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--g7);color:var(--g4)}
+  .pill.pro{background:rgba(232,192,39,.12);color:var(--yellow);border-color:var(--yellow)}
+  /* buttons */
+  button{font-family:'Syne',sans-serif;cursor:pointer}
+  .btn{background:var(--g8);color:var(--paper);border:1px solid var(--g7);border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600}
+  .btn:hover{border-color:var(--g4)}
+  .btn.pri{background:var(--yellow);color:var(--ink);border-color:var(--yellow)}
+  .btn.danger{color:#e8a08c;border-color:#5a2a1e}
+  .btn.sm{padding:5px 9px;font-size:12px}
+  /* layout */
+  .wrap{max-width:1280px;margin:0 auto;padding:22px}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+  h1{font-size:30px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+  h2{font-size:18px;font-weight:700;margin-bottom:4px}
+  .muted{color:var(--g4);font-size:14px}
+  /* gate / upsell */
+  .gate{max-width:520px;margin:8vh auto;background:var(--slate);border:1px solid var(--g7);border-radius:16px;padding:2.5rem 2rem;text-align:center}
   .badge{display:inline-block;background:rgba(42,122,71,.15);color:#7fd1a0;border:1px solid #2a7a47;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:14px}
-  h1{font-size:30px;font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
-  p{color:var(--g4);font-size:15px;line-height:1.6;margin-bottom:1rem}
-  ul{text-align:left;color:var(--g4);font-size:14px;line-height:1.9;margin:0 auto 1.5rem;max-width:380px}
-  a.btn{display:inline-block;background:var(--yellow);color:var(--ink);font-weight:700;text-decoration:none;padding:11px 20px;border-radius:8px;margin:6px}
-  a.link{color:var(--yellow)}
+  .gate ul{text-align:left;color:var(--g4);font-size:14px;line-height:1.9;margin:1rem auto 1.5rem;max-width:380px}
+  /* project list */
+  .new-row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:18px 0 26px;padding:16px;background:var(--g9);border:1px solid var(--g8);border-radius:12px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;color:var(--g4);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em}
+  input,select{font-family:'Syne',sans-serif;background:var(--ink);color:var(--paper);border:1px solid var(--g7);border-radius:7px;padding:8px 10px;font-size:13px}
+  input:focus,select:focus{outline:none;border-color:var(--yellow)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .pcard{background:var(--g9);border:1px solid var(--g8);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s}
+  .pcard:hover{border-color:var(--g4)}
+  .pcard h3{font-size:17px;font-weight:700;margin-bottom:6px}
+  .pcard .meta{font-size:12px;color:var(--g4);font-family:'JetBrains Mono',monospace}
+  .role-tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:999px;border:1px solid var(--g7);color:var(--g4);margin-top:8px}
+  .empty{color:var(--g4);padding:40px;text-align:center;border:1px dashed var(--g7);border-radius:12px}
+  /* editor */
+  .ed-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+  .ed-stats{display:flex;gap:22px;flex-wrap:wrap;margin:10px 0 18px}
+  .stat .k{font-size:11px;color:var(--g4);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em}
+  .stat .v{font-size:20px;font-weight:800}
+  .stat .v.crit{color:var(--orange)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .toolbar .sep{flex:1}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .filters .mono{font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.08em}
+  /* activity table */
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--g8);border-radius:12px;margin-bottom:22px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--g8);white-space:nowrap}
+  th{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--g4);background:var(--g9);position:sticky;top:0}
+  td input,td select{width:100%;min-width:90px;padding:5px 7px;font-size:12px}
+  td.name input{min-width:170px}
+  td.dur input{min-width:60px;width:70px}
+  td.crit{color:var(--orange);font-weight:700;font-family:'JetBrains Mono',monospace;font-size:11px}
+  .stat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .row-x{color:#e8a08c;background:none;border:none;font-size:15px;padding:0 4px}
+  /* gantt */
+  .gantt-wrap{overflow-x:auto;border:1px solid var(--g8);border-radius:12px}
+  .gantt{border-collapse:collapse;font-size:11px;min-width:100%}
+  .gantt th,.gantt td{border:1px solid var(--g8);padding:0}
+  .gantt .lbl{padding:6px 10px;min-width:200px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Syne';font-size:12.5px;position:sticky;left:0;background:var(--g9);z-index:2}
+  .gantt th.wk{min-width:34px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--g4);padding:5px 2px;background:var(--g9)}
+  .gantt td.cell{min-width:34px;height:30px;position:relative}
+  .bar{position:absolute;top:6px;bottom:6px;left:2px;right:2px;border-radius:3px;background:var(--blue)}
+  .bar.crit{background:var(--orange)}
+  .bar.done{background:var(--green)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 2px 0;font-size:11px;color:var(--g4);font-family:'JetBrains Mono',monospace}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .disclaimer{font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.5;color:var(--g4);border-top:1px solid rgba(136,136,130,.25);margin:22px 0 0;padding-top:12px}
+  .warn{color:#e8c08c;font-size:12px;margin:8px 2px;font-family:'JetBrains Mono',monospace}
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--slate);border:1px solid var(--g7);border-radius:14px;padding:22px;max-width:480px;width:100%}
+  .mlist{margin:12px 0;font-size:13px}
+  .mrow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g8)}
+  /* toast */
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--slate);border:1px solid var(--g7);border-radius:9px;padding:11px 18px;font-size:13px;opacity:0;transition:.25s;z-index:100;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:var(--red)}
+  .hidden{display:none!important}
+  @media print{.topbar,.toolbar,.filters,.new-row,.row-x,.disclaimer .none{display:none}.btn{display:none}}
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="badge">Pro · Coming soon</div>
+<div class="topbar">
+  <a class="brand" href="/">Can<span>Lah</span>.ai</a>
+  <div class="right">
+    <span class="pill pro" id="tier-pill">Pro</span>
+    <a class="btn sm" href="/">Home</a>
+  </div>
+</div>
+
+<!-- GATE / UPSELL (non-pro) -->
+<div id="view-gate" class="hidden">
+  <div class="gate">
+    <div class="badge">Pro feature</div>
     <h1>Programme Planner</h1>
-    <p>Collaborative construction scheduling, built for Singapore main contractors — coming as part of CanLah Pro.</p>
+    <p class="muted">Collaborative construction scheduling for Singapore main contractors — part of CanLah Pro.</p>
     <ul>
       <li>· Activity tree (trade → section → task) with dependencies</li>
-      <li>· Weekly Gantt with the critical path highlighted from day one</li>
+      <li>· Weekly Gantt with the real critical path highlighted</li>
       <li>· Team roles: PM, engineer, procurement, subcontractor, viewer</li>
-      <li>· Filter by person / status / timescale; export to Excel & PDF</li>
+      <li>· Filter by person / status; export to CSV &amp; PDF</li>
     </ul>
-    <a class="btn" href="mailto:hello@canlah.ai?subject=CanLah%20Pro%20%E2%80%94%20Programme%20Planner">Talk to us about Pro</a>
-    <p style="margin-top:1.5rem;margin-bottom:0"><a class="link" href="/">← Back home</a></p>
+    <a class="btn pri" href="mailto:hello@canlah.ai?subject=CanLah%20Pro%20%E2%80%94%20Programme%20Planner">Talk to us about Pro</a>
   </div>
+</div>
+
+<!-- PROJECT LIST -->
+<div id="view-list" class="wrap hidden">
+  <div class="eyebrow">// Programme Planner</div>
+  <h1>Your programmes</h1>
+  <p class="muted">Collaborative schedules with a computed critical path.</p>
+
+  <div class="new-row">
+    <div class="field"><label>Project name</label><input id="np-name" placeholder="e.g. Tower A — main contract" style="min-width:240px"></div>
+    <div class="field"><label>Start date</label><input id="np-start" type="date"></div>
+    <button class="btn pri" id="np-create">Create programme</button>
+  </div>
+
+  <div id="list-cards" class="cards"></div>
+  <div id="list-empty" class="empty hidden">No programmes yet — create your first one above.</div>
+</div>
+
+<!-- EDITOR -->
+<div id="view-editor" class="wrap hidden">
+  <div class="ed-head">
+    <div>
+      <button class="btn sm" id="ed-back">← All programmes</button>
+      <h1 id="ed-name" style="margin-top:10px">—</h1>
+      <div class="muted mono" id="ed-sub">—</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="role-tag" id="ed-role">—</span>
+    </div>
+  </div>
+
+  <div class="ed-stats">
+    <div class="stat"><div class="k">Project end</div><div class="v" id="st-end">—</div></div>
+    <div class="stat"><div class="k">Duration</div><div class="v" id="st-dur">—</div></div>
+    <div class="stat"><div class="k">Activities</div><div class="v" id="st-count">—</div></div>
+    <div class="stat"><div class="k">On critical path</div><div class="v crit" id="st-crit">—</div></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn pri" id="ed-add">+ Activity</button>
+    <button class="btn" id="ed-save">Save</button>
+    <button class="btn" id="ed-recompute">Recompute</button>
+    <div class="sep"></div>
+    <button class="btn sm" id="ed-members">Members</button>
+    <button class="btn sm" id="ed-csv">Export CSV</button>
+    <button class="btn sm" id="ed-print">Print / PDF</button>
+    <button class="btn sm danger" id="ed-delete">Delete</button>
+  </div>
+
+  <div class="filters">
+    <span class="mono">Filter:</span>
+    <select id="f-assignee"><option value="">All people</option></select>
+    <select id="f-status">
+      <option value="">All status</option>
+      <option value="todo">To do</option>
+      <option value="in_progress">In progress</option>
+      <option value="done">Done</option>
+      <option value="blocked">Blocked</option>
+    </select>
+    <span class="muted" id="start-edit" style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <span class="mono">Start</span><input id="ed-start" type="date" style="padding:5px 8px">
+    </span>
+  </div>
+
+  <div id="ed-warn" class="warn hidden"></div>
+
+  <div class="tbl-wrap">
+    <table id="act-table">
+      <thead><tr>
+        <th>ID</th><th>Activity</th><th>Trade</th><th>Section</th><th>Days</th>
+        <th>Predecessors</th><th>Assignee</th><th>Status</th><th>Start</th><th>Finish</th><th>Float</th><th></th>
+      </tr></thead>
+      <tbody id="act-body"></tbody>
+    </table>
+  </div>
+
+  <h2>Weekly Gantt</h2>
+  <div class="gantt-wrap"><table class="gantt" id="gantt"></table></div>
+  <div class="legend">
+    <span><i style="background:var(--blue)"></i>Activity</span>
+    <span><i style="background:var(--orange)"></i>Critical path</span>
+    <span><i style="background:var(--green)"></i>Done</span>
+  </div>
+
+  <p class="disclaimer">⚠ AI-assisted draft — durations and the critical path are estimates; a qualified planner must verify before any submission or decision. <a href="/legal">Legal &amp; data →</a></p>
+</div>
+
+<!-- MEMBERS MODAL -->
+<div class="modal-bg" id="member-modal">
+  <div class="modal">
+    <h2>Members</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Owner and PMs can manage the team. Roles: pm, engineer, procurement, subcon, viewer.</p>
+    <div class="mlist" id="member-list"></div>
+    <div class="new-row" style="margin:10px 0" id="member-add-row">
+      <div class="field"><label>User ID</label><input id="m-uid" placeholder="u-..." style="min-width:170px"></div>
+      <div class="field"><label>Role</label><select id="m-role">
+        <option value="viewer">viewer</option><option value="engineer">engineer</option>
+        <option value="procurement">procurement</option><option value="subcon">subcon</option><option value="pm">pm</option>
+      </select></div>
+      <button class="btn pri sm" id="m-add">Add / update</button>
+    </div>
+    <div style="text-align:right;margin-top:8px"><button class="btn" id="m-close">Close</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STATUS = { todo:{label:'To do',color:'#888882'}, in_progress:{label:'In progress',color:'#3a6ea5'}, done:{label:'Done',color:'#2a7a47'}, blocked:{label:'Blocked',color:'#c0492b'} };
+let state = { canManage:false, canEdit:false, current:null, activities:[], schedule:null, myId:null };
+
+function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
+async function api(method, body, qs){
+  const url = '/api/programmes' + (qs||'');
+  const opt = { method, headers:{'Content-Type':'application/json'} };
+  if (body) opt.body = JSON.stringify(body);
+  const res = await fetch(url, opt);
+  if (res.status === 401){ location.href='/login'; throw new Error('Unauthorized'); }
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+function show(view){ ['gate','list','editor'].forEach(v=>$('view-'+v).classList.toggle('hidden', v!==view)); }
+
+// ── boot: gate on tier ───────────────────────────────────────────────────
+async function boot(){
+  let cfg = {};
+  try { cfg = await (await fetch('/api/config')).json(); } catch {}
+  const pro = cfg.tier === 'pro' || cfg.demoMode || cfg.authMode === 'shared' || (cfg.session && cfg.session.role === 'admin');
+  state.myId = (cfg.session && cfg.session.id) || (cfg.demoMode ? 'demo-user' : null);
+  $('tier-pill').textContent = cfg.demoMode ? 'Demo' : (cfg.tier ? cfg.tier.toUpperCase() : 'Pro');
+  if (!pro){ show('gate'); return; }
+  await loadList();
+}
+
+// ── project list ─────────────────────────────────────────────────────────
+async function loadList(){
+  show('list');
+  const { programmes } = await api('GET');
+  const wrap = $('list-cards'); wrap.innerHTML='';
+  $('list-empty').classList.toggle('hidden', programmes.length>0);
+  for (const p of programmes){
+    const el = document.createElement('div'); el.className='pcard';
+    el.innerHTML = `<h3></h3><div class="meta"></div><span class="role-tag"></span>`;
+    el.querySelector('h3').textContent = p.name;
+    el.querySelector('.meta').textContent = `${p.activityCount} activit${p.activityCount===1?'y':'ies'} · start ${p.startDate}`;
+    el.querySelector('.role-tag').textContent = p.role;
+    el.onclick = () => openProgramme(p.id);
+    wrap.appendChild(el);
+  }
+}
+$('np-create').onclick = async () => {
+  const name = $('np-name').value.trim(); const startDate = $('np-start').value;
+  if (!name) return toast('Enter a project name', true);
+  if (!startDate) return toast('Pick a start date', true);
+  try { const { programme } = await api('POST', { name, startDate, activities: [] });
+    $('np-name').value=''; toast('Programme created'); openProgramme(programme.id);
+  } catch(e){ toast(e.message, true); }
+};
+
+// ── editor ───────────────────────────────────────────────────────────────
+async function openProgramme(id){
+  const { programme } = await api('GET', null, '?id='+encodeURIComponent(id));
+  state.current = programme;
+  state.activities = (programme.activities||[]).map(normalise);
+  state.canEdit = ['pm','engineer','procurement','subcon'].includes(programme.role);
+  state.canManage = programme.role === 'pm';
+  $('ed-name').textContent = programme.name;
+  $('ed-sub').textContent = `Owner ${programme.ownerId} · ${programme.members.length} member(s)`;
+  $('ed-role').textContent = programme.role;
+  $('ed-start').value = programme.startDate;
+  $('ed-start').disabled = !state.canEdit;
+  $('ed-add').classList.toggle('hidden', !state.canEdit);
+  $('ed-save').classList.toggle('hidden', !state.canEdit);
+  // Delete is owner-only (also enforced server-side).
+  $('ed-delete').classList.toggle('hidden', !(state.myId && state.myId === programme.ownerId));
+  show('editor');
+  refreshAssigneeFilter();
+  await recompute();
+}
+function normalise(a){
+  return { id:a.id, name:a.name||'', trade:a.trade||'', section:a.section||'',
+    durationDays:Number(a.durationDays)||0,
+    predecessors:(a.predecessors||[]).map(p=>typeof p==='string'?p:p.id),
+    assignee:a.assignee||'', status:a.status||'todo' };
+}
+function nextId(){
+  let n=1; const ids=new Set(state.activities.map(a=>a.id));
+  while(ids.has('a'+n)) n++; return 'a'+n;
+}
+$('ed-back').onclick = () => loadList();
+$('ed-add').onclick = () => {
+  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo' });
+  renderTable(); recompute();
+};
+$('ed-start').onchange = () => recompute();
+$('f-assignee').onchange = renderTable;
+$('f-status').onchange = renderTable;
+
+function refreshAssigneeFilter(){
+  const sel=$('f-assignee'); const cur=sel.value;
+  const people=[...new Set(state.activities.map(a=>a.assignee).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">All people</option>'+people.map(p=>`<option>${p}</option>`).join('');
+  sel.value = people.includes(cur)?cur:'';
+}
+
+function passesFilter(a){
+  const fa=$('f-assignee').value, fs=$('f-status').value;
+  if (fa && a.assignee!==fa) return false;
+  if (fs && a.status!==fs) return false;
+  return true;
+}
+
+function renderTable(){
+  const body=$('act-body'); body.innerHTML='';
+  const sched = state.schedule;
+  const byId = sched ? new Map(sched.tasks.map(t=>[t.id,t])) : new Map();
+  const ro = !state.canEdit;
+  state.activities.filter(passesFilter).forEach((a)=>{
+    const idx = state.activities.indexOf(a);
+    const t = byId.get(a.id) || {};
+    const tr=document.createElement('tr');
+    const dot = `<span class="stat-dot" style="background:${(STATUS[a.status]||STATUS.todo).color}"></span>`;
+    tr.innerHTML = `
+      <td class="mono" style="font-size:11px;color:var(--g4)">${a.id}</td>
+      <td class="name"><input value="" ${ro?'disabled':''}></td>
+      <td><input value="" ${ro?'disabled':''} placeholder="trade"></td>
+      <td><input value="" ${ro?'disabled':''} placeholder="section"></td>
+      <td class="dur"><input type="number" min="0" value="${a.durationDays}" ${ro?'disabled':''}></td>
+      <td><input value="${a.predecessors.join(', ')}" ${ro?'disabled':''} placeholder="a1, a2"></td>
+      <td><input value="" ${ro?'disabled':''} placeholder="name"></td>
+      <td><select ${ro?'disabled':''}>${Object.keys(STATUS).map(s=>`<option value="${s}" ${a.status===s?'selected':''}>${STATUS[s].label}</option>`).join('')}</select></td>
+      <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.start||'—'}</td>
+      <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.end||'—'}</td>
+      <td class="mono" style="font-size:11px;color:var(--g4)">${t.totalFloat!=null?t.totalFloat+'d':'—'}</td>
+      <td>${ro?'':'<button class="row-x" title="Delete">×</button>'}</td>`;
+    const ins = tr.querySelectorAll('input,select');
+    tr.querySelector('.name input').value = a.name;
+    tr.querySelectorAll('td')[2].querySelector('input').value = a.trade;
+    tr.querySelectorAll('td')[3].querySelector('input').value = a.section;
+    tr.querySelectorAll('td')[6].querySelector('input').value = a.assignee;
+    if (!ro){
+      tr.querySelector('.name input').oninput = e => { a.name=e.target.value; };
+      tr.querySelectorAll('td')[2].querySelector('input').oninput = e => { a.trade=e.target.value; };
+      tr.querySelectorAll('td')[3].querySelector('input').oninput = e => { a.section=e.target.value; };
+      tr.querySelector('.dur input').oninput = e => { a.durationDays=Number(e.target.value)||0; debounceRecompute(); };
+      tr.querySelectorAll('td')[5].querySelector('input').oninput = e => { a.predecessors=e.target.value.split(',').map(s=>s.trim()).filter(Boolean); debounceRecompute(); };
+      tr.querySelectorAll('td')[6].querySelector('input').oninput = e => { a.assignee=e.target.value; };
+      tr.querySelector('select').onchange = e => { a.status=e.target.value; renderTable(); renderGantt(); };
+      tr.querySelector('.row-x').onclick = () => { state.activities.splice(idx,1); refreshAssigneeFilter(); renderTable(); recompute(); };
+    }
+    body.appendChild(tr);
+  });
+}
+
+let rcTimer=null;
+function debounceRecompute(){ clearTimeout(rcTimer); rcTimer=setTimeout(recompute, 450); }
+
+async function recompute(){
+  const startDate = $('ed-start').value || state.current.startDate;
+  if (!state.activities.length){ state.schedule={tasks:[],criticalPathTaskIds:[],projectEnd:startDate,projectDurationDays:0,warnings:[]}; updateStats(); renderTable(); renderGantt(); return; }
+  try {
+    const { schedule } = await api('POST', { action:'schedule', startDate, activities: state.activities });
+    state.schedule = schedule;
+    $('ed-warn').classList.toggle('hidden', !(schedule.warnings&&schedule.warnings.length));
+    $('ed-warn').textContent = (schedule.warnings||[]).join(' · ');
+  } catch(e){
+    state.schedule = null;
+    $('ed-warn').classList.remove('hidden'); $('ed-warn').textContent = '⚠ '+e.message;
+  }
+  updateStats(); refreshAssigneeFilter(); renderTable(); renderGantt();
+}
+function updateStats(){
+  const s=state.schedule;
+  $('st-count').textContent = state.activities.length;
+  $('st-end').textContent = s?s.projectEnd:'—';
+  $('st-dur').textContent = s?s.projectDurationDays+' wd':'—';
+  $('st-crit').textContent = s?s.criticalPathTaskIds.length:'—';
+}
+
+// ── weekly gantt ───────────────────────────────────────────────────────────
+function renderGantt(){
+  const g=$('gantt'); const s=state.schedule;
+  if (!s || !s.tasks.length){ g.innerHTML='<tr><td class="lbl">No activities</td></tr>'; return; }
+  const start = new Date((($('ed-start').value)||state.current.startDate)+'T00:00:00');
+  const dates = s.tasks.flatMap(t=>[t.start,t.end]).filter(Boolean).map(d=>new Date(d+'T00:00:00'));
+  const maxDate = new Date(Math.max(...dates, start.getTime()));
+  const weekOf = d => Math.floor((d - mondayOf(start)) / (7*864e5));
+  const totalWeeks = Math.max(1, weekOf(maxDate)+1);
+  // header
+  let head='<tr><th class="lbl">Activity</th>';
+  for (let w=0; w<totalWeeks; w++){ const wd=new Date(mondayOf(start).getTime()+w*7*864e5); head+=`<th class="wk">W${w+1}<br>${(wd.getMonth()+1)}/${wd.getDate()}</th>`; }
+  head+='</tr>';
+  // rows (respect current filter)
+  const byId = new Map(s.tasks.map(t=>[t.id,t]));
+  let rows='';
+  state.activities.filter(passesFilter).forEach(a=>{
+    const t=byId.get(a.id); if(!t){ return; }
+    const ws=weekOf(new Date(t.start+'T00:00:00')); const we=weekOf(new Date(t.end+'T00:00:00'));
+    let cells='';
+    for (let w=0; w<totalWeeks; w++){
+      if (w>=ws && w<=we){
+        const cls = a.status==='done'?'done':(t.onCriticalPath?'crit':'');
+        cells+=`<td class="cell"><div class="bar ${cls}"></div></td>`;
+      } else cells+='<td class="cell"></td>';
+    }
+    const lbl = `${a.name}${a.assignee?' · '+a.assignee:''}`;
+    rows+=`<tr><td class="lbl" title="${lbl}">${lbl}</td>${cells}</tr>`;
+  });
+  g.innerHTML = head+rows;
+}
+function mondayOf(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+
+// ── save / delete / export ─────────────────────────────────────────────────
+$('ed-save').onclick = async () => {
+  try {
+    await api('PATCH', { id:state.current.id, startDate:$('ed-start').value||state.current.startDate, activities: state.activities });
+    state.current.startDate = $('ed-start').value||state.current.startDate;
+    toast('Saved');
+  } catch(e){ toast(e.message, true); }
+};
+$('ed-recompute').onclick = recompute;
+$('ed-delete').onclick = async () => {
+  if (!confirm('Delete this programme? This cannot be undone.')) return;
+  try { await api('DELETE', { id:state.current.id }); toast('Deleted'); loadList(); }
+  catch(e){ toast(e.message, true); }
+};
+$('ed-print').onclick = () => window.print();
+$('ed-csv').onclick = () => {
+  const s=state.schedule; const byId=s?new Map(s.tasks.map(t=>[t.id,t])):new Map();
+  const head=['ID','Activity','Trade','Section','Days','Predecessors','Assignee','Status','Start','Finish','Float','Critical'];
+  const rows=state.activities.map(a=>{ const t=byId.get(a.id)||{}; return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':''];});
+  const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.csv'; a.click(); URL.revokeObjectURL(url);
+};
+
+// ── members ──────────────────────────────────────────────────────────────
+$('ed-members').onclick = () => { renderMembers(); $('member-modal').classList.add('show'); };
+$('m-close').onclick = () => $('member-modal').classList.remove('show');
+function renderMembers(){
+  const list=$('member-list'); list.innerHTML='';
+  const owner = state.current.ownerId;
+  const rowOwner=document.createElement('div'); rowOwner.className='mrow';
+  rowOwner.innerHTML=`<span class="mono">${owner}</span><span class="role-tag">owner · pm</span>`;
+  list.appendChild(rowOwner);
+  (state.current.members||[]).forEach(m=>{
+    if (m.userId===owner) return;
+    const row=document.createElement('div'); row.className='mrow';
+    row.innerHTML=`<span class="mono">${m.userId}</span><span><span class="role-tag">${m.role}</span> ${state.canManage?'<button class="row-x" title="Remove">×</button>':''}</span>`;
+    if (state.canManage){ row.querySelector('.row-x').onclick=async()=>{ try{ await api('PATCH',{id:state.current.id,removeMember:m.userId}); toast('Removed'); await refreshMembers(); }catch(e){toast(e.message,true);} }; }
+    list.appendChild(row);
+  });
+  $('member-add-row').classList.toggle('hidden', !state.canManage);
+}
+async function refreshMembers(){ const {programme}=await api('GET',null,'?id='+encodeURIComponent(state.current.id)); state.current.members=programme.members; $('ed-sub').textContent=`Owner ${programme.ownerId} · ${programme.members.length} member(s)`; renderMembers(); }
+$('m-add').onclick = async () => {
+  const userId=$('m-uid').value.trim(); const role=$('m-role').value;
+  if (!userId) return toast('Enter a user ID', true);
+  try { await api('PATCH',{id:state.current.id,member:{userId,role}}); $('m-uid').value=''; toast('Member saved'); await refreshMembers(); }
+  catch(e){ toast(e.message, true); }
+};
+
+boot();
+</script>
 </body>
 </html>

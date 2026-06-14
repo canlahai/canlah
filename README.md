@@ -52,7 +52,13 @@ a join table. The creator is the owner (effective `pm`). Editors can change acti
 only `pm`/owner can manage members or rename; only the owner can delete. The endpoint is
 **Pro-gated** — in per-user auth, callers need tier `pro` (admins always pass); demo and
 shared-auth modes are open. The real critical path is computed by `lib/cpm.js` over
-`lib/calendar.js` (SG working days + public holidays).
+`lib/calendar.js` (SG working days + public holidays). `POST {action:'schedule',
+activities, startDate}` runs that CPM statelessly and powers the live Gantt.
+
+The app lives at **`/programme`** (`programme.html`): a tier gate (upsell for non-Pro), a
+project list, an activity-tree editor (trade / section / duration / dependencies /
+assignee / status), a weekly Gantt with the critical path highlighted, person/status
+filters, members management, and CSV / print-to-PDF export.
 
 ## What this repo contains
 - Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`,

@@ -10,6 +10,7 @@ import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
 import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
+import { computeSchedule } from './lib/cpm.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
 import { getSentryStatus } from './lib/sentry.js';
@@ -733,6 +734,19 @@ const server = http.createServer((req, res) => {
         }
         if (req.method === 'POST') {
           const body = await parseBody(req) || {};
+          if (body.action === 'schedule') {
+            try {
+              const tasks = (body.activities || []).map((a) => ({
+                id: a.id, name: a.name,
+                durationDays: Math.max(0, Math.round(Number(a.durationDays) || 0)),
+                predecessors: (a.predecessors || []).map((p) => (typeof p === 'string' ? { id: p } : { id: p.id, type: p.type, lagDays: Number(p.lagDays) || 0 })),
+              }));
+              const schedule = computeSchedule(tasks, { startDate: body.startDate });
+              return send(res, 200, JSON.stringify({ schedule }), { 'Content-Type': 'application/json' });
+            } catch (e) {
+              return send(res, 400, JSON.stringify({ error: e.message }), { 'Content-Type': 'application/json' });
+            }
+          }
           const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
           return send(res, 200, JSON.stringify({ ok: true, programme }), { 'Content-Type': 'application/json' });
         }
