@@ -130,6 +130,29 @@ test('non-admin cannot change tiers (403)', async ({ request }) => {
   expect(res.status()).toBe(403);
 });
 
+test('Programme Planner is pro-gated: free user 403, admin 200', async ({ request }) => {
+  // Fresh free user → blocked from the Pro feature.
+  await request.post(`${BASE}/api/login`, { data: { email: 'admin@firm.com', password: 'password123' } });
+  await request.post(`${BASE}/api/users`, { data: { email: 'free@firm.com', password: 'password123', name: 'Free', role: 'user' } });
+
+  await request.post(`${BASE}/api/login`, { data: { email: 'free@firm.com', password: 'password123' } });
+  const blocked = await request.get(`${BASE}/api/programmes`);
+  expect(blocked.status()).toBe(403);
+  expect((await blocked.json()).code).toBe('pro_required');
+
+  // Admin is treated as pro → allowed.
+  await request.post(`${BASE}/api/login`, { data: { email: 'admin@firm.com', password: 'password123' } });
+  const allowed = await request.get(`${BASE}/api/programmes`);
+  expect(allowed.status()).toBe(200);
+
+  // Promote the free user to pro → now allowed too.
+  const free = (await (await request.get(`${BASE}/api/users`)).json()).users.find((u) => u.email === 'free@firm.com');
+  await request.patch(`${BASE}/api/users`, { data: { id: free.id, tier: 'pro' } });
+  await request.post(`${BASE}/api/login`, { data: { email: 'free@firm.com', password: 'password123' } });
+  const nowOk = await request.get(`${BASE}/api/programmes`);
+  expect(nowOk.status()).toBe(200);
+});
+
 test('logged-out request to a protected endpoint is 401', async ({ request }) => {
   const res = await request.get(`${BASE}/api/reports`);
   expect(res.status()).toBe(401);

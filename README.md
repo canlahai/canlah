@@ -42,6 +42,18 @@ month); Pro and admin are unlimited. The quota is enforced server-side in `/api/
 reported by `/api/config.tier`. Promote a pilot user to Pro with
 `PATCH /api/users {id, tier:'pro'}`.
 
+### Programme Planner (Pro)
+
+Collaborative construction schedules live behind `/api/programmes` (run
+`db/programmes.sql`, or it falls back to `data/programmes.json` locally). The activity
+tree is stored as a JSONB document on the programme row (last-write-wins on save);
+membership + per-user role (`pm`, `engineer`, `procurement`, `subcon`, `viewer`) live in
+a join table. The creator is the owner (effective `pm`). Editors can change activities;
+only `pm`/owner can manage members or rename; only the owner can delete. The endpoint is
+**Pro-gated** — in per-user auth, callers need tier `pro` (admins always pass); demo and
+shared-auth modes are open. The real critical path is computed by `lib/cpm.js` over
+`lib/calendar.js` (SG working days + public holidays).
+
 ## What this repo contains
 - Pillar pages: `bq-reader.html`, `site-report.html`, `hr-compliance.html`,
   `programme-planner.html`, plus `login.html`

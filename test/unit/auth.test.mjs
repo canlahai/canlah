@@ -66,17 +66,17 @@ delete process.env.NODE_ENV;
 assert.match(clearSessionCookie(), /Max-Age=0/, 'clearSessionCookie expires the cookie');
 
 // --- authCheck --------------------------------------------------------------
-assert.deepEqual(authCheck(req), { ok: true, role: 'user' }, 'authCheck accepts a valid session');
+assert.deepEqual(authCheck(req), { ok: true, role: 'user', id: 'u1' }, 'authCheck accepts a valid session (carries id)');
 assert.deepEqual(authCheck({ headers: {} }), { ok: false }, 'authCheck rejects when no auth');
 
 process.env.ADMIN_API_KEY = 'admin-secret';
-assert.deepEqual(authCheck({ headers: { 'x-api-key': 'admin-secret' } }), { ok: true, role: 'admin' }, 'admin API key accepted');
+assert.deepEqual(authCheck({ headers: { 'x-api-key': 'admin-secret' } }), { ok: true, role: 'admin', id: 'admin-key' }, 'admin API key accepted');
 assert.deepEqual(authCheck({ headers: { 'x-api-key': 'nope' } }), { ok: false }, 'wrong admin key rejected');
 delete process.env.ADMIN_API_KEY;
 
 // demo mode bypasses auth entirely
 process.env.DEMO_MODE = 'true';
-assert.deepEqual(authCheck({ headers: {} }), { ok: true, demo: true }, 'demo mode bypasses auth');
+assert.deepEqual(authCheck({ headers: {} }), { ok: true, demo: true, id: 'demo-user' }, 'demo mode bypasses auth');
 process.env.DEMO_MODE = 'false';
 
 // --- requireAuth writes the 401 -------------------------------------------
