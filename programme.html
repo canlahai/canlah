@@ -165,6 +165,7 @@
     <button class="btn" id="ed-recompute">Recompute</button>
     <div class="sep"></div>
     <button class="btn sm" id="ed-members">Members</button>
+    <button class="btn sm" id="ed-feed">Activity log</button>
     <button class="btn sm" id="ed-csv">Export CSV</button>
     <button class="btn sm" id="ed-print">Print / PDF</button>
     <button class="btn sm danger" id="ed-delete">Delete</button>
@@ -293,6 +294,16 @@
       <button class="btn" id="ac-close">Close</button>
       <button class="btn pri" id="ac-save">Save update</button>
     </div>
+  </div>
+</div>
+
+<!-- ACTIVITY LOG (programme-wide feed) -->
+<div class="modal-bg" id="feed-modal">
+  <div class="modal" style="max-width:580px;max-height:85vh;overflow:auto">
+    <h2>Activity log</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:8px">Latest updates across all activities — newest first. Click one to open it.</p>
+    <div id="feed-list"></div>
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="feed-close">Close</button></div>
   </div>
 </div>
 
@@ -571,8 +582,11 @@ $('ed-delete').onclick = async () => {
 $('ed-print').onclick = () => window.print();
 $('ed-csv').onclick = () => {
   const s=state.schedule; const byId=s?new Map(s.tasks.map(t=>[t.id,t])):new Map();
-  const head=['ID','Activity','Trade','Section','Days','Predecessors','Assignee','Status','Start','Finish','Float','Critical'];
-  const rows=state.activities.map(a=>{ const t=byId.get(a.id)||{}; return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':''];});
+  const head=['ID','Activity','Trade','Section','Days','Predecessors','Assignee','Status','Start','Finish','Float','Critical','Responsible','Checklist','Ready','Blocked reason','Parties'];
+  const rows=state.activities.map(a=>{ const t=byId.get(a.id)||{};
+    const cs=checklistSummary(a); const ck=cs?`${cs.done}/${cs.total}`:'';
+    const parties=(a.parties||[]).map(p=>`${p.role||''}:${p.who||''}`).filter(x=>x!==':').join('; ');
+    return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':'',a.responsibleParty||'',ck,activityReady(a)?'YES':'NO',a.blockedReason||'',parties];});
   const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.csv'; a.click(); URL.revokeObjectURL(url);
@@ -603,6 +617,22 @@ $('m-add').onclick = async () => {
   try { await api('PATCH',{id:state.current.id,member:{userId,role}}); $('m-uid').value=''; toast('Member saved'); await refreshMembers(); }
   catch(e){ toast(e.message, true); }
 };
+
+// ── programme-wide activity feed ───────────────────────────────────────────
+$('ed-feed').onclick = () => { renderFeed(); $('feed-modal').classList.add('show'); };
+$('feed-close').onclick = () => $('feed-modal').classList.remove('show');
+function renderFeed(){
+  const entries=[];
+  for (const a of state.activities) for (const u of (a.updates||[])) entries.push({ ...u, actId:a.id, actName:a.name });
+  entries.sort((x,y)=>(y.at||'').localeCompare(x.at||''));
+  const el=$('feed-list');
+  el.innerHTML = entries.length ? entries.map(u=>{
+    const when=u.at?new Date(u.at).toLocaleString('en-SG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    const st=u.status?` <span class="role-tag">${(STATUS[u.status]||{}).label||u.status}</span>`:'';
+    return `<div class="mrow" style="cursor:pointer" data-act="${u.actId}"><span><span class="muted mono" style="font-size:11px">${when}</span> <strong>${u.actName||u.actId}</strong> — ${u.note||''}${st}</span><span class="muted mono" style="font-size:10px">${u.role||''}</span></div>`;
+  }).join('') : '<div class="muted" style="font-size:13px">No updates yet. Open an activity’s Plan panel to add the first update.</div>';
+  el.querySelectorAll('[data-act]').forEach(row=>{ row.onclick=()=>{ $('feed-modal').classList.remove('show'); openActivity(row.dataset.act); }; });
+}
 
 // ── activity detail (collaborative) ────────────────────────────────────────
 const CK_STATES = ['pending','complied','not_complied'];

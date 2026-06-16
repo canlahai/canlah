@@ -92,6 +92,16 @@ test('collaborative activity: checklist template + blocked → readiness flags',
   await expect(page.locator('#act-body tr').first().locator('.plan-btn')).toContainText('Blocked');
   await expect(page.locator('#st-risk')).not.toHaveText('0');
 
+  // Programme-wide activity log shows the update.
+  await page.click('#ed-feed');
+  await expect(page.locator('#feed-list')).toContainText('Concrete delivery delayed');
+  await expect(page.locator('#feed-list')).toContainText('Cast slab L3');
+  await page.click('#feed-close');
+
+  // Readiness filter narrows to at-risk activities.
+  await page.selectOption('#f-risk', 'atrisk');
+  await expect(page.locator('#act-body tr')).toHaveCount(1);
+
   // Cleanup.
   page.on('dialog', (d) => d.accept());
   await page.click('#ed-delete');
