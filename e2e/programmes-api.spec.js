@@ -67,6 +67,7 @@ test('collaborative activity update: status + checklist + parties + attributed l
             { id: 'c1', item: 'Formwork inspection', status: 'complied' },
             { id: 'c2', item: 'Rebar inspection', status: 'not_complied' },
           ],
+          deliveries: [{ id: 'd1', item: 'Ready-mix G40', neededBy: '2026-07-02', responsible: 'Procurement', status: 'delayed' }],
         } },
     });
     expect(upd.status()).toBe(200);
@@ -82,6 +83,7 @@ test('collaborative activity update: status + checklist + parties + attributed l
     expect(a1.status).toBe('in_progress');
     expect(a1.checklist.length).toBe(2);
     expect(a1.parties[0].who).toBe('Raj');
+    expect(a1.deliveries[0].status).toBe('delayed');
     expect(a1.updates.length).toBe(2);
 
     // Unknown activity → 400.

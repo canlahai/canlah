@@ -283,6 +283,17 @@
       <button class="btn sm" id="ck-add">Add item</button>
     </div>
 
+    <!-- deliveries / materials -->
+    <h2 style="font-size:15px;margin-top:14px">Materials / deliveries</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Key materials with a needed-by date &amp; owner. A late/overdue delivery makes the activity "not ready".</p>
+    <div id="ac-deliveries"></div>
+    <div class="new-row" id="ac-deliv-add" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Material</label><input id="dv-item" placeholder="e.g. Ready-mix concrete G40"></div>
+      <div class="field"><label>Needed by</label><input id="dv-by" type="date"></div>
+      <div class="field"><label>Responsible</label><input id="dv-resp" placeholder="Procurement" style="min-width:120px"></div>
+      <button class="btn sm" id="dv-add">Add</button>
+    </div>
+
     <!-- update log -->
     <h2 style="font-size:15px;margin-top:14px">Update log</h2>
     <div id="ac-updates" style="max-height:160px;overflow:auto;font-size:13px"></div>
@@ -392,15 +403,26 @@ function normalise(a){
     assignee:a.assignee||'', status:a.status||'todo',
     parties:Array.isArray(a.parties)?a.parties:[],
     checklist:Array.isArray(a.checklist)?a.checklist:[],
+    deliveries:Array.isArray(a.deliveries)?a.deliveries:[],
     updates:Array.isArray(a.updates)?a.updates:[],
     blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'' };
 }
-// An activity is "ready" when every checklist item has complied (and it's not blocked).
+const todayStr = () => new Date().toISOString().slice(0,10);
+// A delivery is a problem if marked delayed, or it's past its needed-by date and not delivered.
+function deliveryLate(d){
+  if (!d) return false;
+  if (d.status==='delayed') return true;
+  if (d.status==='delivered') return false;
+  return !!(d.neededBy && d.neededBy < todayStr());
+}
+// An activity is "ready" when it's not blocked, every checklist item complied,
+// and no required delivery is late/outstanding-overdue.
 function activityReady(a){
   if (a.status==='blocked') return false;
   const cl = a.checklist||[];
-  if (!cl.length) return true;
-  return cl.every(c => (c.status||'pending')==='complied');
+  if (cl.length && !cl.every(c => (c.status||'pending')==='complied')) return false;
+  if ((a.deliveries||[]).some(deliveryLate)) return false;
+  return true;
 }
 function checklistSummary(a){
   const cl=a.checklist||[]; if(!cl.length) return null;
@@ -425,7 +447,7 @@ function nextId(){
 }
 $('ed-back').onclick = () => loadList();
 $('ed-add').onclick = () => {
-  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo', parties:[], checklist:[], updates:[], blockedReason:'', responsibleParty:'' });
+  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo', parties:[], checklist:[], deliveries:[], updates:[], blockedReason:'', responsibleParty:'' });
   renderTable(); recompute();
 };
 $('ed-start').onchange = () => recompute();
@@ -653,13 +675,14 @@ function openActivity(id){
   $('ac-party-add').classList.toggle('hidden', ro);
   $('ac-check-add').classList.toggle('hidden', ro);
   $('ac-template-row').classList.toggle('hidden', ro);
+  $('ac-deliv-add').classList.toggle('hidden', ro);
   $('ac-note-row').classList.toggle('hidden', ro);
   $('ac-save').classList.toggle('hidden', ro);
   if (CKT && !$('ck-tmpl').dataset.filled){
     $('ck-tmpl').innerHTML = CKT.listTemplates().map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
     $('ck-tmpl').dataset.filled='1';
   }
-  renderParties(a); renderChecklist(a); renderUpdates(a); renderReady(a);
+  renderParties(a); renderChecklist(a); renderDeliveries(a); renderUpdates(a); renderReady(a);
   $('activity-modal').classList.add('show');
 }
 function curAct(){ return state.activities.find(x=>x.id===acId); }
@@ -710,6 +733,31 @@ function appendChecklistItems(a, items){
 }
 $('ck-tmpl-add').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const n=appendChecklistItems(a, CKT.templateItems($('ck-tmpl').value)); toast(n?`Added ${n} item${n>1?'s':''}`:'Already on the list'); };
 $('ck-suggest').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const s=CKT.suggestChecklist(a.name,a.trade); $('ck-tmpl').value=s.key; const n=appendChecklistItems(a, s.items); toast(`${s.label}: added ${n} item${n===1?'':'s'}`); };
+
+const DV_STATES=['needed','ordered','delivered','delayed'];
+const DV_LABEL={ needed:'Needed', ordered:'Ordered', delivered:'Delivered', delayed:'Delayed' };
+const DV_COLOR={ needed:'#888882', ordered:'#7fb0e0', delivered:'#7fd1a0', delayed:'#e8a08c' };
+function renderDeliveries(a){
+  const ro=!state.canEdit; const el=$('ac-deliveries'); el.innerHTML='';
+  if(!(a.deliveries||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No materials tracked yet.</div>';
+  (a.deliveries||[]).forEach((d,i)=>{
+    const st=d.status||'needed'; const late=deliveryLate(d);
+    const row=document.createElement('div'); row.className='mrow';
+    const meta=[d.neededBy?('by '+d.neededBy):'', d.responsible||''].filter(Boolean).join(' · ');
+    const stBtn = ro?`<span style="color:${DV_COLOR[st]};font-family:'JetBrains Mono',monospace;font-size:11px">${DV_LABEL[st]}</span>`
+      :`<button class="btn sm" data-i="${i}" style="color:${DV_COLOR[st]}">${DV_LABEL[st]}</button>`;
+    row.innerHTML=`<span>${d.item||''} <span class="muted" style="font-size:11px">${meta}</span>${late?' <span style="color:#e8a08c" title="Late / overdue">⚠ late</span>':''}</span>
+      <span style="display:flex;gap:6px;align-items:center">${stBtn}${ro?'':`<button class="row-x" data-del="${i}" title="Remove">×</button>`}</span>`;
+    if(!ro){
+      row.querySelector('[data-i]').onclick=()=>{ const cur=DV_STATES.indexOf(st); d.status=DV_STATES[(cur+1)%DV_STATES.length]; renderDeliveries(a); renderReady(a); };
+      row.querySelector('[data-del]').onclick=()=>{ a.deliveries.splice(i,1); renderDeliveries(a); renderReady(a); };
+    }
+    el.appendChild(row);
+  });
+}
+$('dv-add').onclick=()=>{ const a=curAct(); if(!a) return; const item=$('dv-item').value.trim(); if(!item) return;
+  a.deliveries=a.deliveries||[]; a.deliveries.push({ id:'d'+Date.now().toString(36), item, neededBy:$('dv-by').value||'', responsible:$('dv-resp').value.trim(), status:'needed' });
+  $('dv-item').value=''; $('dv-by').value=''; $('dv-resp').value=''; renderDeliveries(a); renderReady(a); };
 function renderUpdates(a){
   const el=$('ac-updates'); const ups=a.updates||[];
   el.innerHTML = ups.length ? ups.slice().reverse().map(u=>{
@@ -723,7 +771,7 @@ $('ac-save').onclick=async()=>{
   const a=curAct(); if(!a) return;
   a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
   const note=$('ac-note').value.trim();
-  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[] };
+  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[] };
   const doUpdate = () => api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
   try {
     let r;
