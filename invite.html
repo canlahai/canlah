@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Programme invite — CanLah.ai</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#0c0c0a;--paper:#f2efe8;--yellow:#e8c027;--orange:#d95f2b;--slate:#1e1e1b;--g7:#363632;--g4:#888882;--green:#2a7a47;--red:#c0492b}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:'Syne',sans-serif;background:var(--ink);color:var(--paper);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center}
+  .card{max-width:480px;width:100%;background:var(--slate);border:1px solid var(--g7);border-radius:16px;padding:2.5rem 2rem}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
+  p{color:var(--g4);font-size:15px;line-height:1.6;margin-bottom:1rem}
+  .tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:4px 10px;border-radius:999px;border:1px solid var(--g7);color:var(--paper);margin:2px}
+  .btn{display:inline-block;background:var(--yellow);color:var(--ink);font-weight:700;border:none;text-decoration:none;padding:11px 20px;border-radius:8px;margin:6px;cursor:pointer;font-family:'Syne'}
+  .ghost{display:inline-block;color:var(--paper);text-decoration:none;border:1px solid var(--g7);padding:11px 20px;border-radius:8px;margin:6px}
+  a.link{color:var(--yellow)}
+  .err{color:#e8a08c}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="eyebrow">Programme invite</div>
+    <div id="content"><p>Loading invite…</p></div>
+  </div>
+<script>
+const $ = (id) => document.getElementById(id);
+const token = new URLSearchParams(location.search).get('t') || new URLSearchParams(location.search).get('token');
+const ACCESS_LABEL = { admin:'Admin', editor:'Editor', viewer:'Viewer (read-only)' };
+
+function render(html){ $('content').innerHTML = html; }
+
+async function main(){
+  if (!token){ render('<h1>Invalid invite</h1><p>This link is missing its invite code.</p><a class="link" href="/">← Home</a>'); return; }
+
+  // Are we signed in? (and is this the right account?)
+  let cfg = {};
+  try { cfg = await (await fetch('/api/config')).json(); } catch {}
+  const signedIn = !!(cfg.session && cfg.session.id) || cfg.demoMode;
+
+  // Fetch invite details (requires being signed in).
+  let invite = null, fetchErr = null;
+  if (signedIn){
+    const res = await fetch('/api/invites?token=' + encodeURIComponent(token));
+    if (res.ok) invite = (await res.json()).invite; else fetchErr = (await res.json().catch(()=>({}))).error || res.statusText;
+  }
+
+  if (!signedIn){
+    render(`<h1>You've been invited</h1>
+      <p>Sign in to your CanLah account to view and accept this programme invite.</p>
+      <a class="btn" href="/login?next=${encodeURIComponent(location.pathname + location.search)}">Sign in to continue</a>
+      <p style="font-size:13px;margin-top:1rem">No account yet? Ask the main contractor / your admin to create one for your email.</p>`);
+    return;
+  }
+  if (!invite){
+    render(`<h1>Invite unavailable</h1><p class="err">${fetchErr || 'This invite was not found, or it has already been used or revoked.'}</p><a class="link" href="/programme">Go to Programme Planner →</a>`);
+    return;
+  }
+  if (invite.status !== 'pending'){
+    render(`<h1>Already ${invite.status}</h1><p>This invite has already been ${invite.status}.</p><a class="btn" href="/programme">Open Programme Planner →</a>`);
+    return;
+  }
+
+  const trade = invite.tradeRole ? ` · <span class="tag">${invite.tradeRole}</span>` : '';
+  render(`<h1>${invite.programmeName || 'A programme'}</h1>
+    <p>You're invited to join as:</p>
+    <p><span class="tag">${ACCESS_LABEL[invite.accessLevel] || invite.accessLevel}</span>${trade}</p>
+    <p style="font-size:13px">Invite for <strong style="color:var(--paper)">${invite.email}</strong></p>
+    <button class="btn" id="accept">Accept &amp; join</button>
+    <a class="ghost" href="/programme">Not now</a>
+    <p id="msg" class="err" style="margin-top:1rem"></p>`);
+
+  $('accept').onclick = async () => {
+    $('accept').disabled = true; $('msg').textContent = '';
+    try {
+      const res = await fetch('/api/invites', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'accept', token }) });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok){ $('msg').textContent = data.error || 'Could not accept the invite.'; $('accept').disabled = false; return; }
+      render(`<h1>You're in 🎉</h1><p>You've joined <strong style="color:var(--paper)">${invite.programmeName||'the programme'}</strong> as ${ACCESS_LABEL[invite.accessLevel]||invite.accessLevel}.</p><a class="btn" href="/programme">Open Programme Planner →</a>`);
+    } catch(e){ $('msg').textContent = e.message; $('accept').disabled = false; }
+  };
+}
+main();
+</script>
+</body>
+</html>

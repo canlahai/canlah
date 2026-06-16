@@ -216,21 +216,37 @@
   <p class="disclaimer">⚠ AI-assisted draft — durations and the critical path are estimates; a qualified planner must verify before any submission or decision. <a href="/legal">Legal &amp; data →</a></p>
 </div>
 
-<!-- MEMBERS MODAL -->
+<!-- MEMBERS / INVITES MODAL -->
 <div class="modal-bg" id="member-modal">
-  <div class="modal">
-    <h2>Members</h2>
-    <p class="muted" style="font-size:13px;margin-bottom:8px">Owner and PMs can manage the team. Roles: pm, engineer, procurement, subcon, viewer.</p>
+  <div class="modal" style="max-width:560px;max-height:88vh;overflow:auto">
+    <h2>Team &amp; access</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Admins manage the team. <strong>Access level</strong> = what they can do (Admin / Editor / Viewer); <strong>trade role</strong> = their discipline on site.</p>
     <div class="mlist" id="member-list"></div>
-    <div class="new-row" style="margin:10px 0" id="member-add-row">
-      <div class="field"><label>User ID</label><input id="m-uid" placeholder="u-..." style="min-width:170px"></div>
-      <div class="field"><label>Role</label><select id="m-role">
-        <option value="viewer">viewer</option><option value="engineer">engineer</option>
-        <option value="procurement">procurement</option><option value="subcon">subcon</option><option value="pm">pm</option>
+
+    <!-- invite by email -->
+    <h2 style="font-size:15px;margin-top:14px">Invite by email</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Generates a shareable invite link. The person needs a CanLah account (created by an admin) under the same email; they sign in and accept.</p>
+    <div class="new-row" id="member-add-row" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Email</label><input id="m-email" type="email" placeholder="subcon@firm.sg"></div>
+      <div class="field"><label>Access</label><select id="m-access">
+        <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
       </select></div>
-      <button class="btn pri sm" id="m-add">Add / update</button>
+      <div class="field"><label>Trade role</label><select id="m-trade">
+        <option value="">—</option><option value="pm">PM</option><option value="engineer">Engineer</option>
+        <option value="procurement">Procurement</option><option value="subcon">Subcon</option><option value="supervisor">Supervisor</option>
+      </select></div>
+      <button class="btn pri sm" id="m-invite">Create invite</button>
     </div>
-    <div style="text-align:right;margin-top:8px"><button class="btn" id="m-close">Close</button></div>
+    <div id="invite-link-box" class="hidden" style="margin:8px 0;padding:10px;border:1px solid var(--g7);border-radius:8px;background:var(--g9)">
+      <div class="muted mono" style="font-size:11px;margin-bottom:4px">Shareable invite link — send it to the invitee</div>
+      <div style="display:flex;gap:6px">
+        <input id="invite-link" readonly style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px">
+        <button class="btn sm" id="invite-copy">Copy</button>
+      </div>
+    </div>
+    <div id="invite-list"></div>
+
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="m-close">Close</button></div>
   </div>
 </div>
 
@@ -381,11 +397,12 @@ async function openProgramme(id){
   const { programme } = await api('GET', null, '?id='+encodeURIComponent(id));
   state.current = programme;
   state.activities = (programme.activities||[]).map(normalise);
-  state.canEdit = ['pm','engineer','procurement','subcon'].includes(programme.role);
-  state.canManage = programme.role === 'pm';
+  const access = programme.access || programme.role;
+  state.canEdit = access==='editor' || access==='admin';
+  state.canManage = access==='admin';
   $('ed-name').textContent = programme.name;
   $('ed-sub').textContent = `Owner ${programme.ownerId} · ${programme.members.length} member(s)`;
-  $('ed-role').textContent = programme.role;
+  $('ed-role').textContent = access;
   $('ed-start').value = programme.startDate;
   $('ed-start').disabled = !state.canEdit;
   $('ed-add').classList.toggle('hidden', !state.canEdit);
@@ -617,27 +634,60 @@ $('ed-csv').onclick = () => {
 // ── members ──────────────────────────────────────────────────────────────
 $('ed-members').onclick = () => { renderMembers(); $('member-modal').classList.add('show'); };
 $('m-close').onclick = () => $('member-modal').classList.remove('show');
+async function inviteApi(method, body, qs){
+  const opt={ method, headers:{'Content-Type':'application/json'} }; if (body) opt.body=JSON.stringify(body);
+  const res=await fetch('/api/invites'+(qs||''), opt);
+  if (res.status===401){ location.href='/login'; throw new Error('Unauthorized'); }
+  const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||res.statusText); return data;
+}
+function accessTag(level){ const c={admin:'#e8c027',editor:'#7fb0e0',viewer:'#888882'}[level]||'#888882'; return `<span class="role-tag" style="color:${c};border-color:${c}">${level}</span>`; }
 function renderMembers(){
   const list=$('member-list'); list.innerHTML='';
   const owner = state.current.ownerId;
   const rowOwner=document.createElement('div'); rowOwner.className='mrow';
-  rowOwner.innerHTML=`<span class="mono">${owner}</span><span class="role-tag">owner · pm</span>`;
+  rowOwner.innerHTML=`<span class="mono">${owner}</span><span>${accessTag('admin')} <span class="role-tag">owner</span></span>`;
   list.appendChild(rowOwner);
   (state.current.members||[]).forEach(m=>{
     if (m.userId===owner) return;
     const row=document.createElement('div'); row.className='mrow';
-    row.innerHTML=`<span class="mono">${m.userId}</span><span><span class="role-tag">${m.role}</span> ${state.canManage?'<button class="row-x" title="Remove">×</button>':''}</span>`;
+    const trade = m.tradeRole?` <span class="role-tag">${m.tradeRole}</span>`:'';
+    row.innerHTML=`<span class="mono">${m.userId}</span><span>${accessTag(m.accessLevel||m.role)}${trade} ${state.canManage?'<button class="row-x" title="Remove">×</button>':''}</span>`;
     if (state.canManage){ row.querySelector('.row-x').onclick=async()=>{ try{ await api('PATCH',{id:state.current.id,removeMember:m.userId}); toast('Removed'); await refreshMembers(); }catch(e){toast(e.message,true);} }; }
     list.appendChild(row);
   });
   $('member-add-row').classList.toggle('hidden', !state.canManage);
+  $('invite-link-box').classList.add('hidden');
+  renderInvites();
+}
+async function renderInvites(){
+  const el=$('invite-list'); el.innerHTML='';
+  if (!state.canManage) return;
+  let invites=[];
+  try { invites=(await inviteApi('GET',null,'?programmeId='+encodeURIComponent(state.current.id))).invites||[]; } catch { return; }
+  if (!invites.length){ el.innerHTML='<div class="muted" style="font-size:12px;margin-top:6px">No pending invites.</div>'; return; }
+  el.innerHTML='<div class="muted mono" style="font-size:11px;margin:8px 0 4px">Pending invites</div>';
+  invites.forEach(inv=>{
+    const row=document.createElement('div'); row.className='mrow';
+    const trade=inv.tradeRole?` <span class="role-tag">${inv.tradeRole}</span>`:'';
+    row.innerHTML=`<span>${inv.email} ${accessTag(inv.accessLevel)}${trade}</span><span style="display:flex;gap:6px"><button class="btn sm" data-copy="${inv.token}">Link</button><button class="row-x" data-revoke="${inv.token}" title="Revoke">×</button></span>`;
+    row.querySelector('[data-copy]').onclick=()=>showInviteLink(inv.token);
+    row.querySelector('[data-revoke]').onclick=async()=>{ try{ await inviteApi('DELETE',{token:inv.token}); toast('Invite revoked'); renderInvites(); }catch(e){toast(e.message,true);} };
+    el.appendChild(row);
+  });
+}
+function showInviteLink(token){
+  const link=`${location.origin}/invite?t=${token}`;
+  $('invite-link').value=link; $('invite-link-box').classList.remove('hidden');
+  $('invite-copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(link); toast('Link copied'); }catch{ $('invite-link').select(); document.execCommand('copy'); toast('Link copied'); } };
 }
 async function refreshMembers(){ const {programme}=await api('GET',null,'?id='+encodeURIComponent(state.current.id)); state.current.members=programme.members; $('ed-sub').textContent=`Owner ${programme.ownerId} · ${programme.members.length} member(s)`; renderMembers(); }
-$('m-add').onclick = async () => {
-  const userId=$('m-uid').value.trim(); const role=$('m-role').value;
-  if (!userId) return toast('Enter a user ID', true);
-  try { await api('PATCH',{id:state.current.id,member:{userId,role}}); $('m-uid').value=''; toast('Member saved'); await refreshMembers(); }
-  catch(e){ toast(e.message, true); }
+$('m-invite').onclick = async () => {
+  const email=$('m-email').value.trim(); const accessLevel=$('m-access').value; const tradeRole=$('m-trade').value||undefined;
+  if (!email) return toast('Enter an email', true);
+  try {
+    const { invite } = await inviteApi('POST', { programmeId:state.current.id, email, accessLevel, tradeRole });
+    $('m-email').value=''; toast('Invite created — copy the link'); showInviteLink(invite.token); renderInvites();
+  } catch(e){ toast(e.message, true); }
 };
 
 // ── programme-wide activity feed ───────────────────────────────────────────

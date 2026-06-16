@@ -19,12 +19,13 @@ const ENGINEER = 'u-eng';
 const VIEWER = 'u-view';
 const STRANGER = 'u-stranger';
 
-// --- role helpers -----------------------------------------------------------
-assert.deepEqual(ROLES, ['pm', 'engineer', 'procurement', 'subcon', 'viewer']);
-assert.equal(canEdit('engineer'), true, 'engineer can edit');
+// --- access-level helpers ---------------------------------------------------
+assert.deepEqual(ROLES, ['admin', 'editor', 'viewer'], 'access levels');
+assert.equal(canEdit('editor'), true, 'editor can edit');
+assert.equal(canEdit('admin'), true, 'admin can edit');
 assert.equal(canEdit('viewer'), false, 'viewer cannot edit');
-assert.equal(canManage('pm'), true, 'pm can manage members');
-assert.equal(canManage('engineer'), false, 'engineer cannot manage members');
+assert.equal(canManage('admin'), true, 'admin can manage members');
+assert.equal(canManage('editor'), false, 'editor cannot manage members');
 
 // --- create validation ------------------------------------------------------
 await assert.rejects(() => createProgramme({ ownerId: OWNER, startDate: '2026-07-01' }), /name required/, 'name required');
@@ -37,7 +38,8 @@ const activities = [
   { id: 'a2', name: 'Pile cap', trade: 'Substructure', durationDays: 5, predecessors: [{ id: 'a1' }] },
 ];
 const created = await createProgramme({ name: 'Tower A', ownerId: OWNER, startDate: '2026-07-01', activities });
-assert.equal(created.role, 'pm', 'owner is effective pm');
+assert.equal(created.access, 'admin', 'owner is admin');
+assert.equal(created.role, 'admin', 'role alias mirrors access');
 assert.equal(created.ownerId, OWNER);
 assert.equal(created.activities.length, 2);
 
@@ -56,20 +58,24 @@ assert.equal(ownerList.length, 1, 'owner lists their programme');
 assert.equal(ownerList[0].activityCount, 2, 'list carries activityCount, not full activities');
 assert.equal('activities' in ownerList[0], false, 'list omits the activities payload');
 
-// --- members: pm adds, validates role ---------------------------------------
-assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, role: 'platinum' })).reason, 'invalid', 'bad role rejected');
-assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, role: 'engineer' })).ok, true, 'pm adds engineer');
-assert.equal((await setMember(created.id, OWNER, { userId: VIEWER, role: 'viewer' })).ok, true, 'pm adds viewer');
+// --- members: admin adds, validates access level + trade role ---------------
+assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, accessLevel: 'platinum' })).reason, 'invalid', 'bad access level rejected');
+assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, accessLevel: 'editor', tradeRole: 'banana' })).reason, 'invalid', 'bad trade role rejected');
+assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, accessLevel: 'editor', tradeRole: 'engineer' })).ok, true, 'admin adds editor (engineer)');
+assert.equal((await setMember(created.id, OWNER, { userId: VIEWER, accessLevel: 'viewer' })).ok, true, 'admin adds viewer');
 
 const asEng = await getProgramme(created.id, ENGINEER);
-assert.equal(asEng.role, 'engineer', 'engineer sees their role');
-assert.equal((await listProgrammesForUser(ENGINEER)).length, 1, 'engineer lists the shared programme');
+assert.equal(asEng.access, 'editor', 'editor sees their access level');
+const engMember = asEng.members.find((m) => m.userId === ENGINEER);
+assert.equal(engMember.accessLevel, 'editor', 'member carries access level');
+assert.equal(engMember.tradeRole, 'engineer', 'member carries trade role');
+assert.equal((await listProgrammesForUser(ENGINEER)).length, 1, 'editor lists the shared programme');
 
-// --- non-manager cannot add members -----------------------------------------
-assert.equal((await setMember(created.id, ENGINEER, { userId: STRANGER, role: 'viewer' })).reason, 'forbidden', 'engineer cannot manage members');
+// --- non-admin cannot add members -------------------------------------------
+assert.equal((await setMember(created.id, ENGINEER, { userId: STRANGER, accessLevel: 'viewer' })).reason, 'forbidden', 'editor cannot manage members');
 
 // --- edit permissions -------------------------------------------------------
-assert.equal((await updateProgramme(created.id, ENGINEER, { name: 'Tower A (rev)' })).ok, true, 'engineer can edit');
+assert.equal((await updateProgramme(created.id, ENGINEER, { name: 'Tower A (rev)' })).ok, true, 'editor can edit');
 assert.equal((await getProgramme(created.id, OWNER)).name, 'Tower A (rev)', 'edit persisted');
 assert.equal((await updateProgramme(created.id, VIEWER, { name: 'nope' })).reason, 'forbidden', 'viewer cannot edit');
 assert.equal((await updateProgramme(created.id, STRANGER, { name: 'nope' })).reason, 'not_found', 'stranger edit -> not_found');
@@ -101,7 +107,7 @@ assert.equal(a1.checklist.length, 2, 'checklist persisted');
 assert.equal(a1.parties[0].who, 'Raj', 'parties persisted');
 assert.equal(a1.updates.length, 1, 'update log entry appended');
 assert.equal(a1.updates[0].by, ENGINEER, 'update attributed to actor');
-assert.equal(a1.updates[0].role, 'engineer', 'update carries actor role');
+assert.equal(a1.updates[0].role, 'editor', "update carries actor's access level");
 assert.equal(a1.updates[0].status, 'blocked', 'update records the status change');
 assert.match(a1.updates[0].note, /supplier/, 'update note recorded');
 
