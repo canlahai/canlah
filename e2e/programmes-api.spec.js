@@ -50,3 +50,44 @@ test('create validation: missing name and bad date are 400s', async ({ request }
   const badDate = await request.post('/api/programmes', { data: { name: 'X', startDate: 'July' } });
   expect(badDate.status()).toBe(400);
 });
+
+test('collaborative activity update: status + checklist + parties + attributed log', async ({ request }) => {
+  const created = await request.post('/api/programmes', {
+    data: { name: 'Collab Test', startDate: '2026-07-01',
+      activities: [{ id: 'a1', name: 'Cast slab', durationDays: 3, predecessors: [] }] },
+  });
+  const id = (await created.json()).programme.id;
+  try {
+    const upd = await request.patch('/api/programmes', {
+      data: { id, activityId: 'a1', note: 'Concrete delayed — supplier issue',
+        patch: {
+          status: 'blocked', responsibleParty: 'Procurement', blockedReason: 'concrete delivery delayed',
+          parties: [{ role: 'procurement', who: 'Raj', responsibility: 'concrete delivery' }],
+          checklist: [
+            { id: 'c1', item: 'Formwork inspection', status: 'complied' },
+            { id: 'c2', item: 'Rebar inspection', status: 'not_complied' },
+          ],
+        } },
+    });
+    expect(upd.status()).toBe(200);
+    const activity = (await upd.json()).activity;
+    expect(activity.status).toBe('blocked');
+    expect(activity.updates.length).toBe(1);
+    expect(activity.updates[0].note).toMatch(/supplier/);
+
+    // Persisted + a second contributor appends rather than overwrites.
+    await request.patch('/api/programmes', { data: { id, activityId: 'a1', patch: { status: 'in_progress' }, note: 'Supplier confirmed Friday' } });
+    const one = await (await request.get(`/api/programmes?id=${id}`)).json();
+    const a1 = one.programme.activities.find((a) => a.id === 'a1');
+    expect(a1.status).toBe('in_progress');
+    expect(a1.checklist.length).toBe(2);
+    expect(a1.parties[0].who).toBe('Raj');
+    expect(a1.updates.length).toBe(2);
+
+    // Unknown activity → 400.
+    const bad = await request.patch('/api/programmes', { data: { id, activityId: 'ghost', patch: { status: 'done' } } });
+    expect(bad.status()).toBe(400);
+  } finally {
+    await request.delete('/api/programmes', { data: { id } });
+  }
+});

@@ -190,7 +190,7 @@
     <table id="act-table">
       <thead><tr>
         <th>ID</th><th>Activity</th><th>Trade</th><th>Section</th><th>Days</th>
-        <th>Predecessors</th><th>Assignee</th><th>Status</th><th>Start</th><th>Finish</th><th>Float</th><th></th>
+        <th>Predecessors</th><th>Assignee</th><th>Status</th><th>Start</th><th>Finish</th><th>Float</th><th>Plan</th><th></th>
       </tr></thead>
       <tbody id="act-body"></tbody>
     </table>
@@ -222,6 +222,64 @@
       <button class="btn pri sm" id="m-add">Add / update</button>
     </div>
     <div style="text-align:right;margin-top:8px"><button class="btn" id="m-close">Close</button></div>
+  </div>
+</div>
+
+<!-- ACTIVITY DETAIL (collaborative) -->
+<div class="modal-bg" id="activity-modal">
+  <div class="modal" style="max-width:620px;max-height:88vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <div class="muted mono" id="ac-id" style="font-size:11px">—</div>
+        <h2 id="ac-name">Activity</h2>
+      </div>
+      <span class="role-tag" id="ac-ready">—</span>
+    </div>
+
+    <!-- status + accountability -->
+    <div class="new-row" style="margin:12px 0;align-items:end">
+      <div class="field"><label>Status</label><select id="ac-status">
+        <option value="todo">To do</option><option value="in_progress">In progress</option>
+        <option value="done">Done</option><option value="blocked">Blocked</option>
+      </select></div>
+      <div class="field"><label>Responsible party</label><input id="ac-resp" placeholder="e.g. Procurement" style="min-width:160px"></div>
+      <div class="field" style="flex:1"><label>Blocked reason (if any)</label><input id="ac-blocked" placeholder="e.g. concrete delivery delayed"></div>
+    </div>
+
+    <!-- parties -->
+    <h2 style="font-size:15px;margin-top:6px">Parties involved</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Who owns which part — so a delay has a clear owner.</p>
+    <div id="ac-parties"></div>
+    <div class="new-row" id="ac-party-add" style="margin:8px 0">
+      <div class="field"><label>Role</label><select id="ap-role">
+        <option value="pm">pm</option><option value="engineer">engineer</option>
+        <option value="procurement">procurement</option><option value="subcon">subcon</option><option value="supervisor">supervisor</option>
+      </select></div>
+      <div class="field"><label>Who</label><input id="ap-who" placeholder="name" style="min-width:120px"></div>
+      <div class="field" style="flex:1"><label>Responsibility</label><input id="ap-resp" placeholder="e.g. rebar delivery"></div>
+      <button class="btn sm" id="ap-add">Add</button>
+    </div>
+
+    <!-- checklist -->
+    <h2 style="font-size:15px;margin-top:14px">Pre-task checklist / inspections</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Items that must comply before this activity proceeds (e.g. formwork &amp; rebar inspection before casting).</p>
+    <div id="ac-checklist"></div>
+    <div class="new-row" id="ac-check-add" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>New checklist item</label><input id="ck-item" placeholder="e.g. Formwork inspection"></div>
+      <button class="btn sm" id="ck-add">Add item</button>
+    </div>
+
+    <!-- update log -->
+    <h2 style="font-size:15px;margin-top:14px">Update log</h2>
+    <div id="ac-updates" style="max-height:160px;overflow:auto;font-size:13px"></div>
+    <div class="new-row" id="ac-note-row" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Add an update</label><input id="ac-note" placeholder="e.g. supplier confirmed for Friday"></div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+      <button class="btn" id="ac-close">Close</button>
+      <button class="btn pri" id="ac-save">Save update</button>
+    </div>
   </div>
 </div>
 
@@ -305,7 +363,35 @@ function normalise(a){
   return { id:a.id, name:a.name||'', trade:a.trade||'', section:a.section||'',
     durationDays:Number(a.durationDays)||0,
     predecessors:(a.predecessors||[]).map(p=>typeof p==='string'?p:p.id),
-    assignee:a.assignee||'', status:a.status||'todo' };
+    assignee:a.assignee||'', status:a.status||'todo',
+    parties:Array.isArray(a.parties)?a.parties:[],
+    checklist:Array.isArray(a.checklist)?a.checklist:[],
+    updates:Array.isArray(a.updates)?a.updates:[],
+    blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'' };
+}
+// An activity is "ready" when every checklist item has complied (and it's not blocked).
+function activityReady(a){
+  if (a.status==='blocked') return false;
+  const cl = a.checklist||[];
+  if (!cl.length) return true;
+  return cl.every(c => (c.status||'pending')==='complied');
+}
+function checklistSummary(a){
+  const cl=a.checklist||[]; if(!cl.length) return null;
+  const done=cl.filter(c=>(c.status||'pending')==='complied').length;
+  const bad=cl.filter(c=>c.status==='not_complied').length;
+  return { done, total:cl.length, bad };
+}
+function planBadge(a){
+  const np=(a.parties||[]).length, nu=(a.updates||[]).length;
+  const cs=checklistSummary(a);
+  let label, color, bg;
+  if (a.status==='blocked'){ label='🔒 Blocked'; color='#e8a08c'; bg='rgba(192,73,43,.16)'; }
+  else if (cs && cs.bad){ label=`⚠ ${cs.done}/${cs.total}`; color='#e8c08c'; bg='rgba(201,122,18,.16)'; }
+  else if (cs){ label = cs.done===cs.total ? `✓ ${cs.done}/${cs.total}` : `${cs.done}/${cs.total}`; color = cs.done===cs.total?'#7fd1a0':'#888882'; bg='rgba(42,122,71,.12)'; }
+  else { label='+ Plan'; color='#888882'; bg='transparent'; }
+  const extra = (np||nu) ? ` <span style="color:var(--g4)">·${np?` ${np}👤`:''}${nu?` ${nu}💬`:''}</span>` : '';
+  return `<button class="plan-btn" data-id="${a.id}" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--g7);background:${bg};color:${color};cursor:pointer;white-space:nowrap">${label}${extra}</button>`;
 }
 function nextId(){
   let n=1; const ids=new Set(state.activities.map(a=>a.id));
@@ -313,7 +399,7 @@ function nextId(){
 }
 $('ed-back').onclick = () => loadList();
 $('ed-add').onclick = () => {
-  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo' });
+  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo', parties:[], checklist:[], updates:[], blockedReason:'', responsibleParty:'' });
   renderTable(); recompute();
 };
 $('ed-start').onchange = () => recompute();
@@ -356,6 +442,7 @@ function renderTable(){
       <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.start||'—'}</td>
       <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.end||'—'}</td>
       <td class="mono" style="font-size:11px;color:var(--g4)">${t.totalFloat!=null?t.totalFloat+'d':'—'}</td>
+      <td>${planBadge(a)}</td>
       <td>${ro?'':'<button class="row-x" title="Delete">×</button>'}</td>`;
     const ins = tr.querySelectorAll('input,select');
     tr.querySelector('.name input').value = a.name;
@@ -372,6 +459,8 @@ function renderTable(){
       tr.querySelector('select').onchange = e => { a.status=e.target.value; renderTable(); renderGantt(); };
       tr.querySelector('.row-x').onclick = () => { state.activities.splice(idx,1); refreshAssigneeFilter(); renderTable(); recompute(); };
     }
+    const pb = tr.querySelector('.plan-btn');
+    if (pb) pb.onclick = () => openActivity(a.id);
     body.appendChild(tr);
   });
 }
@@ -482,6 +571,91 @@ $('m-add').onclick = async () => {
   if (!userId) return toast('Enter a user ID', true);
   try { await api('PATCH',{id:state.current.id,member:{userId,role}}); $('m-uid').value=''; toast('Member saved'); await refreshMembers(); }
   catch(e){ toast(e.message, true); }
+};
+
+// ── activity detail (collaborative) ────────────────────────────────────────
+const CK_STATES = ['pending','complied','not_complied'];
+const CK_LABEL = { pending:'Pending', complied:'Comply', not_complied:"Doesn't comply" };
+const CK_COLOR = { pending:'#888882', complied:'#7fd1a0', not_complied:'#e8a08c' };
+let acId = null; // activity being edited (a local working copy lives in state.activities)
+
+function openActivity(id){
+  const a = state.activities.find(x=>x.id===id); if(!a) return;
+  acId = id;
+  const ro = !state.canEdit;
+  $('ac-id').textContent = a.id;
+  $('ac-name').textContent = a.name || 'Activity';
+  $('ac-status').value = a.status || 'todo';
+  $('ac-resp').value = a.responsibleParty || '';
+  $('ac-blocked').value = a.blockedReason || '';
+  ['ac-status','ac-resp','ac-blocked','ac-note'].forEach(i=>$(i).disabled=ro);
+  $('ac-party-add').classList.toggle('hidden', ro);
+  $('ac-check-add').classList.toggle('hidden', ro);
+  $('ac-note-row').classList.toggle('hidden', ro);
+  $('ac-save').classList.toggle('hidden', ro);
+  renderParties(a); renderChecklist(a); renderUpdates(a); renderReady(a);
+  $('activity-modal').classList.add('show');
+}
+function curAct(){ return state.activities.find(x=>x.id===acId); }
+function renderReady(a){
+  const tag=$('ac-ready');
+  if (a.status==='blocked'){ tag.textContent='🔒 Blocked'; tag.style.color='#e8a08c'; }
+  else if (activityReady(a)){ tag.textContent='✓ Ready'; tag.style.color='#7fd1a0'; }
+  else { const cs=checklistSummary(a); tag.textContent = cs?`${cs.done}/${cs.total} checks`:'Not ready'; tag.style.color='#e8c08c'; }
+}
+function renderParties(a){
+  const ro=!state.canEdit; const el=$('ac-parties'); el.innerHTML='';
+  if (!(a.parties||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No parties yet.</div>';
+  (a.parties||[]).forEach((p,i)=>{
+    const row=document.createElement('div'); row.className='mrow';
+    row.innerHTML=`<span><span class="role-tag">${p.role||'—'}</span> <strong>${p.who||''}</strong> <span class="muted">${p.responsibility||''}</span></span>${ro?'':'<button class="row-x" title="Remove">×</button>'}`;
+    if(!ro) row.querySelector('.row-x').onclick=()=>{ a.parties.splice(i,1); renderParties(a); };
+    el.appendChild(row);
+  });
+}
+$('ap-add').onclick=()=>{ const a=curAct(); if(!a) return; const who=$('ap-who').value.trim();
+  a.parties=a.parties||[]; a.parties.push({ role:$('ap-role').value, who, responsibility:$('ap-resp').value.trim() });
+  $('ap-who').value=''; $('ap-resp').value=''; renderParties(a); };
+function renderChecklist(a){
+  const ro=!state.canEdit; const el=$('ac-checklist'); el.innerHTML='';
+  if (!(a.checklist||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No checklist items yet.</div>';
+  (a.checklist||[]).forEach((c,i)=>{
+    const st=c.status||'pending';
+    const row=document.createElement('div'); row.className='mrow';
+    const cycle = ro?'':`<button class="btn sm" data-i="${i}" style="color:${CK_COLOR[st]}">${CK_LABEL[st]}</button>`;
+    const msg = ro?`<span style="color:${CK_COLOR[st]};font-family:'JetBrains Mono',monospace;font-size:11px">${CK_LABEL[st]}</span>`:'';
+    row.innerHTML=`<span>${c.item||''}</span><span style="display:flex;gap:6px;align-items:center">${cycle}${msg}${ro?'':`<button class="row-x" data-del="${i}" title="Remove">×</button>`}</span>`;
+    if(!ro){
+      row.querySelector('[data-i]').onclick=()=>{ const cur=CK_STATES.indexOf(c.status||'pending'); c.status=CK_STATES[(cur+1)%CK_STATES.length]; renderChecklist(a); renderReady(a); };
+      row.querySelector('[data-del]').onclick=()=>{ a.checklist.splice(i,1); renderChecklist(a); renderReady(a); };
+    }
+    el.appendChild(row);
+  });
+}
+$('ck-add').onclick=()=>{ const a=curAct(); if(!a) return; const item=$('ck-item').value.trim(); if(!item) return;
+  a.checklist=a.checklist||[]; a.checklist.push({ id:'c'+Date.now().toString(36), item, status:'pending' });
+  $('ck-item').value=''; renderChecklist(a); renderReady(a); };
+function renderUpdates(a){
+  const el=$('ac-updates'); const ups=a.updates||[];
+  el.innerHTML = ups.length ? ups.slice().reverse().map(u=>{
+    const when = u.at ? new Date(u.at).toLocaleString('en-SG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    const st = u.status?` <span class="role-tag">${(STATUS[u.status]||{}).label||u.status}</span>`:'';
+    return `<div class="mrow"><span><span class="muted mono" style="font-size:11px">${when}</span> ${u.note||''}${st}</span><span class="muted mono" style="font-size:10px">${u.role||''}</span></div>`;
+  }).join('') : '<div class="muted" style="font-size:12px">No updates yet.</div>';
+}
+$('ac-close').onclick=()=>$('activity-modal').classList.remove('show');
+$('ac-save').onclick=async()=>{
+  const a=curAct(); if(!a) return;
+  a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
+  const note=$('ac-note').value.trim();
+  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[] };
+  try {
+    const r = await api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
+    if (r && r.activity) Object.assign(a, r.activity); // adopt server copy incl. appended log
+    $('ac-note').value='';
+    toast('Activity updated');
+    renderUpdates(a); renderReady(a); renderTable(); renderGantt();
+  } catch(e){ toast(e.message, true); }
 };
 
 boot();

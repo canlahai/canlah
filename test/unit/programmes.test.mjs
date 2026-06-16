@@ -11,7 +11,7 @@ process.env.DEV_PROGRAMMES_DIR = mkdtempSync(join(tmpdir(), 'canlah-prog-'));
 const {
   ROLES, canEdit, canManage,
   listProgrammesForUser, getProgramme, createProgramme,
-  updateProgramme, setMember, removeMember, deleteProgramme,
+  updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } = await import('../../lib/programmes.js');
 
 const OWNER = 'u-owner';
@@ -78,6 +78,45 @@ assert.equal((await updateProgramme(created.id, STRANGER, { name: 'nope' })).rea
 assert.equal((await updateProgramme(created.id, OWNER, { startDate: 'soon' })).reason, 'invalid', 'bad startDate rejected');
 assert.equal((await updateProgramme(created.id, OWNER, { activities: 'x' })).reason, 'invalid', 'activities must be array');
 assert.equal((await updateProgramme(created.id, OWNER, { activities: [{ id: 'a1', durationDays: 12 }] })).ok, true, 'activities update ok');
+
+// --- collaborative per-activity updates -------------------------------------
+// Editor (engineer) updates one activity's status + checklist + parties + note.
+const upd = await updateActivity(created.id, ENGINEER, 'a1', {
+  status: 'blocked',
+  blockedReason: 'concrete delivery delayed',
+  responsibleParty: 'Procurement',
+  parties: [{ role: 'procurement', who: 'Raj', responsibility: 'concrete delivery' }],
+  checklist: [
+    { id: 'c1', item: 'Formwork inspection', status: 'complied' },
+    { id: 'c2', item: 'Rebar inspection', status: 'not_complied' },
+  ],
+}, 'Concrete pour pushed — waiting on supplier');
+assert.equal(upd.ok, true, 'engineer can update an activity');
+
+const after = await getProgramme(created.id, OWNER);
+const a1 = after.activities.find((a) => a.id === 'a1');
+assert.equal(a1.status, 'blocked', 'status persisted');
+assert.equal(a1.responsibleParty, 'Procurement', 'responsible party persisted');
+assert.equal(a1.checklist.length, 2, 'checklist persisted');
+assert.equal(a1.parties[0].who, 'Raj', 'parties persisted');
+assert.equal(a1.updates.length, 1, 'update log entry appended');
+assert.equal(a1.updates[0].by, ENGINEER, 'update attributed to actor');
+assert.equal(a1.updates[0].role, 'engineer', 'update carries actor role');
+assert.equal(a1.updates[0].status, 'blocked', 'update records the status change');
+assert.match(a1.updates[0].note, /supplier/, 'update note recorded');
+
+// A second contributor appends to the same activity's log (collaboration).
+await updateActivity(created.id, OWNER, 'a1', { status: 'in_progress' }, 'Supplier confirmed for Friday');
+const after2 = (await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1');
+assert.equal(after2.updates.length, 2, 'second update appended, not overwritten');
+assert.equal(after2.status, 'in_progress', 'latest status wins');
+
+// Permissions + validation.
+assert.equal((await updateActivity(created.id, VIEWER, 'a1', { status: 'done' })).reason, 'forbidden', 'viewer cannot update activities');
+assert.equal((await updateActivity(created.id, STRANGER, 'a1', { status: 'done' })).reason, 'not_found', 'stranger -> not_found');
+assert.equal((await updateActivity(created.id, OWNER, 'ghost', { status: 'done' })).reason, 'invalid', 'unknown activity -> invalid');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { status: 'banana' })).reason, 'invalid', 'bad status rejected');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { checklist: 'x' })).reason, 'invalid', 'checklist must be array');
 
 // --- remove member; cannot remove owner -------------------------------------
 assert.equal((await removeMember(created.id, OWNER, OWNER)).reason, 'invalid', 'cannot remove the owner');

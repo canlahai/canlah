@@ -9,7 +9,7 @@ import { handleUpload } from '@vercel/blob/client';
 import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
-import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
+import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
 import { computeSchedule } from './lib/cpm.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
@@ -756,9 +756,10 @@ const server = http.createServer((req, res) => {
           let result;
           if (body.member) result = await setMember(body.id, uid, body.member);
           else if (body.removeMember) result = await removeMember(body.id, uid, body.removeMember);
+          else if (body.activityId) result = await updateActivity(body.id, uid, body.activityId, body.patch || {}, body.note);
           else result = await updateProgramme(body.id, uid, body);
           if (!result.ok) return send(res, reasonStatus[result.reason] || 400, JSON.stringify({ error: result.message || result.reason || 'update failed' }), { 'Content-Type': 'application/json' });
-          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify(result.activity ? { ok: true, activity: result.activity } : { ok: true }), { 'Content-Type': 'application/json' });
         }
         if (req.method === 'DELETE') {
           const body = await parseBody(req) || {};
