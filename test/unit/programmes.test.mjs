@@ -11,7 +11,7 @@ process.env.DEV_PROGRAMMES_DIR = mkdtempSync(join(tmpdir(), 'canlah-prog-'));
 const {
   ROLES, canEdit, canManage,
   listProgrammesForUser, getProgramme, createProgramme,
-  updateProgramme, setMember, removeMember, deleteProgramme,
+  updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } = await import('../../lib/programmes.js');
 
 const OWNER = 'u-owner';
@@ -19,12 +19,13 @@ const ENGINEER = 'u-eng';
 const VIEWER = 'u-view';
 const STRANGER = 'u-stranger';
 
-// --- role helpers -----------------------------------------------------------
-assert.deepEqual(ROLES, ['pm', 'engineer', 'procurement', 'subcon', 'viewer']);
-assert.equal(canEdit('engineer'), true, 'engineer can edit');
+// --- access-level helpers ---------------------------------------------------
+assert.deepEqual(ROLES, ['admin', 'editor', 'viewer'], 'access levels');
+assert.equal(canEdit('editor'), true, 'editor can edit');
+assert.equal(canEdit('admin'), true, 'admin can edit');
 assert.equal(canEdit('viewer'), false, 'viewer cannot edit');
-assert.equal(canManage('pm'), true, 'pm can manage members');
-assert.equal(canManage('engineer'), false, 'engineer cannot manage members');
+assert.equal(canManage('admin'), true, 'admin can manage members');
+assert.equal(canManage('editor'), false, 'editor cannot manage members');
 
 // --- create validation ------------------------------------------------------
 await assert.rejects(() => createProgramme({ ownerId: OWNER, startDate: '2026-07-01' }), /name required/, 'name required');
@@ -37,7 +38,8 @@ const activities = [
   { id: 'a2', name: 'Pile cap', trade: 'Substructure', durationDays: 5, predecessors: [{ id: 'a1' }] },
 ];
 const created = await createProgramme({ name: 'Tower A', ownerId: OWNER, startDate: '2026-07-01', activities });
-assert.equal(created.role, 'pm', 'owner is effective pm');
+assert.equal(created.access, 'admin', 'owner is admin');
+assert.equal(created.role, 'admin', 'role alias mirrors access');
 assert.equal(created.ownerId, OWNER);
 assert.equal(created.activities.length, 2);
 
@@ -56,20 +58,24 @@ assert.equal(ownerList.length, 1, 'owner lists their programme');
 assert.equal(ownerList[0].activityCount, 2, 'list carries activityCount, not full activities');
 assert.equal('activities' in ownerList[0], false, 'list omits the activities payload');
 
-// --- members: pm adds, validates role ---------------------------------------
-assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, role: 'platinum' })).reason, 'invalid', 'bad role rejected');
-assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, role: 'engineer' })).ok, true, 'pm adds engineer');
-assert.equal((await setMember(created.id, OWNER, { userId: VIEWER, role: 'viewer' })).ok, true, 'pm adds viewer');
+// --- members: admin adds, validates access level + trade role ---------------
+assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, accessLevel: 'platinum' })).reason, 'invalid', 'bad access level rejected');
+assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, accessLevel: 'editor', tradeRole: 'banana' })).reason, 'invalid', 'bad trade role rejected');
+assert.equal((await setMember(created.id, OWNER, { userId: ENGINEER, accessLevel: 'editor', tradeRole: 'engineer' })).ok, true, 'admin adds editor (engineer)');
+assert.equal((await setMember(created.id, OWNER, { userId: VIEWER, accessLevel: 'viewer' })).ok, true, 'admin adds viewer');
 
 const asEng = await getProgramme(created.id, ENGINEER);
-assert.equal(asEng.role, 'engineer', 'engineer sees their role');
-assert.equal((await listProgrammesForUser(ENGINEER)).length, 1, 'engineer lists the shared programme');
+assert.equal(asEng.access, 'editor', 'editor sees their access level');
+const engMember = asEng.members.find((m) => m.userId === ENGINEER);
+assert.equal(engMember.accessLevel, 'editor', 'member carries access level');
+assert.equal(engMember.tradeRole, 'engineer', 'member carries trade role');
+assert.equal((await listProgrammesForUser(ENGINEER)).length, 1, 'editor lists the shared programme');
 
-// --- non-manager cannot add members -----------------------------------------
-assert.equal((await setMember(created.id, ENGINEER, { userId: STRANGER, role: 'viewer' })).reason, 'forbidden', 'engineer cannot manage members');
+// --- non-admin cannot add members -------------------------------------------
+assert.equal((await setMember(created.id, ENGINEER, { userId: STRANGER, accessLevel: 'viewer' })).reason, 'forbidden', 'editor cannot manage members');
 
 // --- edit permissions -------------------------------------------------------
-assert.equal((await updateProgramme(created.id, ENGINEER, { name: 'Tower A (rev)' })).ok, true, 'engineer can edit');
+assert.equal((await updateProgramme(created.id, ENGINEER, { name: 'Tower A (rev)' })).ok, true, 'editor can edit');
 assert.equal((await getProgramme(created.id, OWNER)).name, 'Tower A (rev)', 'edit persisted');
 assert.equal((await updateProgramme(created.id, VIEWER, { name: 'nope' })).reason, 'forbidden', 'viewer cannot edit');
 assert.equal((await updateProgramme(created.id, STRANGER, { name: 'nope' })).reason, 'not_found', 'stranger edit -> not_found');
@@ -78,6 +84,45 @@ assert.equal((await updateProgramme(created.id, STRANGER, { name: 'nope' })).rea
 assert.equal((await updateProgramme(created.id, OWNER, { startDate: 'soon' })).reason, 'invalid', 'bad startDate rejected');
 assert.equal((await updateProgramme(created.id, OWNER, { activities: 'x' })).reason, 'invalid', 'activities must be array');
 assert.equal((await updateProgramme(created.id, OWNER, { activities: [{ id: 'a1', durationDays: 12 }] })).ok, true, 'activities update ok');
+
+// --- collaborative per-activity updates -------------------------------------
+// Editor (engineer) updates one activity's status + checklist + parties + note.
+const upd = await updateActivity(created.id, ENGINEER, 'a1', {
+  status: 'blocked',
+  blockedReason: 'concrete delivery delayed',
+  responsibleParty: 'Procurement',
+  parties: [{ role: 'procurement', who: 'Raj', responsibility: 'concrete delivery' }],
+  checklist: [
+    { id: 'c1', item: 'Formwork inspection', status: 'complied' },
+    { id: 'c2', item: 'Rebar inspection', status: 'not_complied' },
+  ],
+}, 'Concrete pour pushed — waiting on supplier');
+assert.equal(upd.ok, true, 'engineer can update an activity');
+
+const after = await getProgramme(created.id, OWNER);
+const a1 = after.activities.find((a) => a.id === 'a1');
+assert.equal(a1.status, 'blocked', 'status persisted');
+assert.equal(a1.responsibleParty, 'Procurement', 'responsible party persisted');
+assert.equal(a1.checklist.length, 2, 'checklist persisted');
+assert.equal(a1.parties[0].who, 'Raj', 'parties persisted');
+assert.equal(a1.updates.length, 1, 'update log entry appended');
+assert.equal(a1.updates[0].by, ENGINEER, 'update attributed to actor');
+assert.equal(a1.updates[0].role, 'editor', "update carries actor's access level");
+assert.equal(a1.updates[0].status, 'blocked', 'update records the status change');
+assert.match(a1.updates[0].note, /supplier/, 'update note recorded');
+
+// A second contributor appends to the same activity's log (collaboration).
+await updateActivity(created.id, OWNER, 'a1', { status: 'in_progress' }, 'Supplier confirmed for Friday');
+const after2 = (await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1');
+assert.equal(after2.updates.length, 2, 'second update appended, not overwritten');
+assert.equal(after2.status, 'in_progress', 'latest status wins');
+
+// Permissions + validation.
+assert.equal((await updateActivity(created.id, VIEWER, 'a1', { status: 'done' })).reason, 'forbidden', 'viewer cannot update activities');
+assert.equal((await updateActivity(created.id, STRANGER, 'a1', { status: 'done' })).reason, 'not_found', 'stranger -> not_found');
+assert.equal((await updateActivity(created.id, OWNER, 'ghost', { status: 'done' })).reason, 'invalid', 'unknown activity -> invalid');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { status: 'banana' })).reason, 'invalid', 'bad status rejected');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { checklist: 'x' })).reason, 'invalid', 'checklist must be array');
 
 // --- remove member; cannot remove owner -------------------------------------
 assert.equal((await removeMember(created.id, OWNER, OWNER)).reason, 'invalid', 'cannot remove the owner');

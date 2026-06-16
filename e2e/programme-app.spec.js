@@ -54,3 +54,56 @@ test('programme planner: create → edit tree → Gantt → save → delete', as
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
 });
+
+test('collaborative activity: checklist template + blocked → readiness flags', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'Collab UI');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+
+  // Add an activity and name it so the template matcher picks "concrete casting".
+  await page.click('#ed-add');
+  const row = page.locator('#act-body tr').first();
+  await row.locator('td.name input').fill('Cast slab L3');
+
+  // Open the activity detail panel via the Plan badge.
+  await row.locator('.plan-btn').click();
+  await expect(page.locator('#activity-modal')).toBeVisible();
+
+  // Suggest a checklist from the activity name → concrete template populates.
+  await page.click('#ck-suggest');
+  await expect(page.locator('#ac-checklist .mrow').first()).toBeVisible();
+  const items = await page.locator('#ac-checklist .mrow').count();
+  expect(items).toBeGreaterThan(3);
+
+  // Mark blocked with a responsible party, add an update, save.
+  await page.selectOption('#ac-status', 'blocked');
+  await page.fill('#ac-resp', 'Procurement');
+  await page.fill('#ac-note', 'Concrete delivery delayed');
+  await page.click('#ac-save');
+  await expect(page.locator('#toast')).toContainText('updated');
+
+  // Update log now shows the attributed entry.
+  await expect(page.locator('#ac-updates')).toContainText('Concrete delivery delayed');
+  await page.click('#ac-close');
+
+  // Table badge reflects blocked; the At-risk stat is non-zero.
+  await expect(page.locator('#act-body tr').first().locator('.plan-btn')).toContainText('Blocked');
+  await expect(page.locator('#st-risk')).not.toHaveText('0');
+
+  // Programme-wide activity log shows the update.
+  await page.click('#ed-feed');
+  await expect(page.locator('#feed-list')).toContainText('Concrete delivery delayed');
+  await expect(page.locator('#feed-list')).toContainText('Cast slab L3');
+  await page.click('#feed-close');
+
+  // Readiness filter narrows to at-risk activities.
+  await page.selectOption('#f-risk', 'atrisk');
+  await expect(page.locator('#act-body tr')).toHaveCount(1);
+
+  // Cleanup.
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});

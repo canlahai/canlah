@@ -16,7 +16,7 @@ import { enforceRateLimit } from '../lib/rate-limit.js';
 import { hasProAccess } from '../lib/users.js';
 import {
   listProgrammesForUser, getProgramme, createProgramme,
-  updateProgramme, setMember, removeMember, deleteProgramme,
+  updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } from '../lib/programmes.js';
 import { computeSchedule } from '../lib/cpm.js';
 import { initSentry, captureException } from '../lib/sentry.js';
@@ -80,11 +80,12 @@ export default async function handler(req, res) {
       let result;
       if (body.member) result = await setMember(body.id, uid, body.member);
       else if (body.removeMember) result = await removeMember(body.id, uid, body.removeMember);
+      else if (body.activityId) result = await updateActivity(body.id, uid, body.activityId, body.patch || {}, body.note);
       else result = await updateProgramme(body.id, uid, body);
       if (!result.ok) {
         return res.status(reasonStatus[result.reason] || 400).json({ error: result.message || result.reason || 'update failed' });
       }
-      return res.status(200).json({ ok: true });
+      return res.status(200).json(result.activity ? { ok: true, activity: result.activity } : { ok: true });
     }
 
     if (req.method === 'DELETE') {

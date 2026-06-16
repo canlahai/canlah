@@ -9,7 +9,8 @@ import { handleUpload } from '@vercel/blob/client';
 import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
-import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
+import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
+import { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } from './lib/invites.js';
 import { computeSchedule } from './lib/cpm.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
@@ -756,9 +757,10 @@ const server = http.createServer((req, res) => {
           let result;
           if (body.member) result = await setMember(body.id, uid, body.member);
           else if (body.removeMember) result = await removeMember(body.id, uid, body.removeMember);
+          else if (body.activityId) result = await updateActivity(body.id, uid, body.activityId, body.patch || {}, body.note);
           else result = await updateProgramme(body.id, uid, body);
           if (!result.ok) return send(res, reasonStatus[result.reason] || 400, JSON.stringify({ error: result.message || result.reason || 'update failed' }), { 'Content-Type': 'application/json' });
-          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify(result.activity ? { ok: true, activity: result.activity } : { ok: true }), { 'Content-Type': 'application/json' });
         }
         if (req.method === 'DELETE') {
           const body = await parseBody(req) || {};
@@ -773,6 +775,66 @@ const server = http.createServer((req, res) => {
         const msg = err?.message || 'Internal server error';
         const status = /required|must be|YYYY-MM-DD/.test(msg) ? 400 : 500;
         return send(res, status, JSON.stringify({ error: status === 400 ? msg : 'Internal server error' }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/invites') {
+    (async () => {
+      const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
+      try {
+        if (!rateLimitCheck(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
+        const caller = authCheck(req);
+        if (!(await hasProAccess(caller))) return send(res, 403, JSON.stringify({ error: 'Programme Planner is a Pro feature', code: 'pro_required' }), { 'Content-Type': 'application/json' });
+        const uid = caller.id;
+
+        if (req.method === 'GET') {
+          const token = parsedUrl.searchParams.get('token');
+          const programmeId = parsedUrl.searchParams.get('programmeId');
+          if (token) {
+            const invite = await getInvite(token);
+            if (!invite) return send(res, 404, JSON.stringify({ error: 'Invite not found' }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ invite }), { 'Content-Type': 'application/json' });
+          }
+          if (programmeId) {
+            const prog = await getProgramme(programmeId, uid);
+            if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
+            const r = await listInvites(programmeId, prog.access);
+            if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ invites: r.invites }), { 'Content-Type': 'application/json' });
+          }
+          return send(res, 400, JSON.stringify({ error: 'token or programmeId required' }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'POST') {
+          const body = await parseBody(req) || {};
+          if (body.action === 'accept') {
+            const u = await getUserById(uid).catch(() => null);
+            const r = await acceptInvite(body.token, { id: uid, email: u?.email });
+            if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ ok: true, programmeId: r.programmeId, accessLevel: r.accessLevel }), { 'Content-Type': 'application/json' });
+          }
+          const prog = await getProgramme(body.programmeId, uid);
+          if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
+          const r = await createInvite({ programmeId: body.programmeId, actorAccess: prog.access, email: body.email, accessLevel: body.accessLevel, tradeRole: body.tradeRole, invitedBy: uid });
+          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true, invite: r.invite }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'DELETE') {
+          const body = await parseBody(req) || {};
+          const token = body.token || parsedUrl.searchParams.get('token');
+          const inv = await getInvite(token);
+          if (!inv) return send(res, 404, JSON.stringify({ error: 'Invite not found' }), { 'Content-Type': 'application/json' });
+          const prog = await getProgramme(inv.programmeId, uid);
+          if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
+          const r = await revokeInvite(token, prog.access);
+          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+        return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
+      } catch (err) {
+        return send(res, 500, JSON.stringify({ error: 'Internal server error' }), { 'Content-Type': 'application/json' });
       }
     })();
     return;

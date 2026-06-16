@@ -156,6 +156,7 @@
     <div class="stat"><div class="k">Duration</div><div class="v" id="st-dur">—</div></div>
     <div class="stat"><div class="k">Activities</div><div class="v" id="st-count">—</div></div>
     <div class="stat"><div class="k">On critical path</div><div class="v crit" id="st-crit">—</div></div>
+    <div class="stat"><div class="k">At risk</div><div class="v" id="st-risk" style="color:#e8a08c">—</div></div>
   </div>
 
   <div class="toolbar">
@@ -164,6 +165,7 @@
     <button class="btn" id="ed-recompute">Recompute</button>
     <div class="sep"></div>
     <button class="btn sm" id="ed-members">Members</button>
+    <button class="btn sm" id="ed-feed">Activity log</button>
     <button class="btn sm" id="ed-csv">Export CSV</button>
     <button class="btn sm" id="ed-print">Print / PDF</button>
     <button class="btn sm danger" id="ed-delete">Delete</button>
@@ -179,6 +181,13 @@
       <option value="done">Done</option>
       <option value="blocked">Blocked</option>
     </select>
+    <select id="f-risk">
+      <option value="">All readiness</option>
+      <option value="atrisk">At risk (blocked / not ready)</option>
+      <option value="blocked">Blocked only</option>
+      <option value="notready">Not ready (checklist incomplete)</option>
+      <option value="ready">Ready</option>
+    </select>
     <span class="muted" id="start-edit" style="margin-left:auto;display:flex;gap:6px;align-items:center">
       <span class="mono">Start</span><input id="ed-start" type="date" style="padding:5px 8px">
     </span>
@@ -190,7 +199,7 @@
     <table id="act-table">
       <thead><tr>
         <th>ID</th><th>Activity</th><th>Trade</th><th>Section</th><th>Days</th>
-        <th>Predecessors</th><th>Assignee</th><th>Status</th><th>Start</th><th>Finish</th><th>Float</th><th></th>
+        <th>Predecessors</th><th>Assignee</th><th>Status</th><th>Start</th><th>Finish</th><th>Float</th><th>Plan</th><th></th>
       </tr></thead>
       <tbody id="act-body"></tbody>
     </table>
@@ -207,21 +216,121 @@
   <p class="disclaimer">⚠ AI-assisted draft — durations and the critical path are estimates; a qualified planner must verify before any submission or decision. <a href="/legal">Legal &amp; data →</a></p>
 </div>
 
-<!-- MEMBERS MODAL -->
+<!-- MEMBERS / INVITES MODAL -->
 <div class="modal-bg" id="member-modal">
-  <div class="modal">
-    <h2>Members</h2>
-    <p class="muted" style="font-size:13px;margin-bottom:8px">Owner and PMs can manage the team. Roles: pm, engineer, procurement, subcon, viewer.</p>
+  <div class="modal" style="max-width:560px;max-height:88vh;overflow:auto">
+    <h2>Team &amp; access</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Admins manage the team. <strong>Access level</strong> = what they can do (Admin / Editor / Viewer); <strong>trade role</strong> = their discipline on site.</p>
     <div class="mlist" id="member-list"></div>
-    <div class="new-row" style="margin:10px 0" id="member-add-row">
-      <div class="field"><label>User ID</label><input id="m-uid" placeholder="u-..." style="min-width:170px"></div>
-      <div class="field"><label>Role</label><select id="m-role">
-        <option value="viewer">viewer</option><option value="engineer">engineer</option>
-        <option value="procurement">procurement</option><option value="subcon">subcon</option><option value="pm">pm</option>
+
+    <!-- invite by email -->
+    <h2 style="font-size:15px;margin-top:14px">Invite by email</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Generates a shareable invite link. The person needs a CanLah account (created by an admin) under the same email; they sign in and accept.</p>
+    <div class="new-row" id="member-add-row" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Email</label><input id="m-email" type="email" placeholder="subcon@firm.sg"></div>
+      <div class="field"><label>Access</label><select id="m-access">
+        <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
       </select></div>
-      <button class="btn pri sm" id="m-add">Add / update</button>
+      <div class="field"><label>Trade role</label><select id="m-trade">
+        <option value="">—</option><option value="pm">PM</option><option value="engineer">Engineer</option>
+        <option value="procurement">Procurement</option><option value="subcon">Subcon</option><option value="supervisor">Supervisor</option>
+      </select></div>
+      <button class="btn pri sm" id="m-invite">Create invite</button>
     </div>
-    <div style="text-align:right;margin-top:8px"><button class="btn" id="m-close">Close</button></div>
+    <div id="invite-link-box" class="hidden" style="margin:8px 0;padding:10px;border:1px solid var(--g7);border-radius:8px;background:var(--g9)">
+      <div class="muted mono" style="font-size:11px;margin-bottom:4px">Shareable invite link — send it to the invitee</div>
+      <div style="display:flex;gap:6px">
+        <input id="invite-link" readonly style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px">
+        <button class="btn sm" id="invite-copy">Copy</button>
+      </div>
+    </div>
+    <div id="invite-list"></div>
+
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="m-close">Close</button></div>
+  </div>
+</div>
+
+<!-- ACTIVITY DETAIL (collaborative) -->
+<div class="modal-bg" id="activity-modal">
+  <div class="modal" style="max-width:620px;max-height:88vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <div class="muted mono" id="ac-id" style="font-size:11px">—</div>
+        <h2 id="ac-name">Activity</h2>
+      </div>
+      <span class="role-tag" id="ac-ready">—</span>
+    </div>
+
+    <!-- status + accountability -->
+    <div class="new-row" style="margin:12px 0;align-items:end">
+      <div class="field"><label>Status</label><select id="ac-status">
+        <option value="todo">To do</option><option value="in_progress">In progress</option>
+        <option value="done">Done</option><option value="blocked">Blocked</option>
+      </select></div>
+      <div class="field"><label>Responsible party</label><input id="ac-resp" placeholder="e.g. Procurement" style="min-width:160px"></div>
+      <div class="field" style="flex:1"><label>Blocked reason (if any)</label><input id="ac-blocked" placeholder="e.g. concrete delivery delayed"></div>
+    </div>
+
+    <!-- parties -->
+    <h2 style="font-size:15px;margin-top:6px">Parties involved</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Who owns which part — so a delay has a clear owner.</p>
+    <div id="ac-parties"></div>
+    <div class="new-row" id="ac-party-add" style="margin:8px 0">
+      <div class="field"><label>Role</label><select id="ap-role">
+        <option value="pm">pm</option><option value="engineer">engineer</option>
+        <option value="procurement">procurement</option><option value="subcon">subcon</option><option value="supervisor">supervisor</option>
+      </select></div>
+      <div class="field"><label>Who</label><input id="ap-who" placeholder="name" style="min-width:120px"></div>
+      <div class="field" style="flex:1"><label>Responsibility</label><input id="ap-resp" placeholder="e.g. rebar delivery"></div>
+      <button class="btn sm" id="ap-add">Add</button>
+    </div>
+
+    <!-- checklist -->
+    <h2 style="font-size:15px;margin-top:14px">Pre-task checklist / inspections</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Items that must comply before this activity proceeds (e.g. formwork &amp; rebar inspection before casting).</p>
+    <div class="new-row" id="ac-template-row" style="margin:6px 0">
+      <div class="field"><label>Apply a template</label><select id="ck-tmpl" style="min-width:170px"></select></div>
+      <button class="btn sm" id="ck-tmpl-add">Add template</button>
+      <button class="btn sm" id="ck-suggest" title="Pick a template from the activity name/trade">Suggest from activity</button>
+    </div>
+    <div id="ac-checklist"></div>
+    <div class="new-row" id="ac-check-add" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>New checklist item</label><input id="ck-item" placeholder="e.g. Formwork inspection"></div>
+      <button class="btn sm" id="ck-add">Add item</button>
+    </div>
+
+    <!-- deliveries / materials -->
+    <h2 style="font-size:15px;margin-top:14px">Materials / deliveries</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Key materials with a needed-by date &amp; owner. A late/overdue delivery makes the activity "not ready".</p>
+    <div id="ac-deliveries"></div>
+    <div class="new-row" id="ac-deliv-add" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Material</label><input id="dv-item" placeholder="e.g. Ready-mix concrete G40"></div>
+      <div class="field"><label>Needed by</label><input id="dv-by" type="date"></div>
+      <div class="field"><label>Responsible</label><input id="dv-resp" placeholder="Procurement" style="min-width:120px"></div>
+      <button class="btn sm" id="dv-add">Add</button>
+    </div>
+
+    <!-- update log -->
+    <h2 style="font-size:15px;margin-top:14px">Update log</h2>
+    <div id="ac-updates" style="max-height:160px;overflow:auto;font-size:13px"></div>
+    <div class="new-row" id="ac-note-row" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Add an update</label><input id="ac-note" placeholder="e.g. supplier confirmed for Friday"></div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+      <button class="btn" id="ac-close">Close</button>
+      <button class="btn pri" id="ac-save">Save update</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACTIVITY LOG (programme-wide feed) -->
+<div class="modal-bg" id="feed-modal">
+  <div class="modal" style="max-width:580px;max-height:85vh;overflow:auto">
+    <h2>Activity log</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:8px">Latest updates across all activities — newest first. Click one to open it.</p>
+    <div id="feed-list"></div>
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="feed-close">Close</button></div>
   </div>
 </div>
 
@@ -231,6 +340,8 @@
 const $ = (id) => document.getElementById(id);
 const STATUS = { todo:{label:'To do',color:'#888882'}, in_progress:{label:'In progress',color:'#3a6ea5'}, done:{label:'Done',color:'#2a7a47'}, blocked:{label:'Blocked',color:'#c0492b'} };
 let state = { canManage:false, canEdit:false, current:null, activities:[], schedule:null, myId:null };
+let CKT = null; // checklist-templates module (loaded lazily)
+import('/lib/checklist-templates.js').then(m => { CKT = m; }).catch(() => {});
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
 async function api(method, body, qs){
@@ -286,11 +397,12 @@ async function openProgramme(id){
   const { programme } = await api('GET', null, '?id='+encodeURIComponent(id));
   state.current = programme;
   state.activities = (programme.activities||[]).map(normalise);
-  state.canEdit = ['pm','engineer','procurement','subcon'].includes(programme.role);
-  state.canManage = programme.role === 'pm';
+  const access = programme.access || programme.role;
+  state.canEdit = access==='editor' || access==='admin';
+  state.canManage = access==='admin';
   $('ed-name').textContent = programme.name;
   $('ed-sub').textContent = `Owner ${programme.ownerId} · ${programme.members.length} member(s)`;
-  $('ed-role').textContent = programme.role;
+  $('ed-role').textContent = access;
   $('ed-start').value = programme.startDate;
   $('ed-start').disabled = !state.canEdit;
   $('ed-add').classList.toggle('hidden', !state.canEdit);
@@ -305,7 +417,46 @@ function normalise(a){
   return { id:a.id, name:a.name||'', trade:a.trade||'', section:a.section||'',
     durationDays:Number(a.durationDays)||0,
     predecessors:(a.predecessors||[]).map(p=>typeof p==='string'?p:p.id),
-    assignee:a.assignee||'', status:a.status||'todo' };
+    assignee:a.assignee||'', status:a.status||'todo',
+    parties:Array.isArray(a.parties)?a.parties:[],
+    checklist:Array.isArray(a.checklist)?a.checklist:[],
+    deliveries:Array.isArray(a.deliveries)?a.deliveries:[],
+    updates:Array.isArray(a.updates)?a.updates:[],
+    blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'' };
+}
+const todayStr = () => new Date().toISOString().slice(0,10);
+// A delivery is a problem if marked delayed, or it's past its needed-by date and not delivered.
+function deliveryLate(d){
+  if (!d) return false;
+  if (d.status==='delayed') return true;
+  if (d.status==='delivered') return false;
+  return !!(d.neededBy && d.neededBy < todayStr());
+}
+// An activity is "ready" when it's not blocked, every checklist item complied,
+// and no required delivery is late/outstanding-overdue.
+function activityReady(a){
+  if (a.status==='blocked') return false;
+  const cl = a.checklist||[];
+  if (cl.length && !cl.every(c => (c.status||'pending')==='complied')) return false;
+  if ((a.deliveries||[]).some(deliveryLate)) return false;
+  return true;
+}
+function checklistSummary(a){
+  const cl=a.checklist||[]; if(!cl.length) return null;
+  const done=cl.filter(c=>(c.status||'pending')==='complied').length;
+  const bad=cl.filter(c=>c.status==='not_complied').length;
+  return { done, total:cl.length, bad };
+}
+function planBadge(a){
+  const np=(a.parties||[]).length, nu=(a.updates||[]).length;
+  const cs=checklistSummary(a);
+  let label, color, bg;
+  if (a.status==='blocked'){ label='🔒 Blocked'; color='#e8a08c'; bg='rgba(192,73,43,.16)'; }
+  else if (cs && cs.bad){ label=`⚠ ${cs.done}/${cs.total}`; color='#e8c08c'; bg='rgba(201,122,18,.16)'; }
+  else if (cs){ label = cs.done===cs.total ? `✓ ${cs.done}/${cs.total}` : `${cs.done}/${cs.total}`; color = cs.done===cs.total?'#7fd1a0':'#888882'; bg='rgba(42,122,71,.12)'; }
+  else { label='+ Plan'; color='#888882'; bg='transparent'; }
+  const extra = (np||nu) ? ` <span style="color:var(--g4)">·${np?` ${np}👤`:''}${nu?` ${nu}💬`:''}</span>` : '';
+  return `<button class="plan-btn" data-id="${a.id}" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--g7);background:${bg};color:${color};cursor:pointer;white-space:nowrap">${label}${extra}</button>`;
 }
 function nextId(){
   let n=1; const ids=new Set(state.activities.map(a=>a.id));
@@ -313,12 +464,13 @@ function nextId(){
 }
 $('ed-back').onclick = () => loadList();
 $('ed-add').onclick = () => {
-  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo' });
+  state.activities.push({ id:nextId(), name:'New activity', trade:'', section:'', durationDays:1, predecessors:[], assignee:'', status:'todo', parties:[], checklist:[], deliveries:[], updates:[], blockedReason:'', responsibleParty:'' });
   renderTable(); recompute();
 };
 $('ed-start').onchange = () => recompute();
-$('f-assignee').onchange = renderTable;
-$('f-status').onchange = renderTable;
+$('f-assignee').onchange = () => { renderTable(); renderGantt(); };
+$('f-status').onchange = () => { renderTable(); renderGantt(); };
+$('f-risk').onchange = () => { renderTable(); renderGantt(); };
 
 function refreshAssigneeFilter(){
   const sel=$('f-assignee'); const cur=sel.value;
@@ -328,9 +480,16 @@ function refreshAssigneeFilter(){
 }
 
 function passesFilter(a){
-  const fa=$('f-assignee').value, fs=$('f-status').value;
+  const fa=$('f-assignee').value, fs=$('f-status').value, fr=$('f-risk').value;
   if (fa && a.assignee!==fa) return false;
   if (fs && a.status!==fs) return false;
+  if (fr){
+    const ready=activityReady(a), blocked=a.status==='blocked';
+    if (fr==='atrisk' && ready) return false;
+    if (fr==='blocked' && !blocked) return false;
+    if (fr==='notready' && (ready||blocked)) return false;
+    if (fr==='ready' && !ready) return false;
+  }
   return true;
 }
 
@@ -356,6 +515,7 @@ function renderTable(){
       <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.start||'—'}</td>
       <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.end||'—'}</td>
       <td class="mono" style="font-size:11px;color:var(--g4)">${t.totalFloat!=null?t.totalFloat+'d':'—'}</td>
+      <td>${planBadge(a)}</td>
       <td>${ro?'':'<button class="row-x" title="Delete">×</button>'}</td>`;
     const ins = tr.querySelectorAll('input,select');
     tr.querySelector('.name input').value = a.name;
@@ -369,9 +529,11 @@ function renderTable(){
       tr.querySelector('.dur input').oninput = e => { a.durationDays=Number(e.target.value)||0; debounceRecompute(); };
       tr.querySelectorAll('td')[5].querySelector('input').oninput = e => { a.predecessors=e.target.value.split(',').map(s=>s.trim()).filter(Boolean); debounceRecompute(); };
       tr.querySelectorAll('td')[6].querySelector('input').oninput = e => { a.assignee=e.target.value; };
-      tr.querySelector('select').onchange = e => { a.status=e.target.value; renderTable(); renderGantt(); };
+      tr.querySelector('select').onchange = e => { a.status=e.target.value; updateStats(); renderTable(); renderGantt(); };
       tr.querySelector('.row-x').onclick = () => { state.activities.splice(idx,1); refreshAssigneeFilter(); renderTable(); recompute(); };
     }
+    const pb = tr.querySelector('.plan-btn');
+    if (pb) pb.onclick = () => openActivity(a.id);
     body.appendChild(tr);
   });
 }
@@ -399,6 +561,9 @@ function updateStats(){
   $('st-end').textContent = s?s.projectEnd:'—';
   $('st-dur').textContent = s?s.projectDurationDays+' wd':'—';
   $('st-crit').textContent = s?s.criticalPathTaskIds.length:'—';
+  const atRisk = state.activities.filter(a => a.status==='blocked' || !activityReady(a)).length;
+  $('st-risk').textContent = atRisk;
+  $('st-risk').style.color = atRisk ? '#e8a08c' : 'var(--g4)';
 }
 
 // ── weekly gantt ───────────────────────────────────────────────────────────
@@ -420,15 +585,20 @@ function renderGantt(){
   state.activities.filter(passesFilter).forEach(a=>{
     const t=byId.get(a.id); if(!t){ return; }
     const ws=weekOf(new Date(t.start+'T00:00:00')); const we=weekOf(new Date(t.end+'T00:00:00'));
+    const blocked = a.status==='blocked';
+    const notReady = !blocked && !activityReady(a);
     let cells='';
     for (let w=0; w<totalWeeks; w++){
       if (w>=ws && w<=we){
         const cls = a.status==='done'?'done':(t.onCriticalPath?'crit':'');
-        cells+=`<td class="cell"><div class="bar ${cls}"></div></td>`;
+        // Blocked → red bar; not-ready (checklist incomplete) → amber dashed outline.
+        const extra = blocked ? 'background:#c0492b' : (notReady ? 'outline:1.5px dashed #e8c08c;outline-offset:-2px' : '');
+        cells+=`<td class="cell"><div class="bar ${cls}" style="${extra}"></div></td>`;
       } else cells+='<td class="cell"></td>';
     }
+    const mark = blocked ? ' 🔒' : (notReady ? ' ⚠' : '');
     const lbl = `${a.name}${a.assignee?' · '+a.assignee:''}`;
-    rows+=`<tr><td class="lbl" title="${lbl}">${lbl}</td>${cells}</tr>`;
+    rows+=`<tr><td class="lbl" title="${lbl}${blocked?' — blocked':notReady?' — checklist incomplete':''}">${lbl}${mark}</td>${cells}</tr>`;
   });
   g.innerHTML = head+rows;
 }
@@ -451,8 +621,11 @@ $('ed-delete').onclick = async () => {
 $('ed-print').onclick = () => window.print();
 $('ed-csv').onclick = () => {
   const s=state.schedule; const byId=s?new Map(s.tasks.map(t=>[t.id,t])):new Map();
-  const head=['ID','Activity','Trade','Section','Days','Predecessors','Assignee','Status','Start','Finish','Float','Critical'];
-  const rows=state.activities.map(a=>{ const t=byId.get(a.id)||{}; return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':''];});
+  const head=['ID','Activity','Trade','Section','Days','Predecessors','Assignee','Status','Start','Finish','Float','Critical','Responsible','Checklist','Ready','Blocked reason','Parties'];
+  const rows=state.activities.map(a=>{ const t=byId.get(a.id)||{};
+    const cs=checklistSummary(a); const ck=cs?`${cs.done}/${cs.total}`:'';
+    const parties=(a.parties||[]).map(p=>`${p.role||''}:${p.who||''}`).filter(x=>x!==':').join('; ');
+    return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':'',a.responsibleParty||'',ck,activityReady(a)?'YES':'NO',a.blockedReason||'',parties];});
   const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.csv'; a.click(); URL.revokeObjectURL(url);
@@ -461,27 +634,210 @@ $('ed-csv').onclick = () => {
 // ── members ──────────────────────────────────────────────────────────────
 $('ed-members').onclick = () => { renderMembers(); $('member-modal').classList.add('show'); };
 $('m-close').onclick = () => $('member-modal').classList.remove('show');
+async function inviteApi(method, body, qs){
+  const opt={ method, headers:{'Content-Type':'application/json'} }; if (body) opt.body=JSON.stringify(body);
+  const res=await fetch('/api/invites'+(qs||''), opt);
+  if (res.status===401){ location.href='/login'; throw new Error('Unauthorized'); }
+  const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||res.statusText); return data;
+}
+function accessTag(level){ const c={admin:'#e8c027',editor:'#7fb0e0',viewer:'#888882'}[level]||'#888882'; return `<span class="role-tag" style="color:${c};border-color:${c}">${level}</span>`; }
 function renderMembers(){
   const list=$('member-list'); list.innerHTML='';
   const owner = state.current.ownerId;
   const rowOwner=document.createElement('div'); rowOwner.className='mrow';
-  rowOwner.innerHTML=`<span class="mono">${owner}</span><span class="role-tag">owner · pm</span>`;
+  rowOwner.innerHTML=`<span class="mono">${owner}</span><span>${accessTag('admin')} <span class="role-tag">owner</span></span>`;
   list.appendChild(rowOwner);
   (state.current.members||[]).forEach(m=>{
     if (m.userId===owner) return;
     const row=document.createElement('div'); row.className='mrow';
-    row.innerHTML=`<span class="mono">${m.userId}</span><span><span class="role-tag">${m.role}</span> ${state.canManage?'<button class="row-x" title="Remove">×</button>':''}</span>`;
+    const trade = m.tradeRole?` <span class="role-tag">${m.tradeRole}</span>`:'';
+    row.innerHTML=`<span class="mono">${m.userId}</span><span>${accessTag(m.accessLevel||m.role)}${trade} ${state.canManage?'<button class="row-x" title="Remove">×</button>':''}</span>`;
     if (state.canManage){ row.querySelector('.row-x').onclick=async()=>{ try{ await api('PATCH',{id:state.current.id,removeMember:m.userId}); toast('Removed'); await refreshMembers(); }catch(e){toast(e.message,true);} }; }
     list.appendChild(row);
   });
   $('member-add-row').classList.toggle('hidden', !state.canManage);
+  $('invite-link-box').classList.add('hidden');
+  renderInvites();
+}
+async function renderInvites(){
+  const el=$('invite-list'); el.innerHTML='';
+  if (!state.canManage) return;
+  let invites=[];
+  try { invites=(await inviteApi('GET',null,'?programmeId='+encodeURIComponent(state.current.id))).invites||[]; } catch { return; }
+  if (!invites.length){ el.innerHTML='<div class="muted" style="font-size:12px;margin-top:6px">No pending invites.</div>'; return; }
+  el.innerHTML='<div class="muted mono" style="font-size:11px;margin:8px 0 4px">Pending invites</div>';
+  invites.forEach(inv=>{
+    const row=document.createElement('div'); row.className='mrow';
+    const trade=inv.tradeRole?` <span class="role-tag">${inv.tradeRole}</span>`:'';
+    row.innerHTML=`<span>${inv.email} ${accessTag(inv.accessLevel)}${trade}</span><span style="display:flex;gap:6px"><button class="btn sm" data-copy="${inv.token}">Link</button><button class="row-x" data-revoke="${inv.token}" title="Revoke">×</button></span>`;
+    row.querySelector('[data-copy]').onclick=()=>showInviteLink(inv.token);
+    row.querySelector('[data-revoke]').onclick=async()=>{ try{ await inviteApi('DELETE',{token:inv.token}); toast('Invite revoked'); renderInvites(); }catch(e){toast(e.message,true);} };
+    el.appendChild(row);
+  });
+}
+function showInviteLink(token){
+  const link=`${location.origin}/invite?t=${token}`;
+  $('invite-link').value=link; $('invite-link-box').classList.remove('hidden');
+  $('invite-copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(link); toast('Link copied'); }catch{ $('invite-link').select(); document.execCommand('copy'); toast('Link copied'); } };
 }
 async function refreshMembers(){ const {programme}=await api('GET',null,'?id='+encodeURIComponent(state.current.id)); state.current.members=programme.members; $('ed-sub').textContent=`Owner ${programme.ownerId} · ${programme.members.length} member(s)`; renderMembers(); }
-$('m-add').onclick = async () => {
-  const userId=$('m-uid').value.trim(); const role=$('m-role').value;
-  if (!userId) return toast('Enter a user ID', true);
-  try { await api('PATCH',{id:state.current.id,member:{userId,role}}); $('m-uid').value=''; toast('Member saved'); await refreshMembers(); }
-  catch(e){ toast(e.message, true); }
+$('m-invite').onclick = async () => {
+  const email=$('m-email').value.trim(); const accessLevel=$('m-access').value; const tradeRole=$('m-trade').value||undefined;
+  if (!email) return toast('Enter an email', true);
+  try {
+    const { invite } = await inviteApi('POST', { programmeId:state.current.id, email, accessLevel, tradeRole });
+    $('m-email').value=''; toast('Invite created — copy the link'); showInviteLink(invite.token); renderInvites();
+  } catch(e){ toast(e.message, true); }
+};
+
+// ── programme-wide activity feed ───────────────────────────────────────────
+$('ed-feed').onclick = () => { renderFeed(); $('feed-modal').classList.add('show'); };
+$('feed-close').onclick = () => $('feed-modal').classList.remove('show');
+function renderFeed(){
+  const entries=[];
+  for (const a of state.activities) for (const u of (a.updates||[])) entries.push({ ...u, actId:a.id, actName:a.name });
+  entries.sort((x,y)=>(y.at||'').localeCompare(x.at||''));
+  const el=$('feed-list');
+  el.innerHTML = entries.length ? entries.map(u=>{
+    const when=u.at?new Date(u.at).toLocaleString('en-SG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    const st=u.status?` <span class="role-tag">${(STATUS[u.status]||{}).label||u.status}</span>`:'';
+    return `<div class="mrow" style="cursor:pointer" data-act="${u.actId}"><span><span class="muted mono" style="font-size:11px">${when}</span> <strong>${u.actName||u.actId}</strong> — ${u.note||''}${st}</span><span class="muted mono" style="font-size:10px">${u.role||''}</span></div>`;
+  }).join('') : '<div class="muted" style="font-size:13px">No updates yet. Open an activity’s Plan panel to add the first update.</div>';
+  el.querySelectorAll('[data-act]').forEach(row=>{ row.onclick=()=>{ $('feed-modal').classList.remove('show'); openActivity(row.dataset.act); }; });
+}
+
+// ── activity detail (collaborative) ────────────────────────────────────────
+const CK_STATES = ['pending','complied','not_complied'];
+const CK_LABEL = { pending:'Pending', complied:'Comply', not_complied:"Doesn't comply" };
+const CK_COLOR = { pending:'#888882', complied:'#7fd1a0', not_complied:'#e8a08c' };
+let acId = null; // activity being edited (a local working copy lives in state.activities)
+
+function openActivity(id){
+  const a = state.activities.find(x=>x.id===id); if(!a) return;
+  acId = id;
+  const ro = !state.canEdit;
+  $('ac-id').textContent = a.id;
+  $('ac-name').textContent = a.name || 'Activity';
+  $('ac-status').value = a.status || 'todo';
+  $('ac-resp').value = a.responsibleParty || '';
+  $('ac-blocked').value = a.blockedReason || '';
+  ['ac-status','ac-resp','ac-blocked','ac-note'].forEach(i=>$(i).disabled=ro);
+  $('ac-party-add').classList.toggle('hidden', ro);
+  $('ac-check-add').classList.toggle('hidden', ro);
+  $('ac-template-row').classList.toggle('hidden', ro);
+  $('ac-deliv-add').classList.toggle('hidden', ro);
+  $('ac-note-row').classList.toggle('hidden', ro);
+  $('ac-save').classList.toggle('hidden', ro);
+  if (CKT && !$('ck-tmpl').dataset.filled){
+    $('ck-tmpl').innerHTML = CKT.listTemplates().map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
+    $('ck-tmpl').dataset.filled='1';
+  }
+  renderParties(a); renderChecklist(a); renderDeliveries(a); renderUpdates(a); renderReady(a);
+  $('activity-modal').classList.add('show');
+}
+function curAct(){ return state.activities.find(x=>x.id===acId); }
+function renderReady(a){
+  const tag=$('ac-ready');
+  if (a.status==='blocked'){ tag.textContent='🔒 Blocked'; tag.style.color='#e8a08c'; }
+  else if (activityReady(a)){ tag.textContent='✓ Ready'; tag.style.color='#7fd1a0'; }
+  else { const cs=checklistSummary(a); tag.textContent = cs?`${cs.done}/${cs.total} checks`:'Not ready'; tag.style.color='#e8c08c'; }
+}
+function renderParties(a){
+  const ro=!state.canEdit; const el=$('ac-parties'); el.innerHTML='';
+  if (!(a.parties||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No parties yet.</div>';
+  (a.parties||[]).forEach((p,i)=>{
+    const row=document.createElement('div'); row.className='mrow';
+    row.innerHTML=`<span><span class="role-tag">${p.role||'—'}</span> <strong>${p.who||''}</strong> <span class="muted">${p.responsibility||''}</span></span>${ro?'':'<button class="row-x" title="Remove">×</button>'}`;
+    if(!ro) row.querySelector('.row-x').onclick=()=>{ a.parties.splice(i,1); renderParties(a); };
+    el.appendChild(row);
+  });
+}
+$('ap-add').onclick=()=>{ const a=curAct(); if(!a) return; const who=$('ap-who').value.trim();
+  a.parties=a.parties||[]; a.parties.push({ role:$('ap-role').value, who, responsibility:$('ap-resp').value.trim() });
+  $('ap-who').value=''; $('ap-resp').value=''; renderParties(a); };
+function renderChecklist(a){
+  const ro=!state.canEdit; const el=$('ac-checklist'); el.innerHTML='';
+  if (!(a.checklist||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No checklist items yet.</div>';
+  (a.checklist||[]).forEach((c,i)=>{
+    const st=c.status||'pending';
+    const row=document.createElement('div'); row.className='mrow';
+    const cycle = ro?'':`<button class="btn sm" data-i="${i}" style="color:${CK_COLOR[st]}">${CK_LABEL[st]}</button>`;
+    const msg = ro?`<span style="color:${CK_COLOR[st]};font-family:'JetBrains Mono',monospace;font-size:11px">${CK_LABEL[st]}</span>`:'';
+    row.innerHTML=`<span>${c.item||''}</span><span style="display:flex;gap:6px;align-items:center">${cycle}${msg}${ro?'':`<button class="row-x" data-del="${i}" title="Remove">×</button>`}</span>`;
+    if(!ro){
+      row.querySelector('[data-i]').onclick=()=>{ const cur=CK_STATES.indexOf(c.status||'pending'); c.status=CK_STATES[(cur+1)%CK_STATES.length]; renderChecklist(a); renderReady(a); };
+      row.querySelector('[data-del]').onclick=()=>{ a.checklist.splice(i,1); renderChecklist(a); renderReady(a); };
+    }
+    el.appendChild(row);
+  });
+}
+$('ck-add').onclick=()=>{ const a=curAct(); if(!a) return; const item=$('ck-item').value.trim(); if(!item) return;
+  a.checklist=a.checklist||[]; a.checklist.push({ id:'c'+Date.now().toString(36), item, status:'pending' });
+  $('ck-item').value=''; renderChecklist(a); renderReady(a); };
+function appendChecklistItems(a, items){
+  a.checklist=a.checklist||[];
+  const have=new Set(a.checklist.map(c=>(c.item||'').toLowerCase()));
+  let added=0;
+  for(const it of items){ if(have.has(it.toLowerCase())) continue; a.checklist.push({ id:'c'+Date.now().toString(36)+(added++), item:it, status:'pending' }); }
+  renderChecklist(a); renderReady(a); return added;
+}
+$('ck-tmpl-add').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const n=appendChecklistItems(a, CKT.templateItems($('ck-tmpl').value)); toast(n?`Added ${n} item${n>1?'s':''}`:'Already on the list'); };
+$('ck-suggest').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const s=CKT.suggestChecklist(a.name,a.trade); $('ck-tmpl').value=s.key; const n=appendChecklistItems(a, s.items); toast(`${s.label}: added ${n} item${n===1?'':'s'}`); };
+
+const DV_STATES=['needed','ordered','delivered','delayed'];
+const DV_LABEL={ needed:'Needed', ordered:'Ordered', delivered:'Delivered', delayed:'Delayed' };
+const DV_COLOR={ needed:'#888882', ordered:'#7fb0e0', delivered:'#7fd1a0', delayed:'#e8a08c' };
+function renderDeliveries(a){
+  const ro=!state.canEdit; const el=$('ac-deliveries'); el.innerHTML='';
+  if(!(a.deliveries||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No materials tracked yet.</div>';
+  (a.deliveries||[]).forEach((d,i)=>{
+    const st=d.status||'needed'; const late=deliveryLate(d);
+    const row=document.createElement('div'); row.className='mrow';
+    const meta=[d.neededBy?('by '+d.neededBy):'', d.responsible||''].filter(Boolean).join(' · ');
+    const stBtn = ro?`<span style="color:${DV_COLOR[st]};font-family:'JetBrains Mono',monospace;font-size:11px">${DV_LABEL[st]}</span>`
+      :`<button class="btn sm" data-i="${i}" style="color:${DV_COLOR[st]}">${DV_LABEL[st]}</button>`;
+    row.innerHTML=`<span>${d.item||''} <span class="muted" style="font-size:11px">${meta}</span>${late?' <span style="color:#e8a08c" title="Late / overdue">⚠ late</span>':''}</span>
+      <span style="display:flex;gap:6px;align-items:center">${stBtn}${ro?'':`<button class="row-x" data-del="${i}" title="Remove">×</button>`}</span>`;
+    if(!ro){
+      row.querySelector('[data-i]').onclick=()=>{ const cur=DV_STATES.indexOf(st); d.status=DV_STATES[(cur+1)%DV_STATES.length]; renderDeliveries(a); renderReady(a); };
+      row.querySelector('[data-del]').onclick=()=>{ a.deliveries.splice(i,1); renderDeliveries(a); renderReady(a); };
+    }
+    el.appendChild(row);
+  });
+}
+$('dv-add').onclick=()=>{ const a=curAct(); if(!a) return; const item=$('dv-item').value.trim(); if(!item) return;
+  a.deliveries=a.deliveries||[]; a.deliveries.push({ id:'d'+Date.now().toString(36), item, neededBy:$('dv-by').value||'', responsible:$('dv-resp').value.trim(), status:'needed' });
+  $('dv-item').value=''; $('dv-by').value=''; $('dv-resp').value=''; renderDeliveries(a); renderReady(a); };
+function renderUpdates(a){
+  const el=$('ac-updates'); const ups=a.updates||[];
+  el.innerHTML = ups.length ? ups.slice().reverse().map(u=>{
+    const when = u.at ? new Date(u.at).toLocaleString('en-SG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    const st = u.status?` <span class="role-tag">${(STATUS[u.status]||{}).label||u.status}</span>`:'';
+    return `<div class="mrow"><span><span class="muted mono" style="font-size:11px">${when}</span> ${u.note||''}${st}</span><span class="muted mono" style="font-size:10px">${u.role||''}</span></div>`;
+  }).join('') : '<div class="muted" style="font-size:12px">No updates yet.</div>';
+}
+$('ac-close').onclick=()=>$('activity-modal').classList.remove('show');
+$('ac-save').onclick=async()=>{
+  const a=curAct(); if(!a) return;
+  a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
+  const note=$('ac-note').value.trim();
+  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[] };
+  const doUpdate = () => api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
+  try {
+    let r;
+    try { r = await doUpdate(); }
+    catch(err){
+      // New activity not persisted yet → save the whole schedule, then log.
+      if (/not found/i.test(err.message)){
+        await api('PATCH', { id:state.current.id, startDate:$('ed-start').value||state.current.startDate, activities: state.activities });
+        r = await doUpdate();
+      } else throw err;
+    }
+    if (r && r.activity) Object.assign(a, r.activity); // adopt server copy incl. appended log
+    $('ac-note').value='';
+    toast('Activity updated');
+    renderUpdates(a); renderReady(a); updateStats(); renderTable(); renderGantt();
+  } catch(e){ toast(e.message, true); }
 };
 
 boot();
