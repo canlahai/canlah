@@ -156,6 +156,7 @@
     <div class="stat"><div class="k">Duration</div><div class="v" id="st-dur">—</div></div>
     <div class="stat"><div class="k">Activities</div><div class="v" id="st-count">—</div></div>
     <div class="stat"><div class="k">On critical path</div><div class="v crit" id="st-crit">—</div></div>
+    <div class="stat"><div class="k">At risk</div><div class="v" id="st-risk" style="color:#e8a08c">—</div></div>
   </div>
 
   <div class="toolbar">
@@ -178,6 +179,13 @@
       <option value="in_progress">In progress</option>
       <option value="done">Done</option>
       <option value="blocked">Blocked</option>
+    </select>
+    <select id="f-risk">
+      <option value="">All readiness</option>
+      <option value="atrisk">At risk (blocked / not ready)</option>
+      <option value="blocked">Blocked only</option>
+      <option value="notready">Not ready (checklist incomplete)</option>
+      <option value="ready">Ready</option>
     </select>
     <span class="muted" id="start-edit" style="margin-left:auto;display:flex;gap:6px;align-items:center">
       <span class="mono">Start</span><input id="ed-start" type="date" style="padding:5px 8px">
@@ -263,6 +271,11 @@
     <!-- checklist -->
     <h2 style="font-size:15px;margin-top:14px">Pre-task checklist / inspections</h2>
     <p class="muted" style="font-size:12px;margin-bottom:6px">Items that must comply before this activity proceeds (e.g. formwork &amp; rebar inspection before casting).</p>
+    <div class="new-row" id="ac-template-row" style="margin:6px 0">
+      <div class="field"><label>Apply a template</label><select id="ck-tmpl" style="min-width:170px"></select></div>
+      <button class="btn sm" id="ck-tmpl-add">Add template</button>
+      <button class="btn sm" id="ck-suggest" title="Pick a template from the activity name/trade">Suggest from activity</button>
+    </div>
     <div id="ac-checklist"></div>
     <div class="new-row" id="ac-check-add" style="margin:8px 0">
       <div class="field" style="flex:1"><label>New checklist item</label><input id="ck-item" placeholder="e.g. Formwork inspection"></div>
@@ -289,6 +302,8 @@
 const $ = (id) => document.getElementById(id);
 const STATUS = { todo:{label:'To do',color:'#888882'}, in_progress:{label:'In progress',color:'#3a6ea5'}, done:{label:'Done',color:'#2a7a47'}, blocked:{label:'Blocked',color:'#c0492b'} };
 let state = { canManage:false, canEdit:false, current:null, activities:[], schedule:null, myId:null };
+let CKT = null; // checklist-templates module (loaded lazily)
+import('/lib/checklist-templates.js').then(m => { CKT = m; }).catch(() => {});
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
 async function api(method, body, qs){
@@ -403,8 +418,9 @@ $('ed-add').onclick = () => {
   renderTable(); recompute();
 };
 $('ed-start').onchange = () => recompute();
-$('f-assignee').onchange = renderTable;
-$('f-status').onchange = renderTable;
+$('f-assignee').onchange = () => { renderTable(); renderGantt(); };
+$('f-status').onchange = () => { renderTable(); renderGantt(); };
+$('f-risk').onchange = () => { renderTable(); renderGantt(); };
 
 function refreshAssigneeFilter(){
   const sel=$('f-assignee'); const cur=sel.value;
@@ -414,9 +430,16 @@ function refreshAssigneeFilter(){
 }
 
 function passesFilter(a){
-  const fa=$('f-assignee').value, fs=$('f-status').value;
+  const fa=$('f-assignee').value, fs=$('f-status').value, fr=$('f-risk').value;
   if (fa && a.assignee!==fa) return false;
   if (fs && a.status!==fs) return false;
+  if (fr){
+    const ready=activityReady(a), blocked=a.status==='blocked';
+    if (fr==='atrisk' && ready) return false;
+    if (fr==='blocked' && !blocked) return false;
+    if (fr==='notready' && (ready||blocked)) return false;
+    if (fr==='ready' && !ready) return false;
+  }
   return true;
 }
 
@@ -456,7 +479,7 @@ function renderTable(){
       tr.querySelector('.dur input').oninput = e => { a.durationDays=Number(e.target.value)||0; debounceRecompute(); };
       tr.querySelectorAll('td')[5].querySelector('input').oninput = e => { a.predecessors=e.target.value.split(',').map(s=>s.trim()).filter(Boolean); debounceRecompute(); };
       tr.querySelectorAll('td')[6].querySelector('input').oninput = e => { a.assignee=e.target.value; };
-      tr.querySelector('select').onchange = e => { a.status=e.target.value; renderTable(); renderGantt(); };
+      tr.querySelector('select').onchange = e => { a.status=e.target.value; updateStats(); renderTable(); renderGantt(); };
       tr.querySelector('.row-x').onclick = () => { state.activities.splice(idx,1); refreshAssigneeFilter(); renderTable(); recompute(); };
     }
     const pb = tr.querySelector('.plan-btn');
@@ -488,6 +511,9 @@ function updateStats(){
   $('st-end').textContent = s?s.projectEnd:'—';
   $('st-dur').textContent = s?s.projectDurationDays+' wd':'—';
   $('st-crit').textContent = s?s.criticalPathTaskIds.length:'—';
+  const atRisk = state.activities.filter(a => a.status==='blocked' || !activityReady(a)).length;
+  $('st-risk').textContent = atRisk;
+  $('st-risk').style.color = atRisk ? '#e8a08c' : 'var(--g4)';
 }
 
 // ── weekly gantt ───────────────────────────────────────────────────────────
@@ -509,15 +535,20 @@ function renderGantt(){
   state.activities.filter(passesFilter).forEach(a=>{
     const t=byId.get(a.id); if(!t){ return; }
     const ws=weekOf(new Date(t.start+'T00:00:00')); const we=weekOf(new Date(t.end+'T00:00:00'));
+    const blocked = a.status==='blocked';
+    const notReady = !blocked && !activityReady(a);
     let cells='';
     for (let w=0; w<totalWeeks; w++){
       if (w>=ws && w<=we){
         const cls = a.status==='done'?'done':(t.onCriticalPath?'crit':'');
-        cells+=`<td class="cell"><div class="bar ${cls}"></div></td>`;
+        // Blocked → red bar; not-ready (checklist incomplete) → amber dashed outline.
+        const extra = blocked ? 'background:#c0492b' : (notReady ? 'outline:1.5px dashed #e8c08c;outline-offset:-2px' : '');
+        cells+=`<td class="cell"><div class="bar ${cls}" style="${extra}"></div></td>`;
       } else cells+='<td class="cell"></td>';
     }
+    const mark = blocked ? ' 🔒' : (notReady ? ' ⚠' : '');
     const lbl = `${a.name}${a.assignee?' · '+a.assignee:''}`;
-    rows+=`<tr><td class="lbl" title="${lbl}">${lbl}</td>${cells}</tr>`;
+    rows+=`<tr><td class="lbl" title="${lbl}${blocked?' — blocked':notReady?' — checklist incomplete':''}">${lbl}${mark}</td>${cells}</tr>`;
   });
   g.innerHTML = head+rows;
 }
@@ -591,8 +622,13 @@ function openActivity(id){
   ['ac-status','ac-resp','ac-blocked','ac-note'].forEach(i=>$(i).disabled=ro);
   $('ac-party-add').classList.toggle('hidden', ro);
   $('ac-check-add').classList.toggle('hidden', ro);
+  $('ac-template-row').classList.toggle('hidden', ro);
   $('ac-note-row').classList.toggle('hidden', ro);
   $('ac-save').classList.toggle('hidden', ro);
+  if (CKT && !$('ck-tmpl').dataset.filled){
+    $('ck-tmpl').innerHTML = CKT.listTemplates().map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
+    $('ck-tmpl').dataset.filled='1';
+  }
   renderParties(a); renderChecklist(a); renderUpdates(a); renderReady(a);
   $('activity-modal').classList.add('show');
 }
@@ -635,6 +671,15 @@ function renderChecklist(a){
 $('ck-add').onclick=()=>{ const a=curAct(); if(!a) return; const item=$('ck-item').value.trim(); if(!item) return;
   a.checklist=a.checklist||[]; a.checklist.push({ id:'c'+Date.now().toString(36), item, status:'pending' });
   $('ck-item').value=''; renderChecklist(a); renderReady(a); };
+function appendChecklistItems(a, items){
+  a.checklist=a.checklist||[];
+  const have=new Set(a.checklist.map(c=>(c.item||'').toLowerCase()));
+  let added=0;
+  for(const it of items){ if(have.has(it.toLowerCase())) continue; a.checklist.push({ id:'c'+Date.now().toString(36)+(added++), item:it, status:'pending' }); }
+  renderChecklist(a); renderReady(a); return added;
+}
+$('ck-tmpl-add').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const n=appendChecklistItems(a, CKT.templateItems($('ck-tmpl').value)); toast(n?`Added ${n} item${n>1?'s':''}`:'Already on the list'); };
+$('ck-suggest').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const s=CKT.suggestChecklist(a.name,a.trade); $('ck-tmpl').value=s.key; const n=appendChecklistItems(a, s.items); toast(`${s.label}: added ${n} item${n===1?'':'s'}`); };
 function renderUpdates(a){
   const el=$('ac-updates'); const ups=a.updates||[];
   el.innerHTML = ups.length ? ups.slice().reverse().map(u=>{
@@ -649,12 +694,21 @@ $('ac-save').onclick=async()=>{
   a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
   const note=$('ac-note').value.trim();
   const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[] };
+  const doUpdate = () => api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
   try {
-    const r = await api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
+    let r;
+    try { r = await doUpdate(); }
+    catch(err){
+      // New activity not persisted yet → save the whole schedule, then log.
+      if (/not found/i.test(err.message)){
+        await api('PATCH', { id:state.current.id, startDate:$('ed-start').value||state.current.startDate, activities: state.activities });
+        r = await doUpdate();
+      } else throw err;
+    }
     if (r && r.activity) Object.assign(a, r.activity); // adopt server copy incl. appended log
     $('ac-note').value='';
     toast('Activity updated');
-    renderUpdates(a); renderReady(a); renderTable(); renderGantt();
+    renderUpdates(a); renderReady(a); updateStats(); renderTable(); renderGantt();
   } catch(e){ toast(e.message, true); }
 };
 
