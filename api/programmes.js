@@ -15,7 +15,7 @@ import { requireAuth, authCheck } from '../lib/auth.js';
 import { enforceRateLimit } from '../lib/rate-limit.js';
 import { hasProAccess } from '../lib/users.js';
 import {
-  listProgrammesForUser, getProgramme, createProgramme,
+  listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme,
   updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } from '../lib/programmes.js';
 import { computeSchedule } from '../lib/cpm.js';
@@ -50,11 +50,16 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const id = req.query?.id || new URL(req.url, 'http://x').searchParams.get('id');
+      const params = new URL(req.url, 'http://x').searchParams;
+      const id = req.query?.id || params.get('id');
       if (id) {
         const prog = await getProgramme(id, uid);
         if (!prog) return res.status(404).json({ error: 'Programme not found' });
         return res.status(200).json({ programme: prog });
+      }
+      const view = req.query?.view || params.get('view');
+      if (view === 'portfolio') {
+        return res.status(200).json({ programmes: await listPortfolioForUser(uid) });
       }
       return res.status(200).json({ programmes: await listProgrammesForUser(uid) });
     }

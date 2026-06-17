@@ -10,7 +10,7 @@ process.env.DEV_PROGRAMMES_DIR = mkdtempSync(join(tmpdir(), 'canlah-prog-'));
 
 const {
   ROLES, canEdit, canManage,
-  listProgrammesForUser, getProgramme, createProgramme,
+  listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme,
   updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } = await import('../../lib/programmes.js');
 
@@ -141,6 +141,33 @@ assert.equal((await updateActivity(created.id, OWNER, 'a1', { checklist: 'x' }))
 assert.equal((await removeMember(created.id, OWNER, OWNER)).reason, 'invalid', 'cannot remove the owner');
 assert.equal((await removeMember(created.id, OWNER, VIEWER)).ok, true, 'pm removes viewer');
 assert.equal(await getProgramme(created.id, VIEWER), null, 'removed viewer loses access');
+
+// --- portfolio roll-up stats ------------------------------------------------
+const PF = 'u-portfolio';
+const pfActs = [
+  { id: 'a1', name: 'Foundations', durationDays: 10, predecessors: [], status: 'done' },
+  { id: 'a2', name: 'Columns L1', durationDays: 8, predecessors: [{ id: 'a1' }], status: 'in_progress' },
+  // blocked → counts toward at-risk; not done
+  { id: 'a3', name: 'Slab L1', durationDays: 6, predecessors: [{ id: 'a2' }], status: 'blocked' },
+  // not_complied checklist → not ready → at-risk even though not blocked
+  { id: 'a4', name: 'M&E rough-in', durationDays: 5, predecessors: [{ id: 'a3' }], status: 'todo',
+    checklist: [{ item: 'permit', status: 'not_complied' }] },
+];
+const pf = await createProgramme({ name: 'Portfolio P', ownerId: PF, startDate: '2026-07-01', endDate: '2026-07-10', activities: pfActs });
+const portfolio = await listPortfolioForUser(PF);
+assert.equal(portfolio.length, 1, 'portfolio lists owned programme');
+const ps = portfolio[0].stats;
+assert.ok(ps, 'portfolio entry carries stats');
+assert.equal('activities' in portfolio[0], false, 'portfolio omits raw activities');
+assert.equal(ps.total, 4, 'stats: total activities');
+assert.equal(ps.done, 1, 'stats: done count');
+assert.equal(ps.blocked, 1, 'stats: blocked count');
+assert.equal(ps.atRisk, 2, 'stats: blocked + not-ready are at risk');
+assert.equal(ps.percentComplete, 25, 'stats: percent complete = done/total');
+assert.ok(ps.computedEnd && ps.computedEnd > '2026-07-10', 'stats: computed end past the tight target');
+assert.equal(ps.targetEnd, '2026-07-10', 'stats: target end echoed');
+assert.ok(ps.overrunDays > 0, 'stats: positive overrun vs target');
+await deleteProgramme(pf.id, PF);
 
 // --- delete: owner only -----------------------------------------------------
 assert.equal((await deleteProgramme(created.id, ENGINEER)).reason, 'forbidden', 'non-owner cannot delete');

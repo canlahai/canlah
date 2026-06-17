@@ -43,12 +43,12 @@ test('programme planner: create → edit tree → Gantt → save → delete', as
   await page.click('#ed-save');
   await expect(page.locator('#toast')).toContainText('Saved');
 
-  // Back to the list shows the card.
+  // Back to the list shows the programme on the portfolio dashboard.
   await page.click('#ed-back');
-  await expect(page.locator('#list-cards')).toContainText('E2E Planner');
+  await expect(page.locator('#pf-body')).toContainText('E2E Planner');
 
-  // Reopen and delete (auto-accept the confirm dialog).
-  await page.locator('.pcard', { hasText: 'E2E Planner' }).first().click();
+  // Reopen from the dashboard row and delete (auto-accept the confirm dialog).
+  await page.locator('#pf-body tr', { hasText: 'E2E Planner' }).first().click();
   await expect(page.locator('#view-editor')).toBeVisible();
   page.on('dialog', (d) => d.accept());
   await page.click('#ed-delete');
@@ -153,6 +153,49 @@ test('generate from profile → full SG programme as a collaborative schedule', 
   // Has the SG regulatory gates (e.g. TOP) — Gantt labels render names as text.
   await expect(page.locator('#gantt')).toContainText('TOP');
 
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('portfolio dashboard: roll-up, progress + risk stats, card toggle', async ({ page }) => {
+  await page.goto('/programme');
+
+  // Create a programme with two activities and mark one blocked → at-risk.
+  await page.fill('#np-name', 'Portfolio One');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-add');
+  await page.click('#ed-add');
+  await expect(page.locator('#act-body tr')).toHaveCount(2);
+  // Block the first activity via the detail panel.
+  await page.locator('#act-body tr').first().locator('.plan-btn').click();
+  await expect(page.locator('#activity-modal')).toBeVisible();
+  await page.selectOption('#ac-status', 'blocked');
+  await page.fill('#ac-resp', 'Procurement');
+  await page.click('#ac-save');
+  await page.click('#ac-close');
+  await page.click('#ed-save');
+  await page.click('#ed-back');
+
+  // Dashboard is the default list view: row + roll-up reflect the data.
+  await expect(page.locator('#portfolio-panel')).toBeVisible();
+  await expect(page.locator('#pf-rollup')).toContainText('programme');
+  const row = page.locator('#pf-body tr', { hasText: 'Portfolio One' }).first();
+  await expect(row).toContainText('% ·');           // progress cell
+  await expect(row.locator('.risk-pill')).toContainText('1'); // one at-risk (blocked)
+
+  // Toggle to Cards and back.
+  await page.click('#seg-cards');
+  await expect(page.locator('#list-cards')).toBeVisible();
+  await expect(page.locator('#portfolio-panel')).toBeHidden();
+  await page.click('#seg-dash');
+  await expect(page.locator('#portfolio-panel')).toBeVisible();
+
+  // Open from the dashboard row, then clean up.
+  await row.click();
+  await expect(page.locator('#view-editor')).toBeVisible();
   page.on('dialog', (d) => d.accept());
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
