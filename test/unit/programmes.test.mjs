@@ -31,6 +31,19 @@ assert.equal(canManage('editor'), false, 'editor cannot manage members');
 await assert.rejects(() => createProgramme({ ownerId: OWNER, startDate: '2026-07-01' }), /name required/, 'name required');
 await assert.rejects(() => createProgramme({ name: 'X', startDate: '2026-07-01' }), /ownerId required/, 'ownerId required');
 await assert.rejects(() => createProgramme({ name: 'X', ownerId: OWNER, startDate: 'July' }), /YYYY-MM-DD/, 'startDate format enforced');
+await assert.rejects(() => createProgramme({ name: 'X', ownerId: OWNER, startDate: '2026-07-01', endDate: 'soon' }), /endDate must be YYYY-MM-DD/, 'bad endDate rejected');
+await assert.rejects(() => createProgramme({ name: 'X', ownerId: OWNER, startDate: '2026-07-01', endDate: '2026-06-01' }), /on or after/, 'endDate before start rejected');
+
+// --- optional target end date (separate owner so list counts below stay clean) ---
+const DOWNER = 'u-dated-owner';
+const withEnd = await createProgramme({ name: 'Dated', ownerId: DOWNER, startDate: '2026-07-01', endDate: '2026-12-31' });
+assert.equal(withEnd.endDate, '2026-12-31', 'endDate stored + returned');
+assert.equal((await createProgramme({ name: 'NoEnd', ownerId: DOWNER, startDate: '2026-07-01' })).endDate, null, 'endDate optional → null');
+assert.equal((await updateProgramme(withEnd.id, DOWNER, { endDate: '2027-03-31' })).ok, true, 'endDate update ok');
+assert.equal((await getProgramme(withEnd.id, DOWNER)).endDate, '2027-03-31', 'endDate update persisted');
+assert.equal((await updateProgramme(withEnd.id, DOWNER, { endDate: 'nope' })).reason, 'invalid', 'bad endDate update rejected');
+assert.equal((await updateProgramme(withEnd.id, DOWNER, { endDate: '' })).ok, true, 'endDate can be cleared');
+assert.equal((await getProgramme(withEnd.id, DOWNER)).endDate, null, 'cleared endDate → null');
 
 // --- create + read ----------------------------------------------------------
 const activities = [

@@ -131,6 +131,7 @@
   <div class="new-row">
     <div class="field"><label>Project name</label><input id="np-name" placeholder="e.g. Tower A — main contract" style="min-width:240px"></div>
     <div class="field"><label>Start date</label><input id="np-start" type="date"></div>
+    <div class="field"><label>Target end date <span style="text-transform:none;opacity:.7">(optional)</span></label><input id="np-end" type="date"></div>
     <button class="btn pri" id="np-create">Create programme</button>
   </div>
 
@@ -152,7 +153,8 @@
   </div>
 
   <div class="ed-stats">
-    <div class="stat"><div class="k">Project end</div><div class="v" id="st-end">—</div></div>
+    <div class="stat"><div class="k">Computed end</div><div class="v" id="st-end">—</div></div>
+    <div class="stat"><div class="k">Target end</div><div class="v" id="st-target">—</div></div>
     <div class="stat"><div class="k">Duration</div><div class="v" id="st-dur">—</div></div>
     <div class="stat"><div class="k">Activities</div><div class="v" id="st-count">—</div></div>
     <div class="stat"><div class="k">On critical path</div><div class="v crit" id="st-crit">—</div></div>
@@ -188,8 +190,9 @@
       <option value="notready">Not ready (checklist incomplete)</option>
       <option value="ready">Ready</option>
     </select>
-    <span class="muted" id="start-edit" style="margin-left:auto;display:flex;gap:6px;align-items:center">
-      <span class="mono">Start</span><input id="ed-start" type="date" style="padding:5px 8px">
+    <span class="muted" id="start-edit" style="margin-left:auto;display:flex;gap:10px;align-items:center">
+      <span style="display:flex;gap:6px;align-items:center"><span class="mono">Start</span><input id="ed-start" type="date" style="padding:5px 8px"></span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="mono">Target end</span><input id="ed-end" type="date" style="padding:5px 8px"></span>
     </span>
   </div>
 
@@ -396,11 +399,12 @@ async function loadList(){
   }
 }
 $('np-create').onclick = async () => {
-  const name = $('np-name').value.trim(); const startDate = $('np-start').value;
+  const name = $('np-name').value.trim(); const startDate = $('np-start').value; const endDate = $('np-end').value || undefined;
   if (!name) return toast('Enter a project name', true);
   if (!startDate) return toast('Pick a start date', true);
-  try { const { programme } = await api('POST', { name, startDate, activities: [] });
-    $('np-name').value=''; toast('Programme created'); openProgramme(programme.id);
+  if (endDate && endDate < startDate) return toast('Target end date is before the start date', true);
+  try { const { programme } = await api('POST', { name, startDate, endDate, activities: [] });
+    $('np-name').value=''; $('np-end').value=''; toast('Programme created'); openProgramme(programme.id);
   } catch(e){ toast(e.message, true); }
 };
 
@@ -417,6 +421,9 @@ async function openProgramme(id){
   $('ed-role').textContent = access;
   $('ed-start').value = programme.startDate;
   $('ed-start').disabled = !state.canEdit;
+  $('ed-end').value = programme.endDate || '';
+  $('ed-end').disabled = !state.canEdit;
+  state.current.endDate = programme.endDate || '';
   $('ed-add').classList.toggle('hidden', !state.canEdit);
   $('ed-save').classList.toggle('hidden', !state.canEdit);
   // Delete is owner-only (also enforced server-side).
@@ -480,6 +487,12 @@ $('ed-add').onclick = () => {
   renderTable(); recompute();
 };
 $('ed-start').onchange = () => recompute();
+$('ed-end').onchange = async () => {
+  const endDate = $('ed-end').value || '';
+  if (endDate && endDate < ($('ed-start').value || state.current.startDate)) { toast('Target end is before the start date', true); $('ed-end').value = state.current.endDate || ''; return; }
+  try { await api('PATCH', { id: state.current.id, endDate }); state.current.endDate = endDate; toast('Target end saved'); updateStats(); }
+  catch(e){ toast(e.message, true); }
+};
 $('f-assignee').onchange = () => { renderTable(); renderGantt(); };
 $('f-status').onchange = () => { renderTable(); renderGantt(); };
 $('f-risk').onchange = () => { renderTable(); renderGantt(); };
@@ -573,6 +586,16 @@ function updateStats(){
   $('st-end').textContent = s?s.projectEnd:'—';
   $('st-dur').textContent = s?s.projectDurationDays+' wd':'—';
   $('st-crit').textContent = s?s.criticalPathTaskIds.length:'—';
+  // Target end + overrun check vs the computed critical-path end.
+  const target = (state.current && state.current.endDate) || '';
+  const tEl = $('st-target');
+  if (!target) { tEl.textContent = '—'; tEl.style.color = 'var(--g4)'; tEl.title = 'Set a target end date in the toolbar'; }
+  else {
+    const over = s && s.projectEnd && s.projectEnd > target;
+    tEl.textContent = target + (s && s.projectEnd ? (over ? ' ⚠' : ' ✓') : '');
+    tEl.style.color = !s||!s.projectEnd ? 'var(--paper)' : (over ? '#e8a08c' : '#7fd1a0');
+    tEl.title = !s||!s.projectEnd ? '' : (over ? `Computed end (${s.projectEnd}) is AFTER target — overrunning` : `On track — computed end (${s.projectEnd}) is on/before target`);
+  }
   const atRisk = state.activities.filter(a => a.status==='blocked' || !activityReady(a)).length;
   $('st-risk').textContent = atRisk;
   $('st-risk').style.color = atRisk ? '#e8a08c' : 'var(--g4)';

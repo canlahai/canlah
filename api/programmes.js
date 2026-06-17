@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       if (!(await hasProAccess(caller))) {
         return res.status(402).json({ error: 'Creating a programme is a Pro feature. Ask your main contractor to invite you, or upgrade to Pro.', code: 'pro_required' });
       }
-      const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
+      const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, endDate: body.endDate, activities: body.activities });
       return res.status(200).json({ ok: true, programme });
     }
 

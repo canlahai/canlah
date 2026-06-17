@@ -750,7 +750,7 @@ const server = http.createServer((req, res) => {
           if (!(await hasProAccess(caller))) {
             return send(res, 402, JSON.stringify({ error: 'Creating a programme is a Pro feature. Ask your main contractor to invite you, or upgrade to Pro.', code: 'pro_required' }), { 'Content-Type': 'application/json' });
           }
-          const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
+          const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, endDate: body.endDate, activities: body.activities });
           return send(res, 200, JSON.stringify({ ok: true, programme }), { 'Content-Type': 'application/json' });
         }
         if (req.method === 'PATCH') {
