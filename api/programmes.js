@@ -19,6 +19,7 @@ import {
   updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } from '../lib/programmes.js';
 import { computeSchedule } from '../lib/cpm.js';
+import { lookahead, resourceLoad, masterPlan } from '../lib/portfolio.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
@@ -60,6 +61,16 @@ export default async function handler(req, res) {
       const view = req.query?.view || params.get('view');
       if (view === 'portfolio') {
         return res.status(200).json({ programmes: await listPortfolioForUser(uid) });
+      }
+      if (view === 'lookahead') {
+        const days = Math.max(7, Math.min(90, Number(req.query?.days || params.get('days')) || 21));
+        return res.status(200).json(await lookahead(uid, { days }));
+      }
+      if (view === 'resources') {
+        return res.status(200).json(await resourceLoad(uid));
+      }
+      if (view === 'master') {
+        return res.status(200).json(await masterPlan(uid));
       }
       return res.status(200).json({ programmes: await listProgrammesForUser(uid) });
     }

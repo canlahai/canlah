@@ -201,6 +201,97 @@ test('portfolio dashboard: roll-up, progress + risk stats, card toggle', async (
   await expect(page.locator('#view-list')).toBeVisible();
 });
 
+test('directory: add a contact, it appears, then remove it', async ({ page }) => {
+  await page.goto('/programme');
+  await expect(page.locator('#view-list')).toBeVisible();
+  const email = `dir-${Date.now()}@firm.sg`;
+
+  await page.click('#open-directory');
+  await expect(page.locator('#directory-modal')).toBeVisible();
+  await page.fill('#dir-email', email);
+  await page.fill('#dir-name', 'Ah Seng');
+  await page.fill('#dir-company', 'Colour Low');
+  await page.selectOption('#dir-trade', 'subcon');
+  await page.click('#dir-add');
+
+  await expect(page.locator('#dir-list')).toContainText('Ah Seng');
+  await expect(page.locator('#dir-list')).toContainText(email);
+
+  // Remove (no confirm dialog on contact delete).
+  await page.locator('#dir-list .mrow', { hasText: 'Ah Seng' }).locator('.row-x').click();
+  await expect(page.locator('#dir-list')).not.toContainText(email);
+});
+
+test('multi-programme: look-ahead + resources + master with a cross-project link', async ({ page }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const tag = String(Date.now()).slice(-5);
+  const nameA = `MP Alpha ${tag}`, nameB = `MP Beta ${tag}`;
+
+  // Helper: create a programme with one assigned, dated activity. Returns in list view.
+  async function makeProgramme(name, actName) {
+    await page.goto('/programme');
+    await page.fill('#np-name', name);
+    await page.fill('#np-start', today);
+    await page.click('#np-create');
+    await expect(page.locator('#view-editor')).toBeVisible();
+    await page.click('#ed-add');
+    const row = page.locator('#act-body tr').first();
+    await row.locator('td.name input').fill(actName);
+    await row.locator('td.dur input').fill('5');
+    await row.locator('td').nth(6).locator('input').fill('Ah Seng'); // assignee column
+  }
+
+  // Programme A — fully saved (so it can be a link target).
+  await makeProgramme(nameA, 'Alpha pour');
+  await page.click('#ed-save');
+  await page.click('#ed-back');
+  await expect(page.locator('#pf-body')).toContainText(nameA); // pfCache now holds A
+
+  // Programme B — depends on A's activity (cross-project link).
+  await makeProgramme(nameB, 'Beta deck');
+  await page.locator('#act-body tr').first().locator('.plan-btn').click();
+  await expect(page.locator('#activity-modal')).toBeVisible();
+  await page.selectOption('#dep-prog', { label: nameA });
+  await expect(page.locator('#dep-act option', { hasText: 'Alpha pour' })).toHaveCount(1);
+  await page.selectOption('#dep-act', { label: 'Alpha pour' });
+  await page.click('#dep-add');
+  await expect(page.locator('#ac-deps')).toContainText('Alpha pour');
+  await page.click('#ac-close');
+  await page.click('#ed-save'); // persists assignee + externalDeps
+  await page.click('#ed-back');
+
+  // Look-ahead: both activities land in the 3-week window.
+  await page.click('#seg-lookahead');
+  await expect(page.locator('#lookahead-panel')).toBeVisible();
+  await expect(page.locator('#la-body')).toContainText('Alpha pour');
+  await expect(page.locator('#la-body')).toContainText('Beta deck');
+
+  // Resources: Ah Seng committed on both → flagged as a double-booking.
+  await page.click('#seg-resources');
+  await expect(page.locator('#resources-panel')).toBeVisible();
+  await expect(page.locator('#res-body')).toContainText('Ah Seng');
+  await expect(page.locator('#res-summary')).toContainText('double-booking');
+  await expect(page.locator('#res-body .res-clash')).toHaveCount(1);
+
+  // Master: both programmes on the timeline + a breached cross-project link.
+  await page.click('#seg-master');
+  await expect(page.locator('#master-panel')).toBeVisible();
+  await expect(page.locator('#mp-timeline')).toContainText(nameA);
+  await expect(page.locator('#mp-timeline')).toContainText(nameB);
+  await expect(page.locator('#mp-links')).toContainText('Alpha pour');
+  await expect(page.locator('#mp-links .lk-breached')).toHaveCount(1);
+
+  // Cleanup both programmes.
+  page.on('dialog', (d) => d.accept());
+  for (const nm of [nameA, nameB]) {
+    await page.click('#seg-dash');
+    await page.locator('#pf-body tr', { hasText: nm }).first().click();
+    await expect(page.locator('#view-editor')).toBeVisible();
+    await page.click('#ed-delete');
+    await expect(page.locator('#view-list')).toBeVisible();
+  }
+});
+
 test('upload scope-of-works → AI reads works + durations → programme', async ({ page }) => {
   await page.goto('/programme');
   await page.click('#np-scope');

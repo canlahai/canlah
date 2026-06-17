@@ -63,6 +63,23 @@
   .risk-pill{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
   .risk-0{color:#7fd1a0;background:rgba(42,122,71,.14)}
   .risk-n{color:#e8a08c;background:rgba(192,73,43,.16)}
+  /* look-ahead / resources / master shared rows */
+  .la-week{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px}
+  .la-row,.res-row,.lk-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--g8);border-radius:9px;margin-bottom:6px;background:var(--g9)}
+  .la-row .when{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--g4);min-width:104px}
+  .tag-prog{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-family:'JetBrains Mono',monospace;color:#7fb0e0;border:1px solid var(--g7);border-radius:999px;padding:1px 7px}
+  .flag-late{color:#e8c08c;font-size:11px;font-family:'JetBrains Mono',monospace}
+  .flag-over{color:#e8a08c;font-size:11px;font-family:'JetBrains Mono',monospace}
+  .flag-crit{color:var(--orange);font-size:11px;font-family:'JetBrains Mono',monospace}
+  .res-clash{color:#e8a08c}
+  .res-detail{margin:2px 0 10px 12px;border-left:2px solid var(--g8);padding-left:12px}
+  /* master timeline */
+  .mp-lane{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--g8)}
+  .mp-lane .nm{min-width:160px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+  .mp-track{position:relative;flex:1;height:16px;background:var(--g8);border-radius:999px;min-width:200px}
+  .mp-track>span{position:absolute;top:0;bottom:0;background:var(--blue);border-radius:999px;opacity:.85}
+  .mp-dates{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g4);min-width:150px;text-align:right}
+  .lk-breached{border-color:#c0492b;background:rgba(192,73,43,.10)}
   /* editor */
   .ed-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
   .ed-stats{display:flex;gap:22px;flex-wrap:wrap;margin:10px 0 18px}
@@ -159,8 +176,10 @@
 <!-- PROJECT LIST -->
 <div id="view-list" class="wrap hidden">
   <div class="eyebrow">// Programme Planner</div>
-  <h1>Your programmes</h1>
-  <p class="muted">Collaborative schedules with a computed critical path.</p>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div><h1>Your programmes</h1><p class="muted">Collaborative schedules with a computed critical path.</p></div>
+    <button class="btn" id="open-directory" title="Your reusable subcontractor / contact directory">👥 Directory</button>
+  </div>
 
   <div class="new-row">
     <div class="field"><label>Project name</label><input id="np-name" placeholder="e.g. Tower A — main contract" style="min-width:240px"></div>
@@ -176,6 +195,9 @@
     <div id="pf-rollup" class="pf-rollup"></div>
     <div class="seg" role="tablist">
       <button id="seg-dash" class="seg-btn on" role="tab">📊 Dashboard</button>
+      <button id="seg-lookahead" class="seg-btn" role="tab">📅 Look-ahead</button>
+      <button id="seg-resources" class="seg-btn" role="tab">👷 Resources</button>
+      <button id="seg-master" class="seg-btn" role="tab">🔗 Master</button>
       <button id="seg-cards" class="seg-btn" role="tab">▦ Cards</button>
     </div>
   </div>
@@ -190,8 +212,56 @@
     </table>
   </div>
 
+  <!-- LOOK-AHEAD: what's starting / due soon, across all programmes -->
+  <div id="lookahead-panel" class="hidden">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span class="muted mono" style="font-size:11px">Horizon</span>
+      <select id="la-horizon" style="padding:6px 8px">
+        <option value="7">1 week</option><option value="14">2 weeks</option>
+        <option value="21" selected>3 weeks</option><option value="42">6 weeks</option>
+      </select>
+      <span class="muted" id="la-range" style="font-size:12px"></span>
+    </div>
+    <div id="la-body"></div>
+  </div>
+
+  <!-- RESOURCES: who is committed where, double-bookings flagged -->
+  <div id="resources-panel" class="hidden">
+    <div class="muted" id="res-summary" style="font-size:13px;margin-bottom:10px"></div>
+    <div id="res-body"></div>
+  </div>
+
+  <!-- MASTER: all programmes on one date axis + cross-project dependencies -->
+  <div id="master-panel" class="hidden">
+    <div class="muted" id="mp-summary" style="font-size:13px;margin-bottom:10px"></div>
+    <div id="mp-timeline" class="tbl-wrap" style="margin-bottom:16px"></div>
+    <h3 style="font-size:14px;margin:0 0 8px">Cross-project dependencies</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:8px">Link an activity to one in another programme from that activity's detail panel (the 🔗 section). A red link means the later job is scheduled to start before the one it depends on finishes.</p>
+    <div id="mp-links"></div>
+  </div>
+
   <div id="list-cards" class="cards hidden"></div>
   <div id="list-empty" class="empty hidden">No programmes yet — create your first one above.</div>
+</div>
+
+<!-- DIRECTORY MODAL (subcontractor / contact address book) -->
+<div class="modal-bg" id="directory-modal">
+  <div class="modal" style="max-width:600px;max-height:88vh;overflow:auto">
+    <h2>👥 Directory</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Your reusable address book of subcontractors, consultants and people. Saved contacts auto-suggest when you invite someone to a programme.</p>
+    <div class="new-row" id="dir-add-row" style="margin:8px 0">
+      <div class="field" style="flex:1;min-width:160px"><label>Email</label><input id="dir-email" type="email" placeholder="sub@firm.sg"></div>
+      <div class="field"><label>Name</label><input id="dir-name" placeholder="Ah Seng"></div>
+      <div class="field"><label>Company</label><input id="dir-company" placeholder="Colour Low"></div>
+      <div class="field"><label>Trade</label><select id="dir-trade">
+        <option value="">—</option><option value="pm">PM</option><option value="engineer">Engineer</option>
+        <option value="procurement">Procurement</option><option value="subcon">Subcon</option><option value="supervisor">Supervisor</option>
+      </select></div>
+      <button class="btn pri sm" id="dir-add">Save</button>
+    </div>
+    <div id="dir-list"></div>
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="dir-close">Close</button></div>
+  </div>
 </div>
 
 <!-- EDITOR -->
@@ -285,7 +355,7 @@
     <h2 style="font-size:15px;margin-top:14px">Invite by email</h2>
     <p class="muted" style="font-size:12px;margin-bottom:6px">Generates a shareable invite link. The person needs a CanLah account (created by an admin) under the same email; they sign in and accept.</p>
     <div class="new-row" id="member-add-row" style="margin:8px 0">
-      <div class="field" style="flex:1"><label>Email</label><input id="m-email" type="email" placeholder="subcon@firm.sg"></div>
+      <div class="field" style="flex:1"><label>Email</label><input id="m-email" type="email" placeholder="subcon@firm.sg" list="contacts-dl" autocomplete="off"><datalist id="contacts-dl"></datalist></div>
       <div class="field"><label>Access</label><select id="m-access">
         <option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option>
       </select></div>
@@ -366,6 +436,16 @@
       <div class="field"><label>Needed by</label><input id="dv-by" type="date"></div>
       <div class="field"><label>Responsible</label><input id="dv-resp" placeholder="Procurement" style="min-width:120px"></div>
       <button class="btn sm" id="dv-add">Add</button>
+    </div>
+
+    <!-- cross-project dependencies -->
+    <h2 style="font-size:15px;margin-top:14px">🔗 Depends on (other programmes)</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Link this activity to one in another of your programmes — e.g. a shared crane, or a hand-over that must finish first. Shows on the Master view; a breach is flagged if this starts before the linked work finishes.</p>
+    <div id="ac-deps"></div>
+    <div class="new-row" id="ac-dep-add" style="margin:8px 0">
+      <div class="field" style="flex:1"><label>Programme</label><select id="dep-prog" style="min-width:160px"><option value="">—</option></select></div>
+      <div class="field" style="flex:1"><label>Activity</label><select id="dep-act" style="min-width:160px"><option value="">—</option></select></div>
+      <button class="btn sm" id="dep-add">Link</button>
     </div>
 
     <!-- update log -->
@@ -545,18 +625,24 @@ function renderRollup(programmes){
     `<span class="${blocked?'warn':''}"><b>${blocked}</b> blocked</span>`+
     `<span class="${late?'warn':''}"><b>${late}</b> behind target</span>`;
 }
+const PF_TABS = ['dash','lookahead','resources','master','cards'];
+if (!PF_TABS.includes(listMode)) listMode='dash';
+const PF_PANEL = { dash:'portfolio-panel', lookahead:'lookahead-panel', resources:'resources-panel', master:'master-panel', cards:'list-cards' };
+let pfCache = []; // last portfolio list (names/ids) — reused by the dependency picker
 function applyListMode(){
-  const dash = listMode==='dash';
-  $('seg-dash').classList.toggle('on', dash);
-  $('seg-cards').classList.toggle('on', !dash);
-  $('portfolio-panel').classList.toggle('hidden', !dash);
-  $('list-cards').classList.toggle('hidden', dash);
+  PF_TABS.forEach(t=>{
+    $('seg-'+t).classList.toggle('on', t===listMode);
+    $(PF_PANEL[t]).classList.toggle('hidden', t!==listMode);
+  });
+  if (listMode==='lookahead') loadLookahead();
+  else if (listMode==='resources') loadResources();
+  else if (listMode==='master') loadMaster();
 }
-$('seg-dash').onclick = () => { listMode='dash'; localStorage.setItem('pf-mode','dash'); applyListMode(); };
-$('seg-cards').onclick = () => { listMode='cards'; localStorage.setItem('pf-mode','cards'); applyListMode(); };
+PF_TABS.forEach(t=>{ $('seg-'+t).onclick = () => { listMode=t; localStorage.setItem('pf-mode',t); applyListMode(); }; });
 async function loadList(){
   show('list');
   const { programmes } = await api('GET', null, '?view=portfolio');
+  pfCache = programmes;
   const has = programmes.length>0;
   $('list-empty').classList.toggle('hidden', has);
   $('list-toolbar').classList.toggle('hidden', !has);
@@ -565,6 +651,134 @@ async function loadList(){
   renderCards(programmes);
   applyListMode();
 }
+const dayDiffC = (a,b) => Math.round((Date.parse(a)-Date.parse(b))/86400000);
+
+// ── look-ahead (next N days across all programmes) ──────────────────────────
+function weekLabel(iso){
+  const d=new Date(iso+'T00:00:00Z'); const day=(d.getUTCDay()+6)%7;
+  const mon=new Date(d); mon.setUTCDate(d.getUTCDate()-day);
+  const sun=new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
+  const f=(x)=>x.toLocaleDateString('en-SG',{day:'2-digit',month:'short',timeZone:'UTC'});
+  return `Week of ${f(mon)} – ${f(sun)}`;
+}
+$('la-horizon').onchange = loadLookahead;
+async function loadLookahead(){
+  const days = $('la-horizon').value||21;
+  let data; try { data = await api('GET', null, '?view=lookahead&days='+days); } catch(e){ return toast(e.message,true); }
+  $('la-range').textContent = `${data.from} → ${data.to}`;
+  const body=$('la-body'); body.innerHTML='';
+  if (!data.items.length){ body.innerHTML='<div class="empty">Nothing scheduled in this window. Give activities durations & dependencies so they land on the calendar.</div>'; return; }
+  let curKey=null;
+  for (const it of data.items){
+    const key=weekLabel(it.start);
+    if (key!==curKey){ curKey=key; const h=document.createElement('div'); h.className='la-week'; h.textContent=key; body.appendChild(h); }
+    const flags=[];
+    if (it.overdue) flags.push('<span class="flag-over">⚠ overdue</span>');
+    else if (it.late) flags.push('<span class="flag-late">⚠ in progress</span>');
+    if (it.onCriticalPath) flags.push('<span class="flag-crit">critical</span>');
+    const row=document.createElement('div'); row.className='la-row'; row.style.cursor='pointer';
+    row.innerHTML=`<span class="when">${it.start} → ${it.end}</span>`+
+      `<span style="flex:1"><span class="tag-prog">${esc(it.programmeName)}</span> ${esc(it.name)}${it.assignee?` <span class="muted">· ${esc(it.assignee)}</span>`:''}</span>`+
+      `<span style="display:flex;gap:8px;align-items:center;white-space:nowrap">${flags.join(' ')}</span>`;
+    row.onclick=()=>openProgramme(it.programmeId);
+    body.appendChild(row);
+  }
+}
+
+// ── resource load (who is committed where) ──────────────────────────────────
+async function loadResources(){
+  let data; try { data = await api('GET', null, '?view=resources'); } catch(e){ return toast(e.message,true); }
+  $('res-summary').textContent = data.people.length
+    ? `${data.people.length} ${data.people.length===1?'person':'people'} committed · ${data.totalClashes} double-booking${data.totalClashes===1?'':'s'}`
+    : '';
+  const body=$('res-body'); body.innerHTML='';
+  if (!data.people.length){ body.innerHTML='<div class="empty">No one assigned yet. Set an Assignee on activities to see who is committed across your programmes.</div>'; return; }
+  for (const p of data.people){
+    const row=document.createElement('div'); row.className='res-row';
+    const clash = p.clashes.length?`<span class="res-clash">⚠ ${p.clashes.length} clash${p.clashes.length>1?'es':''}</span>`:'';
+    row.innerHTML=`<span><strong>${esc(p.who)}</strong> <span class="muted">· ${p.count} task${p.count>1?'s':''} across ${p.programmes} programme${p.programmes>1?'s':''}</span></span><span style="display:flex;gap:10px;align-items:center">${clash}<button class="btn sm" data-x>Details</button></span>`;
+    const detail=document.createElement('div'); detail.className='res-detail hidden';
+    detail.innerHTML = p.assignments.map(a=>`<div class="muted" style="font-size:12px"><span class="tag-prog">${esc(a.programmeName)}</span> ${esc(a.name)} <span class="mono">${a.start} → ${a.end}</span>${a.onCriticalPath?' <span class="flag-crit">critical</span>':''}</div>`).join('')
+      + (p.clashes.length?('<div class="flag-over" style="font-size:12px;margin-top:5px">Overlaps: '+p.clashes.map(c=>`${esc(c.a.programmeName)}/${esc(c.a.name)} ↔ ${esc(c.b.programmeName)}/${esc(c.b.name)}`).join('; ')+'</div>'):'');
+    row.querySelector('[data-x]').onclick=()=>detail.classList.toggle('hidden');
+    body.appendChild(row); body.appendChild(detail);
+  }
+}
+
+// ── master / linked view (all programmes on one axis + cross-project links) ──
+async function loadMaster(){
+  let data; try { data = await api('GET', null, '?view=master'); } catch(e){ return toast(e.message,true); }
+  $('mp-summary').textContent = `${data.programmes.length} programme${data.programmes.length===1?'':'s'} · ${data.links.length} cross-project link${data.links.length===1?'':'s'}${data.breaches?` · ⚠ ${data.breaches} breached`:''}`;
+  const tl=$('mp-timeline'); tl.innerHTML='';
+  const dated = data.programmes.filter(p=>p.start&&p.end);
+  if (!dated.length){ tl.innerHTML='<div class="empty">No scheduled programmes yet.</div>'; }
+  else {
+    const min = dated.reduce((m,p)=>p.start<m?p.start:m, dated[0].start);
+    const max = dated.reduce((m,p)=>p.end>m?p.end:m, dated[0].end);
+    const span = Math.max(1, dayDiffC(max,min));
+    for (const p of data.programmes){
+      const lane=document.createElement('div'); lane.className='mp-lane'; lane.style.cursor='pointer';
+      let track='<div class="mp-track"></div>', dates='unscheduled';
+      if (p.start&&p.end){
+        const left=dayDiffC(p.start,min)/span*100, w=Math.max(2,dayDiffC(p.end,p.start)/span*100);
+        track=`<div class="mp-track"><span style="left:${left}%;width:${w}%"></span></div>`;
+        dates=`${p.start} → ${p.end}`;
+      }
+      lane.innerHTML=`<span class="nm">${esc(p.name)}</span>${track}<span class="mp-dates">${dates}</span>`;
+      lane.onclick=()=>openProgramme(p.id);
+      tl.appendChild(lane);
+    }
+  }
+  const ll=$('mp-links'); ll.innerHTML='';
+  if (!data.links.length){ ll.innerHTML='<div class="muted" style="font-size:12px">No cross-project dependencies yet. Add one from an activity’s 🔗 section.</div>'; return; }
+  for (const l of data.links){
+    const row=document.createElement('div'); row.className='lk-row'+(l.breached?' lk-breached':'');
+    const slack = l.slackDays==null?'':(l.breached?`<span class="flag-over">⚠ ${-l.slackDays}d short</span>`:`<span class="muted" style="font-size:11px">${l.slackDays}d slack</span>`);
+    row.innerHTML=`<span style="flex:1"><span class="tag-prog">${esc(l.from.programmeName)}</span> ${esc(l.from.name)} <span class="muted" style="font-size:11px">finishes ${l.from.finish||'—'}</span> → <span class="tag-prog">${esc(l.to.programmeName)}</span> ${esc(l.to.name)} <span class="muted" style="font-size:11px">starts ${l.to.start||'—'}</span></span>${slack}`;
+    ll.appendChild(row);
+  }
+}
+
+// ── directory (subcontractor / contact address book) ────────────────────────
+let contactsCache=[];
+async function contactsApi(method, body, qs){
+  const opt={method,headers:{'Content-Type':'application/json'}}; if(body) opt.body=JSON.stringify(body);
+  const res=await fetch('/api/contacts'+(qs||''),opt);
+  if (res.status===401){ location.href='/login'; throw new Error('Unauthorized'); }
+  const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||res.statusText); return data;
+}
+function refreshContactsDatalist(){
+  const dl=$('contacts-dl'); if(!dl) return;
+  dl.innerHTML=contactsCache.map(c=>`<option value="${esc(c.email)}">${esc(c.name||'')}${c.company?(' · '+esc(c.company)):''}</option>`).join('');
+}
+async function ensureContacts(){
+  if (contactsCache.length){ refreshContactsDatalist(); return; }
+  try { contactsCache=(await contactsApi('GET')).contacts||[]; refreshContactsDatalist(); } catch {}
+}
+$('open-directory').onclick=()=>{ loadDirectory(); $('directory-modal').classList.add('show'); };
+$('dir-close').onclick=()=>$('directory-modal').classList.remove('show');
+async function loadDirectory(){
+  try { contactsCache=(await contactsApi('GET')).contacts||[]; } catch(e){ return toast(e.message,true); }
+  renderDirectory(); refreshContactsDatalist();
+}
+function renderDirectory(){
+  const el=$('dir-list'); el.innerHTML='';
+  if(!contactsCache.length){ el.innerHTML='<div class="muted" style="font-size:12px">No contacts yet — add your subs above to invite them in one click.</div>'; return; }
+  for(const c of contactsCache){
+    const row=document.createElement('div'); row.className='mrow';
+    const meta=[c.company,c.tradeRole].filter(Boolean).join(' · ');
+    row.innerHTML=`<span><strong>${esc(c.name||c.email)}</strong> <span class="muted mono" style="font-size:11px">${esc(c.email)}</span>${meta?` <span class="role-tag">${esc(meta)}</span>`:''}</span><button class="row-x" title="Remove">×</button>`;
+    row.querySelector('.row-x').onclick=async()=>{ try{ await contactsApi('DELETE',{id:c.id}); toast('Removed'); loadDirectory(); }catch(e){toast(e.message,true);} };
+    el.appendChild(row);
+  }
+}
+$('dir-add').onclick=async()=>{
+  const email=$('dir-email').value.trim(); if(!email) return toast('Enter an email',true);
+  try{
+    await busy($('dir-add'),'Saving…',()=>contactsApi('POST',{email,name:$('dir-name').value.trim(),company:$('dir-company').value.trim(),tradeRole:$('dir-trade').value||undefined}));
+    $('dir-email').value='';$('dir-name').value='';$('dir-company').value='';$('dir-trade').value=''; toast('Saved'); loadDirectory();
+  }catch(e){toast(e.message,true);}
+};
 $('np-create').onclick = async () => {
   const name = $('np-name').value.trim(); const startDate = $('np-start').value; const endDate = $('np-end').value || undefined;
   if (!name) return toast('Enter a project name', true);
@@ -699,6 +913,7 @@ function normalise(a){
     checklist:Array.isArray(a.checklist)?a.checklist:[],
     deliveries:Array.isArray(a.deliveries)?a.deliveries:[],
     updates:Array.isArray(a.updates)?a.updates:[],
+    externalDeps:Array.isArray(a.externalDeps)?a.externalDeps:[],
     blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'' };
 }
 const todayStr = () => new Date().toISOString().slice(0,10);
@@ -925,7 +1140,7 @@ $('ed-csv').onclick = () => {
 };
 
 // ── members ──────────────────────────────────────────────────────────────
-$('ed-members').onclick = () => { renderMembers(); $('member-modal').classList.add('show'); };
+$('ed-members').onclick = () => { renderMembers(); ensureContacts(); $('member-modal').classList.add('show'); };
 $('m-close').onclick = () => $('member-modal').classList.remove('show');
 async function inviteApi(method, body, qs){
   const opt={ method, headers:{'Content-Type':'application/json'} }; if (body) opt.body=JSON.stringify(body);
@@ -979,6 +1194,8 @@ $('m-invite').onclick = async () => {
   if (!email) return toast('Enter an email', true);
   try {
     const { invite } = await busy($('m-invite'), 'Creating…', () => inviteApi('POST', { programmeId:state.current.id, email, accessLevel, tradeRole }));
+    // Best-effort: remember this person in the directory for next time.
+    contactsApi('POST', { email, tradeRole }).then(()=>{ contactsCache=[]; }).catch(()=>{});
     $('m-email').value=''; toast('Invite created — copy the link'); showInviteLink(invite.token); renderInvites();
   } catch(e){ toast(e.message, true); }
 };
@@ -1025,8 +1242,46 @@ function openActivity(id){
     $('ck-tmpl').innerHTML = CKT.listTemplates().map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
     $('ck-tmpl').dataset.filled='1';
   }
-  renderParties(a); renderChecklist(a); renderDeliveries(a); renderUpdates(a); renderReady(a);
+  $('ac-dep-add').classList.toggle('hidden', ro);
+  renderParties(a); renderChecklist(a); renderDeliveries(a); renderDeps(a); renderUpdates(a); renderReady(a);
+  fillDepProgrammes();
   $('activity-modal').classList.add('show');
+}
+// cross-project dependencies (Master view links)
+function fillDepProgrammes(){
+  const sel=$('dep-prog'); const cur=state.current?state.current.id:null;
+  sel.innerHTML='<option value="">—</option>'+pfCache.filter(p=>p.id!==cur).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  $('dep-act').innerHTML='<option value="">—</option>';
+}
+$('dep-prog').onchange=async()=>{
+  const pid=$('dep-prog').value; const sel=$('dep-act');
+  if(!pid){ sel.innerHTML='<option value="">—</option>'; return; }
+  sel.innerHTML='<option value="">…</option>';
+  try{ const {programme}=await api('GET',null,'?id='+encodeURIComponent(pid));
+    sel.innerHTML='<option value="">—</option>'+(programme.activities||[]).map(x=>`<option value="${x.id}">${esc(x.name||x.id)}</option>`).join('');
+  }catch(e){ sel.innerHTML='<option value="">—</option>'; toast(e.message,true); }
+};
+$('dep-add').onclick=()=>{
+  const a=curAct(); if(!a) return;
+  const pid=$('dep-prog').value, aid=$('dep-act').value;
+  if(!pid||!aid) return toast('Pick a programme and activity',true);
+  a.externalDeps=a.externalDeps||[];
+  if(a.externalDeps.some(d=>d.programmeId===pid&&d.activityId===aid)) return toast('Already linked',true);
+  const pname=(pfCache.find(p=>p.id===pid)||{}).name||pid;
+  const aopt=$('dep-act').selectedOptions[0]; const aname=aopt?aopt.textContent:aid;
+  a.externalDeps.push({ programmeId:pid, activityId:aid, programmeName:pname, activityName:aname });
+  renderDeps(a); toast('Linked — Save update to persist');
+};
+function renderDeps(a){
+  const ro=!state.canEdit; const el=$('ac-deps'); el.innerHTML='';
+  const deps=a.externalDeps||[];
+  if(!deps.length){ el.innerHTML='<div class="muted" style="font-size:12px">No cross-project links.</div>'; return; }
+  deps.forEach((d,i)=>{
+    const row=document.createElement('div'); row.className='mrow';
+    row.innerHTML=`<span><span class="tag-prog">${esc(d.programmeName||d.programmeId)}</span> ${esc(d.activityName||d.activityId)}</span>${ro?'':'<button class="row-x" title="Remove">×</button>'}`;
+    if(!ro) row.querySelector('.row-x').onclick=()=>{ a.externalDeps.splice(i,1); renderDeps(a); };
+    el.appendChild(row);
+  });
 }
 function curAct(){ return state.activities.find(x=>x.id===acId); }
 function renderReady(a){
@@ -1114,7 +1369,7 @@ $('ac-save').onclick=async()=>{
   const a=curAct(); if(!a) return;
   a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
   const note=$('ac-note').value.trim();
-  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[] };
+  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[], externalDeps:a.externalDeps||[] };
   const doUpdate = () => api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
   try {
     let r;
