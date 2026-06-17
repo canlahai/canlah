@@ -144,8 +144,8 @@ test('generate from profile → full SG programme as a collaborative schedule', 
   // Lands in the editor with a generated activity set + computed critical path.
   await expect(page.locator('#view-editor')).toBeVisible();
   await expect(page.locator('#ed-name')).toHaveText('Generated Tower');
-  const rows = await page.locator('#act-body tr').count();
-  expect(rows).toBeGreaterThan(15); // ~14 standard + 8 floors
+  // Table populates async (during recompute) — poll until rows render.
+  await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBeGreaterThan(15); // ~18 standard + 8 floors
   await expect(page.locator('#gantt .bar').first()).toBeVisible();
   await expect(page.locator('#st-crit')).not.toHaveText('—');
   await expect(page.locator('#st-crit')).not.toHaveText('0');
@@ -168,8 +168,7 @@ test('upload scope-of-works → AI reads works + durations → programme', async
 
   // Lands in the editor populated from the (demo) extracted scope.
   await expect(page.locator('#view-editor')).toBeVisible();
-  const rows = await page.locator('#act-body tr').count();
-  expect(rows).toBeGreaterThan(5); // demo scope has 10 items
+  await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBeGreaterThan(5); // demo scope has 10 items
   await expect(page.locator('#gantt .bar').first()).toBeVisible();
   await expect(page.locator('#st-crit')).not.toHaveText('0');
 
