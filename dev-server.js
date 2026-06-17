@@ -746,6 +746,34 @@ const server = http.createServer((req, res) => {
         // Pro gates programme CREATION only; members collaborate free (per-programme
         // access enforced by roleOf in the lib).
 
+        // Subcontractor directory rides on this endpoint (mirrors prod's
+        // 12-function limit): /api/programmes?resource=contacts.
+        if (parsedUrl.searchParams.get('resource') === 'contacts') {
+          if (req.method === 'GET') return send(res, 200, JSON.stringify({ contacts: await listContacts(uid) }), { 'Content-Type': 'application/json' });
+          if (req.method === 'POST') {
+            const b = await parseBody(req) || {};
+            const r = await addContact(uid, { email: b.email, name: b.name, company: b.company, tradeRole: b.tradeRole });
+            if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ ok: true, contact: r.contact }), { 'Content-Type': 'application/json' });
+          }
+          if (req.method === 'PATCH') {
+            const b = await parseBody(req) || {};
+            if (!b.id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+            const r = await updateContact(uid, b.id, b);
+            if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+          }
+          if (req.method === 'DELETE') {
+            const b = await parseBody(req) || {};
+            const id = b.id || parsedUrl.searchParams.get('id');
+            if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+            const r = await removeContact(uid, id);
+            if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
+            return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+          }
+          return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
+        }
+
         if (req.method === 'GET') {
           const id = parsedUrl.searchParams.get('id');
           if (id) {
@@ -869,45 +897,6 @@ const server = http.createServer((req, res) => {
           const prog = await getProgramme(inv.programmeId, uid);
           if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
           const r = await revokeInvite(token, prog.access);
-          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
-          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
-        }
-        return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
-      } catch (err) {
-        return send(res, 500, JSON.stringify({ error: 'Internal server error' }), { 'Content-Type': 'application/json' });
-      }
-    })();
-    return;
-  }
-
-  if (parsedUrl.pathname === '/api/contacts') {
-    (async () => {
-      const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
-      try {
-        if (!rateLimitCheck(req, res)) return;
-        if (!requireAuthDev(req, res)) return;
-        const uid = authCheck(req).id;
-        if (req.method === 'GET') {
-          return send(res, 200, JSON.stringify({ contacts: await listContacts(uid) }), { 'Content-Type': 'application/json' });
-        }
-        if (req.method === 'POST') {
-          const b = await parseBody(req) || {};
-          const r = await addContact(uid, { email: b.email, name: b.name, company: b.company, tradeRole: b.tradeRole });
-          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
-          return send(res, 200, JSON.stringify({ ok: true, contact: r.contact }), { 'Content-Type': 'application/json' });
-        }
-        if (req.method === 'PATCH') {
-          const b = await parseBody(req) || {};
-          if (!b.id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
-          const r = await updateContact(uid, b.id, b);
-          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
-          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
-        }
-        if (req.method === 'DELETE') {
-          const b = await parseBody(req) || {};
-          const id = b.id || parsedUrl.searchParams.get('id');
-          if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
-          const r = await removeContact(uid, id);
           if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
           return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
         }

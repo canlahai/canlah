@@ -20,12 +20,40 @@ import {
 } from '../lib/programmes.js';
 import { computeSchedule } from '../lib/cpm.js';
 import { lookahead, resourceLoad, masterPlan } from '../lib/portfolio.js';
+import { listContacts, addContact, updateContact, removeContact } from '../lib/contacts.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
 initSentry();
 
 const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
+
+// The subcontractor directory rides on this function (Hobby plan caps deployments
+// at 12 serverless functions) — reached via /api/programmes?resource=contacts.
+async function handleContacts(req, res, uid) {
+  if (req.method === 'GET') return res.status(200).json({ contacts: await listContacts(uid) });
+  if (req.method === 'POST') {
+    const b = req.body || {};
+    const r = await addContact(uid, { email: b.email, name: b.name, company: b.company, tradeRole: b.tradeRole });
+    if (!r.ok) return res.status(reasonStatus[r.reason] || 400).json({ error: r.message || r.reason });
+    return res.status(200).json({ ok: true, contact: r.contact });
+  }
+  if (req.method === 'PATCH') {
+    const b = req.body || {};
+    if (!b.id) return res.status(400).json({ error: 'id required' });
+    const r = await updateContact(uid, b.id, b);
+    if (!r.ok) return res.status(reasonStatus[r.reason] || 400).json({ error: r.message || r.reason });
+    return res.status(200).json({ ok: true });
+  }
+  if (req.method === 'DELETE') {
+    const id = (req.body && req.body.id) || req.query?.id;
+    if (!id) return res.status(400).json({ error: 'id required' });
+    const r = await removeContact(uid, id);
+    if (!r.ok) return res.status(reasonStatus[r.reason] || 400).json({ error: r.reason });
+    return res.status(200).json({ ok: true });
+  }
+  return res.status(405).json({ error: 'Method not allowed' });
+}
 
 // Map stored activities to the lib/cpm.js task shape (tolerant of strings from a form).
 function normaliseTasks(activities) {
@@ -50,6 +78,9 @@ export default async function handler(req, res) {
   // to each programme is enforced per-programme by roleOf() inside the lib.
 
   try {
+    const resource = req.query?.resource || new URL(req.url, 'http://x').searchParams.get('resource');
+    if (resource === 'contacts') return await handleContacts(req, res, uid);
+
     if (req.method === 'GET') {
       const params = new URL(req.url, 'http://x').searchParams;
       const id = req.query?.id || params.get('id');

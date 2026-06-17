@@ -741,9 +741,10 @@ async function loadMaster(){
 
 // ── directory (subcontractor / contact address book) ────────────────────────
 let contactsCache=[];
-async function contactsApi(method, body, qs){
+async function contactsApi(method, body){
+  // Folded onto /api/programmes (Hobby plan caps deployments at 12 functions).
   const opt={method,headers:{'Content-Type':'application/json'}}; if(body) opt.body=JSON.stringify(body);
-  const res=await fetch('/api/contacts'+(qs||''),opt);
+  const res=await fetch('/api/programmes?resource=contacts',opt);
   if (res.status===401){ location.href='/login'; throw new Error('Unauthorized'); }
   const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||res.statusText); return data;
 }
