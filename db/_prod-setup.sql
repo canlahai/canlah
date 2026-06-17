@@ -92,3 +92,24 @@ create index if not exists idx_canlah_invites_email on canlah_programme_invites 
 -- the earlier (single trade-role) membership model.
 alter table canlah_programme_members add column if not exists access_level text not null default 'viewer';
 alter table canlah_programme_members add column if not exists trade_role text;
+
+-- Optional target/contract end date on a programme (powers the dashboard slip flag).
+alter table canlah_programmes add column if not exists end_date text;
+
+-- Subcontractor / contact directory (lib/contacts.js) — an owner's reusable
+-- address book, so subs can be invited onto any programme in one click.
+create table if not exists canlah_contacts (
+  id          text primary key,
+  owner_id    text not null,
+  email       text not null,
+  name        text,
+  company     text,
+  trade_role  text check (trade_role in ('pm', 'engineer', 'procurement', 'subcon', 'supervisor')),
+  created_at  timestamptz not null default now(),
+  unique (owner_id, email)
+);
+
+create index if not exists idx_canlah_contacts_owner on canlah_contacts (owner_id);
+
+-- Cross-project dependencies live on the activity JSON (activity.externalDeps[]),
+-- so no schema change is needed for the Master / linked-programme view.

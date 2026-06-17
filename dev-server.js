@@ -10,7 +10,9 @@ import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
 import { listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
+import { lookahead, resourceLoad, masterPlan } from './lib/portfolio.js';
 import { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } from './lib/invites.js';
+import { listContacts, addContact, updateContact, removeContact } from './lib/contacts.js';
 import { computeSchedule } from './lib/cpm.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
 import { isAllowedBlobUrl } from './lib/blob-url.js';
@@ -751,8 +753,19 @@ const server = http.createServer((req, res) => {
             if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
             return send(res, 200, JSON.stringify({ programme: prog }), { 'Content-Type': 'application/json' });
           }
-          if (parsedUrl.searchParams.get('view') === 'portfolio') {
+          const view = parsedUrl.searchParams.get('view');
+          if (view === 'portfolio') {
             return send(res, 200, JSON.stringify({ programmes: await listPortfolioForUser(uid) }), { 'Content-Type': 'application/json' });
+          }
+          if (view === 'lookahead') {
+            const days = Math.max(7, Math.min(90, Number(parsedUrl.searchParams.get('days')) || 21));
+            return send(res, 200, JSON.stringify(await lookahead(uid, { days })), { 'Content-Type': 'application/json' });
+          }
+          if (view === 'resources') {
+            return send(res, 200, JSON.stringify(await resourceLoad(uid)), { 'Content-Type': 'application/json' });
+          }
+          if (view === 'master') {
+            return send(res, 200, JSON.stringify(await masterPlan(uid)), { 'Content-Type': 'application/json' });
           }
           return send(res, 200, JSON.stringify({ programmes: await listProgrammesForUser(uid) }), { 'Content-Type': 'application/json' });
         }
@@ -856,6 +869,45 @@ const server = http.createServer((req, res) => {
           const prog = await getProgramme(inv.programmeId, uid);
           if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
           const r = await revokeInvite(token, prog.access);
+          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+        return send(res, 405, JSON.stringify({ error: 'Method not allowed' }), { 'Content-Type': 'application/json' });
+      } catch (err) {
+        return send(res, 500, JSON.stringify({ error: 'Internal server error' }), { 'Content-Type': 'application/json' });
+      }
+    })();
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/contacts') {
+    (async () => {
+      const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
+      try {
+        if (!rateLimitCheck(req, res)) return;
+        if (!requireAuthDev(req, res)) return;
+        const uid = authCheck(req).id;
+        if (req.method === 'GET') {
+          return send(res, 200, JSON.stringify({ contacts: await listContacts(uid) }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'POST') {
+          const b = await parseBody(req) || {};
+          const r = await addContact(uid, { email: b.email, name: b.name, company: b.company, tradeRole: b.tradeRole });
+          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true, contact: r.contact }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'PATCH') {
+          const b = await parseBody(req) || {};
+          if (!b.id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+          const r = await updateContact(uid, b.id, b);
+          if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'DELETE') {
+          const b = await parseBody(req) || {};
+          const id = b.id || parsedUrl.searchParams.get('id');
+          if (!id) return send(res, 400, JSON.stringify({ error: 'id required' }), { 'Content-Type': 'application/json' });
+          const r = await removeContact(uid, id);
           if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.reason }), { 'Content-Type': 'application/json' });
           return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json' });
         }
