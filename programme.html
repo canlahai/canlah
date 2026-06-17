@@ -151,7 +151,8 @@
     <div class="field"><label>Project name</label><input id="np-name" placeholder="e.g. Tower A — main contract" style="min-width:240px"></div>
     <div class="field"><label>Start date</label><input id="np-start" type="date"></div>
     <div class="field"><label>Target end date <span style="text-transform:none;opacity:.7">(optional)</span></label><input id="np-end" type="date"></div>
-    <button class="btn pri" id="np-create">Create programme</button>
+    <button class="btn pri" id="np-create">Create blank</button>
+    <button class="btn" id="np-generate" title="Draft a standard SG construction programme from a few project parameters">✨ Generate from profile</button>
   </div>
 
   <div id="list-cards" class="cards"></div>
@@ -356,6 +357,28 @@
   </div>
 </div>
 
+<!-- GENERATE FROM PROFILE -->
+<div class="modal-bg" id="gen-modal">
+  <div class="modal" style="max-width:520px">
+    <h2>✨ Generate a draft programme</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:10px">Answer a few questions and we draft a standard Singapore construction Master Programme — full WBS, floor-cycle super-structure, BCA / SCDF / TOP / CSC gates, and a computed critical path. Edit anything after; durations are benchmark placeholders.</p>
+    <div class="new-row" style="margin:0 0 10px;flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:200px"><label>Project name</label><input id="gen-name" placeholder="e.g. Tower A"></div>
+      <div class="field"><label>Start date</label><input id="gen-start" type="date"></div>
+    </div>
+    <div class="new-row" style="margin:0 0 10px;flex-wrap:wrap">
+      <div class="field"><label>Storeys</label><input id="gen-storeys" type="number" min="1" value="10" style="width:90px"></div>
+      <div class="field"><label>Structural system</label><select id="gen-system"><option value="insitu_rc">In-situ RC</option><option value="precast">Precast</option><option value="steel">Steel</option></select></div>
+      <div class="field" style="flex:1;min-width:160px"><label>Contract form</label><select id="gen-contract"><option value="">—</option><option>Lump Sum</option><option>Design &amp; Build</option><option>PSSCOC</option><option>SIA</option></select></div>
+    </div>
+    <div id="gen-warn" class="warn hidden"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      <button class="btn" id="gen-close">Cancel</button>
+      <button class="btn pri" id="gen-go">Generate programme</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -364,6 +387,8 @@ const STATUS = { todo:{label:'To do',color:'#888882'}, in_progress:{label:'In pr
 let state = { canManage:false, canEdit:false, current:null, activities:[], schedule:null, myId:null };
 let CKT = null; // checklist-templates module (loaded lazily)
 import('/lib/checklist-templates.js').then(m => { CKT = m; }).catch(() => {});
+let GEN = null; // programme-generator module (loaded lazily)
+import('/lib/programme-generator.js').then(m => { GEN = m; }).catch(() => {});
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
 // Disable a button + show a label while an async action runs (loading feedback).
@@ -432,6 +457,46 @@ $('np-create').onclick = async () => {
   try {
     const { programme } = await busy($('np-create'), 'Creating…', () => api('POST', { name, startDate, endDate, activities: [] }));
     $('np-name').value=''; $('np-end').value=''; toast('Programme created'); openProgramme(programme.id);
+  } catch(e){ toast(e.message, true); }
+};
+
+// ── generate from project profile (the "kill the blank page" moat) ──────────
+$('np-generate').onclick = () => {
+  if (!state.canCreate) return toast('Generating a programme needs a Pro account', true);
+  if (!$('gen-start').value) $('gen-start').value = $('np-start').value || new Date().toISOString().slice(0,10);
+  if (!$('gen-name').value) $('gen-name').value = $('np-name').value || '';
+  $('gen-warn').classList.add('hidden');
+  $('gen-modal').classList.add('show');
+};
+$('gen-close').onclick = () => $('gen-modal').classList.remove('show');
+$('gen-go').onclick = async () => {
+  if (!GEN) return toast('Generator still loading — try again in a moment', true);
+  const name = $('gen-name').value.trim();
+  const startDate = $('gen-start').value;
+  const storeys = Math.max(1, parseInt($('gen-storeys').value, 10) || 1);
+  if (!name) return toast('Enter a project name', true);
+  if (!startDate) return toast('Pick a start date', true);
+  const profile = { name, startDate, storeys, structuralSystem: $('gen-system').value, contractForm: $('gen-contract').value || null };
+  let gen;
+  try { gen = GEN.generateProgramme(profile); }
+  catch(e){ return toast(e.message, true); }
+  // Surface generator warnings (e.g. non-RC system uses RC logic for now).
+  if (gen.warnings && gen.warnings.length){ $('gen-warn').classList.remove('hidden'); $('gen-warn').textContent = '⚠ ' + gen.warnings.join(' · '); }
+  // Map generated tasks → collaborative activities.
+  const wbsName = Object.fromEntries((GEN.WBS||[]).map(w => [w.id, w.name]));
+  const activities = gen.tasks.map(t => ({
+    id: t.id, name: t.name,
+    section: wbsName[t.wbsId] || '',
+    trade: t.kind === 'regulatory' ? 'Authority' : '',
+    durationDays: t.durationDays || 0,
+    predecessors: (t.predecessors || []).map(p => (typeof p === 'string' ? p : p.id)),
+    assignee: '', status: 'todo', parties: [], checklist: [], deliveries: [], updates: [],
+  }));
+  try {
+    const { programme } = await busy($('gen-go'), 'Generating…', () => api('POST', { name, startDate, activities }));
+    $('gen-modal').classList.remove('show');
+    toast(`Generated ${activities.length} activities`);
+    openProgramme(programme.id);
   } catch(e){ toast(e.message, true); }
 };
 

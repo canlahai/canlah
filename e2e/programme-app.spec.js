@@ -131,3 +131,29 @@ test('modals close on Escape and on backdrop click', async ({ page }) => {
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
 });
+
+test('generate from profile → full SG programme as a collaborative schedule', async ({ page }) => {
+  await page.goto('/programme');
+  await page.click('#np-generate');
+  await expect(page.locator('#gen-modal')).toBeVisible();
+  await page.fill('#gen-name', 'Generated Tower');
+  await page.fill('#gen-start', '2026-07-01');
+  await page.fill('#gen-storeys', '8');
+  await page.click('#gen-go');
+
+  // Lands in the editor with a generated activity set + computed critical path.
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await expect(page.locator('#ed-name')).toHaveText('Generated Tower');
+  const rows = await page.locator('#act-body tr').count();
+  expect(rows).toBeGreaterThan(15); // ~14 standard + 8 floors
+  await expect(page.locator('#gantt .bar').first()).toBeVisible();
+  await expect(page.locator('#st-crit')).not.toHaveText('—');
+  await expect(page.locator('#st-crit')).not.toHaveText('0');
+
+  // Has the SG regulatory gates (e.g. TOP) — Gantt labels render names as text.
+  await expect(page.locator('#gantt')).toContainText('TOP');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
