@@ -107,3 +107,27 @@ test('collaborative activity: checklist template + blocked → readiness flags',
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
 });
+
+test('modals close on Escape and on backdrop click', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'Modal Test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+
+  // Escape closes the members modal.
+  await page.click('#ed-members');
+  await expect(page.locator('#member-modal')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#member-modal')).toBeHidden();
+
+  // Backdrop click closes it (click the overlay near the corner, not the panel).
+  await page.click('#ed-members');
+  await expect(page.locator('#member-modal')).toBeVisible();
+  await page.click('#member-modal', { position: { x: 6, y: 6 } });
+  await expect(page.locator('#member-modal')).toBeHidden();
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});

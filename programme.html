@@ -94,6 +94,25 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.err{border-color:var(--red)}
   .hidden{display:none!important}
+  /* ── responsive (phones / site tablets) ── */
+  @media(max-width:720px){
+    .wrap{padding:14px}
+    .topbar{padding:12px 14px}
+    h1{font-size:24px}
+    .new-row{flex-direction:column;align-items:stretch}
+    .new-row .field{width:100%}
+    .new-row .field input,.new-row .field select{width:100%}
+    .ed-head{flex-direction:column}
+    .ed-stats{gap:14px 18px}
+    .toolbar{gap:6px}
+    .toolbar .btn{flex:1 1 auto}
+    .toolbar .sep{display:none}
+    .filters{gap:6px}
+    .filters select{flex:1 1 auto}
+    #start-edit{margin-left:0;flex-wrap:wrap}
+    .cards{grid-template-columns:1fr}
+    .modal{max-width:100%;padding:18px}
+  }
   @media print{.topbar,.toolbar,.filters,.new-row,.row-x,.disclaimer .none{display:none}.btn{display:none}}
 </style>
 </head>
@@ -337,7 +356,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -347,6 +366,13 @@ let CKT = null; // checklist-templates module (loaded lazily)
 import('/lib/checklist-templates.js').then(m => { CKT = m; }).catch(() => {});
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
+// Disable a button + show a label while an async action runs (loading feedback).
+async function busy(btn, label, fn){
+  if (!btn) return fn();
+  const txt = btn.textContent, dis = btn.disabled;
+  btn.disabled = true; btn.textContent = label;
+  try { return await fn(); } finally { btn.disabled = dis; btn.textContent = txt; }
+}
 async function api(method, body, qs){
   const url = '/api/programmes' + (qs||'');
   const opt = { method, headers:{'Content-Type':'application/json'} };
@@ -403,7 +429,8 @@ $('np-create').onclick = async () => {
   if (!name) return toast('Enter a project name', true);
   if (!startDate) return toast('Pick a start date', true);
   if (endDate && endDate < startDate) return toast('Target end date is before the start date', true);
-  try { const { programme } = await api('POST', { name, startDate, endDate, activities: [] });
+  try {
+    const { programme } = await busy($('np-create'), 'Creating…', () => api('POST', { name, startDate, endDate, activities: [] }));
     $('np-name').value=''; $('np-end').value=''; toast('Programme created'); openProgramme(programme.id);
   } catch(e){ toast(e.message, true); }
 };
@@ -642,7 +669,7 @@ function mondayOf(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate
 // ── save / delete / export ─────────────────────────────────────────────────
 $('ed-save').onclick = async () => {
   try {
-    await api('PATCH', { id:state.current.id, startDate:$('ed-start').value||state.current.startDate, activities: state.activities });
+    await busy($('ed-save'), 'Saving…', () => api('PATCH', { id:state.current.id, startDate:$('ed-start').value||state.current.startDate, activities: state.activities }));
     state.current.startDate = $('ed-start').value||state.current.startDate;
     toast('Saved');
   } catch(e){ toast(e.message, true); }
@@ -720,7 +747,7 @@ $('m-invite').onclick = async () => {
   const email=$('m-email').value.trim(); const accessLevel=$('m-access').value; const tradeRole=$('m-trade').value||undefined;
   if (!email) return toast('Enter an email', true);
   try {
-    const { invite } = await inviteApi('POST', { programmeId:state.current.id, email, accessLevel, tradeRole });
+    const { invite } = await busy($('m-invite'), 'Creating…', () => inviteApi('POST', { programmeId:state.current.id, email, accessLevel, tradeRole }));
     $('m-email').value=''; toast('Invite created — copy the link'); showInviteLink(invite.token); renderInvites();
   } catch(e){ toast(e.message, true); }
 };
@@ -874,6 +901,15 @@ $('ac-save').onclick=async()=>{
     renderUpdates(a); renderReady(a); updateStats(); renderTable(); renderGantt();
   } catch(e){ toast(e.message, true); }
 };
+
+// Modal UX: close on backdrop click and on Escape.
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-modal', 'true');
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('show'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-bg.show').forEach(bg => bg.classList.remove('show'));
+});
 
 boot();
 </script>
