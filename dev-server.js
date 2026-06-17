@@ -10,7 +10,7 @@ import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
 import { listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
-import { lookahead, resourceLoad, masterPlan } from './lib/portfolio.js';
+import { lookahead, resourceLoad, masterPlan, reflow } from './lib/portfolio.js';
 import { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } from './lib/invites.js';
 import { listContacts, addContact, updateContact, removeContact } from './lib/contacts.js';
 import { computeSchedule } from './lib/cpm.js';
@@ -793,7 +793,8 @@ const server = http.createServer((req, res) => {
             return send(res, 200, JSON.stringify(await resourceLoad(uid)), { 'Content-Type': 'application/json' });
           }
           if (view === 'master') {
-            return send(res, 200, JSON.stringify(await masterPlan(uid)), { 'Content-Type': 'application/json' });
+            const [mp, rf] = await Promise.all([masterPlan(uid), reflow(uid)]);
+            return send(res, 200, JSON.stringify({ ...mp, ...rf }), { 'Content-Type': 'application/json' });
           }
           return send(res, 200, JSON.stringify({ programmes: await listProgrammesForUser(uid) }), { 'Content-Type': 'application/json' });
         }

@@ -238,6 +238,15 @@
     <h3 style="font-size:14px;margin:0 0 8px">Cross-project dependencies</h3>
     <p class="muted" style="font-size:12px;margin-bottom:8px">Link an activity to one in another programme from that activity's detail panel (the 🔗 section). A red link means the later job is scheduled to start before the one it depends on finishes.</p>
     <div id="mp-links"></div>
+
+    <div id="mp-reflow-wrap" class="hidden" style="margin-top:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <h3 style="font-size:14px;margin:0">Suggested re-flow</h3>
+        <button class="btn pri sm" id="mp-apply-all">Apply all</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin-bottom:8px">To clear the breaches above, push these programmes' start dates so each dependency finishes first. Shifts cascade down the chain. Review, then apply.</p>
+      <div id="mp-reflow"></div>
+    </div>
   </div>
 
   <div id="list-cards" class="cards hidden"></div>
@@ -730,14 +739,38 @@ async function loadMaster(){
     }
   }
   const ll=$('mp-links'); ll.innerHTML='';
-  if (!data.links.length){ ll.innerHTML='<div class="muted" style="font-size:12px">No cross-project dependencies yet. Add one from an activity’s 🔗 section.</div>'; return; }
-  for (const l of data.links){
+  if (!data.links.length){ ll.innerHTML='<div class="muted" style="font-size:12px">No cross-project dependencies yet. Add one from an activity’s 🔗 section.</div>'; }
+  else for (const l of data.links){
     const row=document.createElement('div'); row.className='lk-row'+(l.breached?' lk-breached':'');
     const slack = l.slackDays==null?'':(l.breached?`<span class="flag-over">⚠ ${-l.slackDays}d short</span>`:`<span class="muted" style="font-size:11px">${l.slackDays}d slack</span>`);
     row.innerHTML=`<span style="flex:1"><span class="tag-prog">${esc(l.from.programmeName)}</span> ${esc(l.from.name)} <span class="muted" style="font-size:11px">finishes ${l.from.finish||'—'}</span> → <span class="tag-prog">${esc(l.to.programmeName)}</span> ${esc(l.to.name)} <span class="muted" style="font-size:11px">starts ${l.to.start||'—'}</span></span>${slack}`;
     ll.appendChild(row);
   }
+  renderReflow(data.proposals||[]);
 }
+let reflowProposals=[];
+function renderReflow(proposals){
+  reflowProposals=proposals;
+  $('mp-reflow-wrap').classList.toggle('hidden', !proposals.length);
+  const el=$('mp-reflow'); el.innerHTML='';
+  for (const pr of proposals){
+    const row=document.createElement('div'); row.className='lk-row';
+    const ends = (pr.currentEnd&&pr.proposedEnd)?` <span class="muted" style="font-size:11px">· ends ${pr.currentEnd} → ${pr.proposedEnd}</span>`:'';
+    row.innerHTML=`<span style="flex:1"><span class="tag-prog">${esc(pr.programmeName)}</span> <span class="mono" style="font-size:12px">${pr.currentStart} → ${pr.proposedStart}</span> <span class="flag-late">+${pr.shiftWorkingDays} working day${pr.shiftWorkingDays===1?'':'s'}</span>${ends}</span><button class="btn sm" data-apply="${pr.programmeId}">Apply</button>`;
+    row.querySelector('[data-apply]').onclick=()=>applyReflow([pr]);
+    el.appendChild(row);
+  }
+}
+async function applyReflow(list){
+  let ok=0, fail=0;
+  for (const pr of list){
+    try { await api('PATCH', { id:pr.programmeId, startDate:pr.proposedStart }); ok++; }
+    catch(e){ fail++; }
+  }
+  toast(fail?`Applied ${ok}, ${fail} not permitted (need editor access)`:`Applied to ${ok} programme${ok===1?'':'s'}`, !!fail&&!ok);
+  loadMaster();
+}
+$('mp-apply-all').onclick=()=>{ if(reflowProposals.length) applyReflow(reflowProposals.slice()); };
 
 // ── directory (subcontractor / contact address book) ────────────────────────
 let contactsCache=[];

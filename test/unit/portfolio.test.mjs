@@ -8,8 +8,8 @@ delete process.env.SUPABASE_URL;
 delete process.env.SUPABASE_SERVICE_KEY;
 process.env.DEV_PROGRAMMES_DIR = mkdtempSync(join(tmpdir(), 'canlah-portfolio-'));
 
-const { createProgramme } = await import('../../lib/programmes.js');
-const { lookahead, resourceLoad, masterPlan } = await import('../../lib/portfolio.js');
+const { createProgramme, updateProgramme } = await import('../../lib/programmes.js');
+const { lookahead, resourceLoad, masterPlan, reflow } = await import('../../lib/portfolio.js');
 
 const USER = 'u-pf';
 const today = new Date().toISOString().slice(0, 10);
@@ -65,5 +65,21 @@ assert.equal(link.to.programmeName, 'Carpark B', 'link target = successor progra
 assert.equal(link.breached, true, 'successor starts before predecessor finishes → breached');
 assert.ok(link.slackDays <= 0, 'breached link has non-positive slack');
 assert.equal(mp.breaches, 1, 'breach counted');
+
+// --- auto re-flow (propose + apply clears the breach) -----------------------
+const rf = await reflow(USER);
+assert.equal(rf.hasCycle, false, 'no dependency cycle');
+const prop = rf.proposals.find((p) => p.programmeName === 'Carpark B');
+assert.ok(prop, 're-flow proposes a new start for the breached successor');
+assert.ok(prop.proposedStart > prop.currentStart, 'proposed start is later than current');
+assert.ok(prop.shiftWorkingDays > 0, 're-flow shift is a positive number of working days');
+assert.ok(!rf.proposals.some((p) => p.programmeName === 'Tower A'), 'the predecessor (no incoming deps) is not shifted');
+
+// Apply the proposal → the breach is gone and nothing more is proposed.
+assert.equal((await updateProgramme(B.id, USER, { startDate: prop.proposedStart })).ok, true, 'apply re-flow start date');
+const mp2 = await masterPlan(USER);
+assert.equal(mp2.breaches, 0, 'breach cleared after applying re-flow');
+const rf2 = await reflow(USER);
+assert.equal(rf2.proposals.length, 0, 'no further proposals once dependencies are satisfied');
 
 console.log('portfolio.test.mjs — all assertions passed');
