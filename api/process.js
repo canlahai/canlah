@@ -108,12 +108,41 @@ RULES:
 
 Return ONLY the JSON object. No preamble, no explanation.`;
 
+const SCOPE_EXTRACTION_PROMPT = `You are a Singapore construction planner reading a contractor's CONTRACT / SCOPE OF WORKS document. Extract the schedule of works so it can populate a programme.
+
+Pull out EVERY distinct work item / activity the contractor is responsible for. For each, capture the type of work (trade/discipline) and its duration.
+
+Return ONLY valid JSON in this exact structure:
+
+\`\`\`json
+{
+  "projectName": "project / contract name from the document (or null)",
+  "contractRef": "contract reference no. if shown (or null)",
+  "durationUnit": "days",
+  "activities": [
+    { "no": 1, "name": "Bored piling", "type": "Substructure", "durationDays": 30, "after": null },
+    { "no": 2, "name": "Pile caps & ground beams", "type": "Substructure", "durationDays": 15, "after": 1 }
+  ],
+  "notes": ["anything ambiguous, e.g. a duration given as a date range or in weeks"]
+}
+\`\`\`
+
+RULES:
+- "name" = the work item as written. "type" = the trade/discipline (e.g. Substructure, Superstructure, M&E, Architectural, External Works, Testing & Commissioning, Authority). Infer a sensible type if not explicit.
+- "durationDays" = the activity's duration in WORKING DAYS as an integer. Convert if the document uses weeks (×5) or months (×21). If a duration is genuinely absent, use null and add a note.
+- "no" = a 1-based sequence number in the order the works appear.
+- "after" = the "no" of the activity this one must follow IF the document states/implies a sequence; otherwise null. Do not invent dependencies.
+- Extract EVERY line item — do not summarise or merge. Use null for any field genuinely absent. Do not invent durations.
+
+Return ONLY the JSON object. No preamble, no explanation.`;
+
 // Server-held extraction prompts keyed by document type (the client sends a
 // reportType, never a raw prompt — keeps big prompts server-side + limits abuse).
 export const PROMPTS = {
   tree: TREE_EXTRACTION_PROMPT,
   'tree-felling': TREE_EXTRACTION_PROMPT,
   traffic: TRAFFIC_EXTRACTION_PROMPT,
+  scope: SCOPE_EXTRACTION_PROMPT,
 };
 
 const createSafeBlobKey = filename => {
@@ -388,7 +417,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
+          max_tokens: 16000,
           messages: [{ role: 'user', content }],
         }),
       });

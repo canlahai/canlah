@@ -107,3 +107,73 @@ test('collaborative activity: checklist template + blocked → readiness flags',
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
 });
+
+test('modals close on Escape and on backdrop click', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'Modal Test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+
+  // Escape closes the members modal.
+  await page.click('#ed-members');
+  await expect(page.locator('#member-modal')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#member-modal')).toBeHidden();
+
+  // Backdrop click closes it (click the overlay near the corner, not the panel).
+  await page.click('#ed-members');
+  await expect(page.locator('#member-modal')).toBeVisible();
+  await page.click('#member-modal', { position: { x: 6, y: 6 } });
+  await expect(page.locator('#member-modal')).toBeHidden();
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('generate from profile → full SG programme as a collaborative schedule', async ({ page }) => {
+  await page.goto('/programme');
+  await page.click('#np-generate');
+  await expect(page.locator('#gen-modal')).toBeVisible();
+  await page.fill('#gen-name', 'Generated Tower');
+  await page.fill('#gen-start', '2026-07-01');
+  await page.fill('#gen-storeys', '8');
+  await page.click('#gen-go');
+
+  // Lands in the editor with a generated activity set + computed critical path.
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await expect(page.locator('#ed-name')).toHaveText('Generated Tower');
+  const rows = await page.locator('#act-body tr').count();
+  expect(rows).toBeGreaterThan(15); // ~14 standard + 8 floors
+  await expect(page.locator('#gantt .bar').first()).toBeVisible();
+  await expect(page.locator('#st-crit')).not.toHaveText('—');
+  await expect(page.locator('#st-crit')).not.toHaveText('0');
+
+  // Has the SG regulatory gates (e.g. TOP) — Gantt labels render names as text.
+  await expect(page.locator('#gantt')).toContainText('TOP');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('upload scope-of-works → AI reads works + durations → programme', async ({ page }) => {
+  await page.goto('/programme');
+  await page.click('#np-scope');
+  await expect(page.locator('#scope-modal')).toBeVisible();
+  await page.fill('#scope-start', '2026-07-01');
+  await page.setInputFiles('#scope-file', { name: 'scope.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 scope of works') });
+  await page.click('#scope-go');
+
+  // Lands in the editor populated from the (demo) extracted scope.
+  await expect(page.locator('#view-editor')).toBeVisible();
+  const rows = await page.locator('#act-body tr').count();
+  expect(rows).toBeGreaterThan(5); // demo scope has 10 items
+  await expect(page.locator('#gantt .bar').first()).toBeVisible();
+  await expect(page.locator('#st-crit')).not.toHaveText('0');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});

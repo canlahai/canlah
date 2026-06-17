@@ -374,6 +374,27 @@ async function handleApi(req, res) {
     if (action === 'analyse') {
       const { fileId, blobUrl, prompt, reportType } = body;
       if (DEMO_MODE) {
+        if (reportType === 'scope') {
+          // Sample contract scope-of-works extraction (demo).
+          const demoScope = {
+            projectName: 'A&A Works to 3-Storey Factory — Tuas',
+            contractRef: 'CT/2026/0148', durationUnit: 'days',
+            activities: [
+              { no: 1, name: 'Site mobilisation & hoarding', type: 'Preliminaries', durationDays: 10, after: null },
+              { no: 2, name: 'Demolition of existing structures', type: 'Demolition', durationDays: 15, after: 1 },
+              { no: 3, name: 'Bored piling', type: 'Substructure', durationDays: 25, after: 2 },
+              { no: 4, name: 'Pile caps & ground beams', type: 'Substructure', durationDays: 14, after: 3 },
+              { no: 5, name: 'RC superstructure frame', type: 'Superstructure', durationDays: 40, after: 4 },
+              { no: 6, name: 'Brickwork & blockwork', type: 'Architectural', durationDays: 20, after: 5 },
+              { no: 7, name: 'M&E rough-in', type: 'M&E', durationDays: 30, after: 5 },
+              { no: 8, name: 'Internal finishes', type: 'Architectural', durationDays: 25, after: 7 },
+              { no: 9, name: 'External works & drainage', type: 'External Works', durationDays: 18, after: 5 },
+              { no: 10, name: 'Testing & commissioning', type: 'Testing & Commissioning', durationDays: 15, after: 8 },
+            ],
+            notes: ['Demo sample — durations illustrative.'],
+          };
+          return send(res, 200, JSON.stringify({ data: demoScope }), { 'Content-Type': 'application/json' });
+        }
         if (reportType === 'programme-plan') {
           const demoProg = {
             projectName: 'Construction of HDB EW2 Connection — Blk 102',
@@ -554,8 +575,8 @@ async function handleApi(req, res) {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
+          model: 'claude-sonnet-4-6',
+          max_tokens: 16000,
           messages: [{ role: 'user', content }],
         }),
       });
@@ -750,7 +771,7 @@ const server = http.createServer((req, res) => {
           if (!(await hasProAccess(caller))) {
             return send(res, 402, JSON.stringify({ error: 'Creating a programme is a Pro feature. Ask your main contractor to invite you, or upgrade to Pro.', code: 'pro_required' }), { 'Content-Type': 'application/json' });
           }
-          const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
+          const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, endDate: body.endDate, activities: body.activities });
           return send(res, 200, JSON.stringify({ ok: true, programme }), { 'Content-Type': 'application/json' });
         }
         if (req.method === 'PATCH') {
