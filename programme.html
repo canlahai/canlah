@@ -153,6 +153,7 @@
     <div class="field"><label>Target end date <span style="text-transform:none;opacity:.7">(optional)</span></label><input id="np-end" type="date"></div>
     <button class="btn pri" id="np-create">Create blank</button>
     <button class="btn" id="np-generate" title="Draft a standard SG construction programme from a few project parameters">✨ Generate from profile</button>
+    <button class="btn" id="np-scope" title="Upload your contract / scope of works — we read the works + durations and build the programme">📄 Upload scope</button>
   </div>
 
   <div id="list-cards" class="cards"></div>
@@ -357,6 +358,25 @@
   </div>
 </div>
 
+<!-- UPLOAD SCOPE / CONTRACT -->
+<div class="modal-bg" id="scope-modal">
+  <div class="modal" style="max-width:520px">
+    <h2>📄 Build from your scope of works</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:10px">Upload your contract / scope-of-works document (PDF or image). We read every work item, its type and duration, and draft a programme you can edit and share. Durations come from your document.</p>
+    <div class="new-row" style="margin:0 0 10px;flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:200px"><label>Project name <span style="text-transform:none;opacity:.7">(optional — we'll read it)</span></label><input id="scope-name" placeholder="auto from document"></div>
+      <div class="field"><label>Start date</label><input id="scope-start" type="date"></div>
+    </div>
+    <div class="field" style="margin-bottom:8px"><label>Scope document (PDF / JPG / PNG)</label><input id="scope-file" type="file" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px"></div>
+    <div id="scope-status" class="muted" style="font-size:12px;min-height:16px"></div>
+    <div id="scope-warn" class="warn hidden"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      <button class="btn" id="scope-close">Cancel</button>
+      <button class="btn pri" id="scope-go">Read &amp; build</button>
+    </div>
+  </div>
+</div>
+
 <!-- GENERATE FROM PROFILE -->
 <div class="modal-bg" id="gen-modal">
   <div class="modal" style="max-width:520px">
@@ -381,6 +401,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="/canlah.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const STATUS = { todo:{label:'To do',color:'#888882'}, in_progress:{label:'In progress',color:'#3a6ea5'}, done:{label:'Done',color:'#2a7a47'}, blocked:{label:'Blocked',color:'#c0492b'} };
@@ -414,6 +435,7 @@ function show(view){ ['gate','list','editor'].forEach(v=>$('view-'+v).classList.
 async function boot(){
   let cfg = {};
   try { cfg = await (await fetch('/api/config')).json(); } catch {}
+  if (window.CanLah && CanLah.init) { try { await CanLah.init(); } catch {} }  // for the scope-upload pipeline
   state.myId = (cfg.session && cfg.session.id) || (cfg.demoMode ? 'demo-user' : null);
   // Anyone signed in can use the planner (to see programmes they're invited to).
   // Pro is only needed to CREATE a programme.
@@ -498,6 +520,56 @@ $('gen-go').onclick = async () => {
     toast(`Generated ${activities.length} activities`);
     openProgramme(programme.id);
   } catch(e){ toast(e.message, true); }
+};
+
+// ── upload a contract scope-of-works → AI reads works+durations → programme ──
+$('np-scope').onclick = () => {
+  if (!state.canCreate) return toast('Building a programme needs a Pro account', true);
+  if (!$('scope-start').value) $('scope-start').value = $('np-start').value || new Date().toISOString().slice(0,10);
+  $('scope-status').textContent = ''; $('scope-warn').classList.add('hidden');
+  $('scope-modal').classList.add('show');
+};
+$('scope-close').onclick = () => $('scope-modal').classList.remove('show');
+// Turn the AI's extracted scope items into collaborative activities.
+function scopeToActivities(data){
+  const items = (data.activities||[]).filter(x => x && x.name);
+  const ids = new Set(items.map((x,i) => 'a' + (x.no || i+1)));
+  let prevId = null;
+  const activities = items.map((x,i) => {
+    const id = 'a' + (x.no || i+1);
+    const afterId = (x.after != null) ? ('a' + x.after) : prevId;   // sequential default
+    prevId = id;
+    const pred = (afterId && ids.has(afterId) && afterId !== id) ? [afterId] : [];
+    return {
+      id, name: String(x.name), trade: x.type || '', section: x.type || '',
+      durationDays: Math.max(0, Math.round(Number(x.durationDays) || 0)),
+      predecessors: pred, assignee: '', status: 'todo',
+      parties: [], checklist: [], deliveries: [], updates: [],
+    };
+  });
+  return activities;
+}
+$('scope-go').onclick = async () => {
+  const startDate = $('scope-start').value;
+  const file = $('scope-file').files[0];
+  if (!startDate) return toast('Pick a start date', true);
+  if (!file) return toast('Choose your scope document', true);
+  try {
+    CanLah.state.uploadedFile = file;
+    const data = await busy($('scope-go'), 'Reading…', () => CanLah.uploadAndAnalyse({
+      reportType: 'scope',
+      onProgress: (p) => { $('scope-status').textContent = `Uploading… ${Math.round(p)}%`; },
+    }));
+    $('scope-status').textContent = 'Building programme…';
+    const activities = scopeToActivities(data || {});
+    if (!activities.length) { $('scope-warn').classList.remove('hidden'); $('scope-warn').textContent = '⚠ No work items were read from that document. Try a clearer scope/BQ, or use Generate from profile.'; $('scope-status').textContent=''; return; }
+    if (data.notes && data.notes.length){ $('scope-warn').classList.remove('hidden'); $('scope-warn').textContent = '⚠ ' + data.notes.join(' · '); }
+    const name = ($('scope-name').value.trim()) || data.projectName || file.name.replace(/\.[^.]+$/, '');
+    const { programme } = await api('POST', { name, startDate, activities });
+    $('scope-modal').classList.remove('show');
+    toast(`Read ${activities.length} work items → programme created`);
+    openProgramme(programme.id);
+  } catch(e){ $('scope-status').textContent=''; toast(e.message, true); }
 };
 
 // ── editor ───────────────────────────────────────────────────────────────

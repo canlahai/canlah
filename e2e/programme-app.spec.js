@@ -157,3 +157,23 @@ test('generate from profile → full SG programme as a collaborative schedule', 
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
 });
+
+test('upload scope-of-works → AI reads works + durations → programme', async ({ page }) => {
+  await page.goto('/programme');
+  await page.click('#np-scope');
+  await expect(page.locator('#scope-modal')).toBeVisible();
+  await page.fill('#scope-start', '2026-07-01');
+  await page.setInputFiles('#scope-file', { name: 'scope.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 scope of works') });
+  await page.click('#scope-go');
+
+  // Lands in the editor populated from the (demo) extracted scope.
+  await expect(page.locator('#view-editor')).toBeVisible();
+  const rows = await page.locator('#act-body tr').count();
+  expect(rows).toBeGreaterThan(5); // demo scope has 10 items
+  await expect(page.locator('#gantt .bar').first()).toBeVisible();
+  await expect(page.locator('#st-crit')).not.toHaveText('0');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
