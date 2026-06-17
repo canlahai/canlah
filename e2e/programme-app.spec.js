@@ -281,6 +281,13 @@ test('multi-programme: look-ahead + resources + master with a cross-project link
   await expect(page.locator('#mp-links')).toContainText('Alpha pour');
   await expect(page.locator('#mp-links .lk-breached')).toHaveCount(1);
 
+  // Auto re-flow proposes pushing the dependent programme; applying clears the breach.
+  await expect(page.locator('#mp-reflow-wrap')).toBeVisible();
+  await expect(page.locator('#mp-reflow')).toContainText(nameB);
+  await page.locator('#mp-reflow [data-apply]').first().click();
+  await expect(page.locator('#mp-links .lk-breached')).toHaveCount(0);
+  await expect(page.locator('#mp-reflow-wrap')).toBeHidden();
+
   // Cleanup both programmes.
   page.on('dialog', (d) => d.accept());
   for (const nm of [nameA, nameB]) {
