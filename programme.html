@@ -360,10 +360,22 @@ function show(view){ ['gate','list','editor'].forEach(v=>$('view-'+v).classList.
 async function boot(){
   let cfg = {};
   try { cfg = await (await fetch('/api/config')).json(); } catch {}
-  const pro = cfg.tier === 'pro' || cfg.demoMode || cfg.authMode === 'shared' || (cfg.session && cfg.session.role === 'admin');
   state.myId = (cfg.session && cfg.session.id) || (cfg.demoMode ? 'demo-user' : null);
-  $('tier-pill').textContent = cfg.demoMode ? 'Demo' : (cfg.tier ? cfg.tier.toUpperCase() : 'Pro');
-  if (!pro){ show('gate'); return; }
+  // Anyone signed in can use the planner (to see programmes they're invited to).
+  // Pro is only needed to CREATE a programme.
+  const authed = cfg.demoMode || cfg.authMode === 'shared' || !!(cfg.session && cfg.session.id);
+  state.canCreate = cfg.tier === 'pro' || cfg.demoMode || cfg.authMode === 'shared' || (cfg.session && cfg.session.role === 'admin');
+  $('tier-pill').textContent = cfg.demoMode ? 'Demo' : (cfg.tier ? cfg.tier.toUpperCase() : (cfg.session && cfg.session.role === 'admin' ? 'ADMIN' : 'Member'));
+  if (!authed){ location.href = '/login?next=' + encodeURIComponent('/programme'); return; }
+  // Show/hide the "create programme" form based on Pro.
+  const nr = document.querySelector('#view-list .new-row');
+  if (nr) nr.style.display = state.canCreate ? '' : 'none';
+  const note = $('member-create-note');
+  if (!state.canCreate && !note) {
+    const el = document.createElement('p'); el.id = 'member-create-note'; el.className = 'muted';
+    el.style.cssText = 'margin:0 0 18px'; el.textContent = "You're a collaborator — programmes you're invited to appear below. Creating new programmes needs a Pro account.";
+    document.querySelector('#view-list .new-row')?.insertAdjacentElement('afterend', el);
+  }
   await loadList();
 }
 

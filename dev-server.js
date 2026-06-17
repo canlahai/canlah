@@ -719,10 +719,9 @@ const server = http.createServer((req, res) => {
         if (!rateLimitCheck(req, res)) return;
         if (!requireAuthDev(req, res)) return;
         const caller = authCheck(req);
-        if (!(await hasProAccess(caller))) {
-          return send(res, 403, JSON.stringify({ error: 'Programme Planner is a Pro feature', code: 'pro_required' }), { 'Content-Type': 'application/json' });
-        }
         const uid = caller.id;
+        // Pro gates programme CREATION only; members collaborate free (per-programme
+        // access enforced by roleOf in the lib).
 
         if (req.method === 'GET') {
           const id = parsedUrl.searchParams.get('id');
@@ -747,6 +746,9 @@ const server = http.createServer((req, res) => {
             } catch (e) {
               return send(res, 400, JSON.stringify({ error: e.message }), { 'Content-Type': 'application/json' });
             }
+          }
+          if (!(await hasProAccess(caller))) {
+            return send(res, 402, JSON.stringify({ error: 'Creating a programme is a Pro feature. Ask your main contractor to invite you, or upgrade to Pro.', code: 'pro_required' }), { 'Content-Type': 'application/json' });
           }
           const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
           return send(res, 200, JSON.stringify({ ok: true, programme }), { 'Content-Type': 'application/json' });
@@ -787,8 +789,9 @@ const server = http.createServer((req, res) => {
         if (!rateLimitCheck(req, res)) return;
         if (!requireAuthDev(req, res)) return;
         const caller = authCheck(req);
-        if (!(await hasProAccess(caller))) return send(res, 403, JSON.stringify({ error: 'Programme Planner is a Pro feature', code: 'pro_required' }), { 'Content-Type': 'application/json' });
         const uid = caller.id;
+        // No blanket Pro gate — invited members (free) view + accept invites;
+        // create/list/revoke are admin-only, enforced inside the invites lib.
 
         if (req.method === 'GET') {
           const token = parsedUrl.searchParams.get('token');

@@ -43,10 +43,10 @@ export default async function handler(req, res) {
   if (!requireAuth(req, res).ok) return;
 
   const caller = authCheck(req);
-  if (!(await hasProAccess(caller))) {
-    return res.status(403).json({ error: 'Programme Planner is a Pro feature', code: 'pro_required' });
-  }
   const uid = caller.id;
+  // Pro is required to CREATE a programme (the main contractor pays). Invited
+  // members — viewers/editors/subcontractors — collaborate for free; their access
+  // to each programme is enforced per-programme by roleOf() inside the lib.
 
   try {
     if (req.method === 'GET') {
@@ -69,6 +69,9 @@ export default async function handler(req, res) {
         } catch (e) {
           return res.status(400).json({ error: e.message });
         }
+      }
+      if (!(await hasProAccess(caller))) {
+        return res.status(402).json({ error: 'Creating a programme is a Pro feature. Ask your main contractor to invite you, or upgrade to Pro.', code: 'pro_required' });
       }
       const programme = await createProgramme({ name: body.name, ownerId: uid, startDate: body.startDate, activities: body.activities });
       return res.status(200).json({ ok: true, programme });

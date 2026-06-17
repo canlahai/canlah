@@ -8,7 +8,7 @@
 
 import { requireAuth, authCheck } from '../lib/auth.js';
 import { enforceRateLimit } from '../lib/rate-limit.js';
-import { hasProAccess, getUserById } from '../lib/users.js';
+import { getUserById } from '../lib/users.js';
 import { getProgramme } from '../lib/programmes.js';
 import { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } from '../lib/invites.js';
 import { initSentry, captureException } from '../lib/sentry.js';
@@ -22,8 +22,10 @@ export default async function handler(req, res) {
   if (!(await enforceRateLimit(req, res, { id: 'invites', limit: 60, windowMs: 60_000 }))) return;
   if (!requireAuth(req, res).ok) return;
   const caller = authCheck(req);
-  if (!(await hasProAccess(caller))) return res.status(403).json({ error: 'Programme Planner is a Pro feature', code: 'pro_required' });
   const uid = caller.id;
+  // No blanket Pro gate: invited members (free) must be able to view + accept
+  // invites. Creating/listing/revoking invites is admin-only, enforced per
+  // programme inside the invites lib (canManage). Accept is email-matched.
 
   try {
     if (req.method === 'GET') {
