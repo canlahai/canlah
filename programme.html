@@ -48,6 +48,21 @@
   .pcard .meta{font-size:12px;color:var(--g4);font-family:'JetBrains Mono',monospace}
   .role-tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:999px;border:1px solid var(--g7);color:var(--g4);margin-top:8px}
   .empty{color:var(--g4);padding:40px;text-align:center;border:1px dashed var(--g7);border-radius:12px}
+  /* portfolio dashboard */
+  .pf-rollup{display:flex;gap:18px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--g4)}
+  .pf-rollup b{color:var(--paper);font-size:15px}
+  .pf-rollup .warn b{color:#e8a08c}
+  .seg{display:inline-flex;border:1px solid var(--g7);border-radius:8px;overflow:hidden}
+  .seg-btn{background:var(--g9);color:var(--g4);border:0;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer}
+  .seg-btn.on{background:var(--g7);color:var(--paper)}
+  #pf-table tr{cursor:pointer}
+  #pf-table tbody tr:hover{background:var(--g9)}
+  .pbar{position:relative;width:120px;height:8px;background:var(--g8);border-radius:999px;overflow:hidden;display:inline-block;vertical-align:middle}
+  .pbar>span{position:absolute;left:0;top:0;bottom:0;background:var(--green);border-radius:999px}
+  .sched-ok{color:#7fd1a0}.sched-late{color:#e8a08c}.sched-na{color:var(--g4)}
+  .risk-pill{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+  .risk-0{color:#7fd1a0;background:rgba(42,122,71,.14)}
+  .risk-n{color:#e8a08c;background:rgba(192,73,43,.16)}
   /* editor */
   .ed-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
   .ed-stats{display:flex;gap:22px;flex-wrap:wrap;margin:10px 0 18px}
@@ -156,7 +171,26 @@
     <button class="btn" id="np-scope" title="Upload your contract / scope of works — we read the works + durations and build the programme">📄 Upload scope</button>
   </div>
 
-  <div id="list-cards" class="cards"></div>
+  <!-- portfolio roll-up + view toggle (hidden until there are programmes) -->
+  <div id="list-toolbar" class="hidden" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div id="pf-rollup" class="pf-rollup"></div>
+    <div class="seg" role="tablist">
+      <button id="seg-dash" class="seg-btn on" role="tab">📊 Dashboard</button>
+      <button id="seg-cards" class="seg-btn" role="tab">▦ Cards</button>
+    </div>
+  </div>
+
+  <div id="portfolio-panel" class="tbl-wrap hidden">
+    <table id="pf-table">
+      <thead><tr>
+        <th>Programme</th><th>Role</th><th>Progress</th><th>Start</th>
+        <th>Computed end</th><th>Target</th><th>Schedule</th><th>At risk</th>
+      </tr></thead>
+      <tbody id="pf-body"></tbody>
+    </table>
+  </div>
+
+  <div id="list-cards" class="cards hidden"></div>
   <div id="list-empty" class="empty hidden">No programmes yet — create your first one above.</div>
 </div>
 
@@ -430,6 +464,7 @@ async function api(method, body, qs){
   return data;
 }
 function show(view){ ['gate','list','editor'].forEach(v=>$('view-'+v).classList.toggle('hidden', v!==view)); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // ── boot: gate on tier ───────────────────────────────────────────────────
 async function boot(){
@@ -455,21 +490,80 @@ async function boot(){
   await loadList();
 }
 
-// ── project list ─────────────────────────────────────────────────────────
-async function loadList(){
-  show('list');
-  const { programmes } = await api('GET');
-  const wrap = $('list-cards'); wrap.innerHTML='';
-  $('list-empty').classList.toggle('hidden', programmes.length>0);
+// ── project list + portfolio dashboard ─────────────────────────────────────
+let listMode = localStorage.getItem('pf-mode') || 'dash'; // 'dash' | 'cards'
+function fmtDate(d){ return d || '—'; }
+function scheduleCell(s){
+  if (s.computedEnd == null) return '<span class="sched-na">—</span>';
+  if (s.targetEnd == null || s.overrunDays == null) return '<span class="sched-na">no target</span>';
+  if (s.overrunDays > 0) return `<span class="sched-late">⚠ ${s.overrunDays}d late</span>`;
+  if (s.overrunDays < 0) return `<span class="sched-ok">${-s.overrunDays}d early</span>`;
+  return '<span class="sched-ok">on track</span>';
+}
+function renderDashboard(programmes){
+  const body = $('pf-body'); body.innerHTML='';
   for (const p of programmes){
+    const s = p.stats || {};
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td><b>${esc(p.name)}</b></td>`+
+      `<td><span class="role-tag" style="margin:0">${p.role}</span></td>`+
+      `<td><span class="pbar"><span style="width:${s.percentComplete||0}%"></span></span> <span class="mono" style="font-size:11px">${s.percentComplete||0}% · ${s.done||0}/${s.total||0}</span></td>`+
+      `<td class="mono" style="font-size:12px">${fmtDate(p.startDate)}</td>`+
+      `<td class="mono" style="font-size:12px">${fmtDate(s.computedEnd)}</td>`+
+      `<td class="mono" style="font-size:12px">${fmtDate(s.targetEnd)}</td>`+
+      `<td class="mono" style="font-size:12px">${scheduleCell(s)}</td>`+
+      `<td><span class="risk-pill ${s.atRisk?'risk-n':'risk-0'}">${s.atRisk?('⚠ '+s.atRisk):'✓ 0'}</span></td>`;
+    tr.onclick = () => openProgramme(p.id);
+    body.appendChild(tr);
+  }
+}
+function renderCards(programmes){
+  const wrap = $('list-cards'); wrap.innerHTML='';
+  for (const p of programmes){
+    const s = p.stats || {};
     const el = document.createElement('div'); el.className='pcard';
-    el.innerHTML = `<h3></h3><div class="meta"></div><span class="role-tag"></span>`;
+    el.innerHTML = `<h3></h3><div class="meta"></div>`+
+      `<span class="pbar" style="margin:8px 0"><span style="width:${s.percentComplete||0}%"></span></span>`+
+      `<div class="meta" style="margin-top:4px">${s.percentComplete||0}% complete${s.atRisk?` · <span class="sched-late">⚠ ${s.atRisk} at risk</span>`:''}</div>`+
+      `<span class="role-tag"></span>`;
     el.querySelector('h3').textContent = p.name;
     el.querySelector('.meta').textContent = `${p.activityCount} activit${p.activityCount===1?'y':'ies'} · start ${p.startDate}`;
     el.querySelector('.role-tag').textContent = p.role;
     el.onclick = () => openProgramme(p.id);
     wrap.appendChild(el);
   }
+}
+function renderRollup(programmes){
+  const n = programmes.length;
+  const risk = programmes.reduce((t,p)=>t+((p.stats&&p.stats.atRisk)||0),0);
+  const blocked = programmes.reduce((t,p)=>t+((p.stats&&p.stats.blocked)||0),0);
+  const late = programmes.filter(p=>p.stats&&p.stats.overrunDays>0).length;
+  $('pf-rollup').innerHTML =
+    `<span><b>${n}</b> programme${n===1?'':'s'}</span>`+
+    `<span class="${risk?'warn':''}"><b>${risk}</b> activit${risk===1?'y':'ies'} at risk</span>`+
+    `<span class="${blocked?'warn':''}"><b>${blocked}</b> blocked</span>`+
+    `<span class="${late?'warn':''}"><b>${late}</b> behind target</span>`;
+}
+function applyListMode(){
+  const dash = listMode==='dash';
+  $('seg-dash').classList.toggle('on', dash);
+  $('seg-cards').classList.toggle('on', !dash);
+  $('portfolio-panel').classList.toggle('hidden', !dash);
+  $('list-cards').classList.toggle('hidden', dash);
+}
+$('seg-dash').onclick = () => { listMode='dash'; localStorage.setItem('pf-mode','dash'); applyListMode(); };
+$('seg-cards').onclick = () => { listMode='cards'; localStorage.setItem('pf-mode','cards'); applyListMode(); };
+async function loadList(){
+  show('list');
+  const { programmes } = await api('GET', null, '?view=portfolio');
+  const has = programmes.length>0;
+  $('list-empty').classList.toggle('hidden', has);
+  $('list-toolbar').classList.toggle('hidden', !has);
+  renderRollup(programmes);
+  renderDashboard(programmes);
+  renderCards(programmes);
+  applyListMode();
 }
 $('np-create').onclick = async () => {
   const name = $('np-name').value.trim(); const startDate = $('np-start').value; const endDate = $('np-end').value || undefined;

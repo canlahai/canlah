@@ -9,7 +9,7 @@ import { handleUpload } from '@vercel/blob/client';
 import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
-import { listProgrammesForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
+import { listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
 import { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } from './lib/invites.js';
 import { computeSchedule } from './lib/cpm.js';
 import { getSupabaseConfig, pingSupabase } from './lib/supabase.js';
@@ -750,6 +750,9 @@ const server = http.createServer((req, res) => {
             const prog = await getProgramme(id, uid);
             if (!prog) return send(res, 404, JSON.stringify({ error: 'Programme not found' }), { 'Content-Type': 'application/json' });
             return send(res, 200, JSON.stringify({ programme: prog }), { 'Content-Type': 'application/json' });
+          }
+          if (parsedUrl.searchParams.get('view') === 'portfolio') {
+            return send(res, 200, JSON.stringify({ programmes: await listPortfolioForUser(uid) }), { 'Content-Type': 'application/json' });
           }
           return send(res, 200, JSON.stringify({ programmes: await listProgrammesForUser(uid) }), { 'Content-Type': 'application/json' });
         }
