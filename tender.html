@@ -4,31 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CanLah.ai — Tender Builder</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/canlah.css">
 <style>
   .tb-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:24px auto 0}
   .tb-drop{background:var(--g8);border:1px dashed var(--g7);border-radius:var(--rl,12px);padding:22px;text-align:center}
   .tb-drop h3{font-size:14px;margin:0 0 4px;color:var(--paper)}
   .tb-drop p{font-size:12px;color:var(--g5);margin:0 0 12px}
-  .tb-status{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--yellow);min-height:14px;margin-top:8px}
+  .tb-status{font-family:'Inter',sans-serif;font-size:11px;color:var(--yellow);min-height:14px;margin-top:8px}
   table.tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
-  table.tb th{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--g7)}
+  table.tb th{font-family:'Inter',sans-serif;font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--g7)}
   table.tb td{padding:8px 10px;border-bottom:1px solid var(--g7);color:var(--g2);vertical-align:middle}
-  table.tb td.num,table.tb th.num{text-align:right;font-family:'JetBrains Mono',monospace}
+  table.tb td.num,table.tb th.num{text-align:right;font-family:'Inter',sans-serif}
   table.tb select{background:var(--g8);border:1px solid var(--g7);border-radius:8px;color:var(--paper);padding:6px 8px;font-size:12px;max-width:320px}
-  .conf{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;border-radius:6px;text-transform:uppercase;letter-spacing:.06em}
+  .conf{font-family:'Inter',sans-serif;font-size:9px;padding:2px 6px;border-radius:6px;text-transform:uppercase;letter-spacing:.06em}
   .conf.high{background:var(--gbg,#13311f);color:var(--glt,#5ad17e)}
   .conf.medium{background:#3a2f12;color:var(--yellow)}
   .conf.low{background:var(--rbg,#3a1717);color:var(--red)}
   .tb-warn{background:#3a2f12;border:1px solid var(--yellow);border-radius:var(--r,8px);padding:12px 14px;margin:14px 0;font-size:13px;color:#e8c98a}
   .tb-warn ul{margin:6px 0 0;padding-left:18px}
-  .tb-totals{display:flex;justify-content:flex-end;gap:30px;margin-top:14px;font-family:'JetBrains Mono',monospace}
+  .tb-totals{display:flex;justify-content:flex-end;gap:30px;margin-top:14px;font-family:'Inter',sans-serif}
   .tb-totals .tt-row{text-align:right}
   .tb-totals .tt-label{font-size:10px;color:var(--g5);text-transform:uppercase;letter-spacing:.06em}
   .tb-totals .tt-val{font-size:20px;font-weight:800;color:var(--paper)}
   .tb-totals .tt-val.total{color:var(--yellow)}
-  .markup-in{width:70px;background:var(--g8);border:1px solid var(--g7);border-radius:8px;color:var(--paper);padding:6px 8px;font-size:13px;font-family:'JetBrains Mono',monospace}
+  .markup-in{width:70px;background:var(--g8);border:1px solid var(--g7);border-radius:8px;color:var(--paper);padding:6px 8px;font-size:13px;font-family:'Inter',sans-serif}
   .unmatched-row{opacity:.55}
 </style>
 </head>
@@ -75,7 +75,7 @@
   <div class="report-screen">
     <div class="rh-top">
       <div>
-        <div class="rh-eyebrow" style="color:var(--orange);font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em">Step 2 of 3 · Approve matches</div>
+        <div class="rh-eyebrow" style="color:var(--orange);font-family:'Inter',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.08em">Step 2 of 3 · Approve matches</div>
         <div class="rh-title" style="font-size:26px;font-weight:800;color:var(--paper)">Match take-off to BQ</div>
       </div>
       <div class="rh-actions" style="display:flex;gap:10px;align-items:center">
@@ -97,7 +97,7 @@
   <div class="report-screen">
     <div class="rh-top">
       <div>
-        <div class="rh-eyebrow" style="color:var(--orange);font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em">Tender · CanLah.ai</div>
+        <div class="rh-eyebrow" style="color:var(--orange);font-family:'Inter',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.08em">Tender · CanLah.ai</div>
         <div class="rh-title" id="t-title" style="font-size:26px;font-weight:800;color:var(--paper)">Tender</div>
       </div>
       <div class="rh-actions" style="display:flex;gap:10px">
@@ -106,7 +106,7 @@
         <button class="act-btn primary" onclick="CanLah.showPage('upload')">New tender</button>
       </div>
     </div>
-    <p style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;line-height:1.5;color:#888882;border-top:1px solid rgba(136,136,130,.25);margin:16px 0 0;padding-top:12px">⚠ AI-generated draft — rates and quantities are estimates, not contractual; a qualified QS must verify before tender or costing. <a href="/legal" style="color:#e8c027">Legal &amp; data →</a></p>
+    <p style="font-family:'Inter',ui-monospace,monospace;font-size:11.5px;line-height:1.5;color:#888882;border-top:1px solid rgba(136,136,130,.25);margin:16px 0 0;padding-top:12px">⚠ AI-generated draft — rates and quantities are estimates, not contractual; a qualified QS must verify before tender or costing. <a href="/legal" style="color:#e8c027">Legal &amp; data →</a></p>
     <div id="tender-warnings"></div>
     <div class="section">
       <table class="tb" id="tender-table"></table>
