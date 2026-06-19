@@ -359,6 +359,39 @@ test('upload scope-of-works → AI reads works + durations → programme', async
   await expect(page.locator('#view-list')).toBeVisible();
 });
 
+test('programme overview: read-friendly status summary + toggle', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'Overview test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  // Editors land on Schedule.
+  await expect(page.locator('#ed-schedule')).toBeVisible();
+  await page.click('#ed-add');
+  const row = page.locator('#act-body tr').first();
+  await row.locator('td.name input').fill('Foundations');
+  await row.locator('td.dur input').fill('10');
+  await row.locator('select').selectOption('in_progress');
+
+  // Switch to Overview → status summary renders.
+  await page.click('#ed-seg-overview');
+  await expect(page.locator('#ed-overview')).toBeVisible();
+  await expect(page.locator('#ed-schedule')).toBeHidden();
+  await expect(page.locator('#ed-overview')).toContainText('Progress');
+  await expect(page.locator('#ed-overview')).toContainText('By phase');
+  await expect(page.locator('#ed-overview')).toContainText('In progress now');
+  await expect(page.locator('#ed-overview')).toContainText('Foundations');
+
+  // Toggle back to Schedule.
+  await page.click('#ed-seg-schedule');
+  await expect(page.locator('#act-body')).toBeVisible();
+  await expect(page.locator('#ed-overview')).toBeHidden();
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
 test('build from BQ → quantities → estimated-duration programme', async ({ page }) => {
   await page.goto('/programme');
   await page.click('#np-bq');

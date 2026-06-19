@@ -80,6 +80,17 @@
   .mp-track>span{position:absolute;top:0;bottom:0;background:var(--blue);border-radius:999px;opacity:.85}
   .mp-dates{font-family:'Inter',sans-serif;font-size:10px;color:var(--g4);min-width:150px;text-align:right}
   .lk-breached{border-color:#c0492b;background:rgba(192,73,43,.10)}
+  /* programme overview (read-friendly status summary) */
+  .ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:8px}
+  .ov-card{background:var(--g9);border:1px solid var(--g8);border-radius:12px;padding:14px}
+  .ov-card .k{font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.08em}
+  .ov-card .v{font-size:22px;font-weight:800;margin-top:4px}
+  .ov-card .v.sm{font-size:15px}
+  .ov-sec{margin:22px 0}
+  .ov-sec h3{font-size:14px;margin-bottom:10px}
+  .ov-phase{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--g8)}
+  .ov-phase .nm{min-width:150px;max-width:220px;font-size:13px;font-weight:600}
+  .ov-empty{color:var(--g4);font-size:13px;padding:6px 0}
   /* editor */
   .ed-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
   .ed-stats{display:flex;gap:22px;flex-wrap:wrap;margin:10px 0 18px}
@@ -312,6 +323,12 @@
     <div class="stat"><div class="k">At risk</div><div class="v" id="st-risk" style="color:#c2410c">—</div></div>
   </div>
 
+  <div class="seg" role="tablist" style="margin-bottom:14px">
+    <button id="ed-seg-overview" class="seg-btn on" role="tab">📋 Overview</button>
+    <button id="ed-seg-schedule" class="seg-btn" role="tab">🗂 Schedule &amp; Gantt</button>
+  </div>
+
+  <div id="ed-schedule" class="hidden">
   <div class="toolbar">
     <button class="btn pri" id="ed-add">+ Activity</button>
     <button class="btn" id="ed-save">Save</button>
@@ -366,6 +383,10 @@
     <span><i style="background:var(--orange)"></i>Critical path</span>
     <span><i style="background:var(--green)"></i>Done</span>
   </div>
+  </div><!-- /ed-schedule -->
+
+  <!-- OVERVIEW: read-friendly status summary everyone can take in at a glance -->
+  <div id="ed-overview"></div>
 
   <p class="disclaimer">⚠ AI-assisted draft — durations and the critical path are estimates; a qualified planner must verify before any submission or decision. <a href="/legal">Legal &amp; data →</a></p>
 </div>
@@ -1071,6 +1092,9 @@ async function openProgramme(id){
   $('ed-delete').classList.toggle('hidden', !(state.myId && state.myId === programme.ownerId));
   show('editor');
   refreshAssigneeFilter();
+  // Default landing: read-only members get the Overview; editors get the Schedule.
+  edView = state.canEdit ? 'schedule' : 'overview';
+  applyEdView();
   await recompute();
 }
 function normalise(a){
@@ -1210,7 +1234,7 @@ function debounceRecompute(){ clearTimeout(rcTimer); rcTimer=setTimeout(recomput
 
 async function recompute(){
   const startDate = $('ed-start').value || state.current.startDate;
-  if (!state.activities.length){ state.schedule={tasks:[],criticalPathTaskIds:[],projectEnd:startDate,projectDurationDays:0,warnings:[]}; updateStats(); renderTable(); renderGantt(); return; }
+  if (!state.activities.length){ state.schedule={tasks:[],criticalPathTaskIds:[],projectEnd:startDate,projectDurationDays:0,warnings:[]}; updateStats(); renderTable(); renderGantt(); renderOverview(); return; }
   try {
     const { schedule } = await api('POST', { action:'schedule', startDate, activities: state.activities });
     state.schedule = schedule;
@@ -1220,7 +1244,63 @@ async function recompute(){
     state.schedule = null;
     $('ed-warn').classList.remove('hidden'); $('ed-warn').textContent = '⚠ '+e.message;
   }
-  updateStats(); refreshAssigneeFilter(); renderTable(); renderGantt();
+  updateStats(); refreshAssigneeFilter(); renderTable(); renderGantt(); renderOverview();
+}
+
+// ── programme overview (read-friendly status summary for everyone) ──────────
+let edView = 'overview';
+function applyEdView(){
+  const ov = edView==='overview';
+  $('ed-seg-overview').classList.toggle('on', ov);
+  $('ed-seg-schedule').classList.toggle('on', !ov);
+  $('ed-overview').classList.toggle('hidden', !ov);
+  $('ed-schedule').classList.toggle('hidden', ov);
+  if (ov) renderOverview();
+}
+$('ed-seg-overview').onclick=()=>{ edView='overview'; applyEdView(); };
+$('ed-seg-schedule').onclick=()=>{ edView='schedule'; applyEdView(); };
+function renderOverview(){
+  const el=$('ed-overview'); if(!el) return;
+  const acts=state.activities||[]; const s=state.schedule;
+  const byId=new Map(((s&&s.tasks)||[]).map(t=>[t.id,t]));
+  const total=acts.length, done=acts.filter(a=>a.status==='done').length;
+  const inprog=acts.filter(a=>a.status==='in_progress').length;
+  const todo=acts.filter(a=>a.status==='todo').length;
+  const blocked=acts.filter(a=>a.status==='blocked').length;
+  const atRisk=acts.filter(a=>a.status==='blocked'||!activityReady(a)).length;
+  const pct=total?Math.round(done/total*100):0;
+  const start=(state.current&&state.current.startDate)||'—';
+  const cend=(s&&s.projectEnd)||'—';
+  const target=(state.current&&state.current.endDate)||'';
+  let schedNote='';
+  if(target&&s&&s.projectEnd){ const over=s.projectEnd>target; schedNote = over?`<span class="flag-over">⚠ over by ${Math.round((Date.parse(s.projectEnd)-Date.parse(target))/86400000)}d</span>`:'<span class="sched-ok">✓ on/before target</span>'; }
+  const phases={};
+  for(const a of acts){ const k=a.section||a.trade||'Other'; (phases[k]=phases[k]||{t:0,d:0}); phases[k].t++; if(a.status==='done')phases[k].d++; }
+  const horizon=(()=>{const d=new Date();d.setDate(d.getDate()+14);return d.toISOString().slice(0,10);})();
+  const dateOf=a=>{const t=byId.get(a.id);return t?t.start:null;};
+  const inProgList=acts.filter(a=>a.status==='in_progress');
+  const upNext=acts.filter(a=>a.status==='todo'&&dateOf(a)&&dateOf(a)<=horizon).sort((x,y)=>(dateOf(x)||'').localeCompare(dateOf(y)||'')).slice(0,8);
+  const blockers=acts.filter(a=>a.status==='blocked');
+  const dates=a=>{const t=byId.get(a.id);return t?`<span class="mono" style="font-size:11px;color:var(--g4)">${t.start} → ${t.end}</span>`:'';};
+  const row=(a,right)=>`<div class="la-row"><span style="flex:1">${esc(a.name||a.id)}${a.assignee?` <span class="muted">· ${esc(a.assignee)}</span>`:''}</span><span style="white-space:nowrap">${right||''}</span></div>`;
+  el.innerHTML = `
+    <div class="ov-grid">
+      <div class="ov-card"><div class="k">Progress</div><div class="v">${pct}%</div><span class="pbar" style="margin-top:6px;width:100%"><span style="width:${pct}%"></span></span><div class="muted" style="font-size:11px;margin-top:4px">${done}/${total} done</div></div>
+      <div class="ov-card"><div class="k">In progress</div><div class="v">${inprog}</div></div>
+      <div class="ov-card"><div class="k">To do</div><div class="v">${todo}</div></div>
+      <div class="ov-card"><div class="k">Blocked</div><div class="v" style="color:${blocked?'#c2410c':'inherit'}">${blocked}</div></div>
+      <div class="ov-card"><div class="k">At risk</div><div class="v" style="color:${atRisk?'#c2410c':'inherit'}">${atRisk}</div></div>
+    </div>
+    <div class="ov-grid">
+      <div class="ov-card"><div class="k">Start</div><div class="v sm mono">${start}</div></div>
+      <div class="ov-card"><div class="k">Computed end</div><div class="v sm mono">${cend}</div></div>
+      <div class="ov-card"><div class="k">Target end</div><div class="v sm mono">${target||'—'}</div>${schedNote?`<div style="font-size:11px;margin-top:4px">${schedNote}</div>`:''}</div>
+    </div>
+    <div class="ov-sec"><h3>By phase</h3>${Object.keys(phases).length?Object.keys(phases).map(k=>{const p=phases[k];const pc=p.t?Math.round(p.d/p.t*100):0;return `<div class="ov-phase"><span class="nm">${esc(k)}</span><span class="pbar" style="flex:1;max-width:260px"><span style="width:${pc}%"></span></span><span class="mono" style="font-size:11px;color:var(--g4)">${pc}% · ${p.d}/${p.t}</span></div>`;}).join(''):'<div class="ov-empty">No activities yet.</div>'}</div>
+    <div class="ov-sec"><h3>🔧 In progress now (${inProgList.length})</h3>${inProgList.length?inProgList.map(a=>row(a,dates(a))).join(''):'<div class="ov-empty">Nothing marked in progress.</div>'}</div>
+    <div class="ov-sec"><h3>📅 Up next (starting ≤ 2 weeks)</h3>${upNext.length?upNext.map(a=>row(a,dates(a))).join(''):'<div class="ov-empty">Nothing starting in the next two weeks.</div>'}</div>
+    <div class="ov-sec"><h3>🔴 Blockers (${blockers.length})</h3>${blockers.length?blockers.map(a=>row(a,a.blockedReason?`<span class="flag-over">${esc(a.blockedReason)}</span>`:'<span class="flag-over">blocked</span>')).join(''):'<div class="ov-empty">No blockers. ✓</div>'}</div>
+  `;
 }
 function updateStats(){
   const s=state.schedule;
