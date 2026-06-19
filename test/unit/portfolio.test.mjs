@@ -9,7 +9,7 @@ delete process.env.SUPABASE_SERVICE_KEY;
 process.env.DEV_PROGRAMMES_DIR = mkdtempSync(join(tmpdir(), 'canlah-portfolio-'));
 
 const { createProgramme, updateProgramme } = await import('../../lib/programmes.js');
-const { lookahead, resourceLoad, masterPlan, reflow } = await import('../../lib/portfolio.js');
+const { lookahead, resourceLoad, masterPlan, reflow, attention } = await import('../../lib/portfolio.js');
 
 const USER = 'u-pf';
 const today = new Date().toISOString().slice(0, 10);
@@ -81,5 +81,24 @@ const mp2 = await masterPlan(USER);
 assert.equal(mp2.breaches, 0, 'breach cleared after applying re-flow');
 const rf2 = await reflow(USER);
 assert.equal(rf2.proposals.length, 0, 'no further proposals once dependencies are satisfied');
+
+// --- attention inbox --------------------------------------------------------
+const UATT = 'u-attn';
+const past = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+await createProgramme({
+  name: 'Attn P', ownerId: UATT, startDate: today,
+  activities: [
+    { id: 'c1', name: 'Blocked thing', durationDays: 3, predecessors: [], status: 'blocked', blockedReason: 'rebar late', assignee: 'PM' },
+    { id: 'c2', name: 'Pour', durationDays: 2, predecessors: [], status: 'todo', deliveries: [{ item: 'Concrete', neededBy: past(2), status: 'needed' }] },
+  ],
+});
+const att = await attention(UATT);
+assert.equal(att.blocked.length, 1, 'one blocked activity');
+assert.equal(att.blocked[0].name, 'Blocked thing', 'blocked item carries name');
+assert.equal(att.blocked[0].reason, 'rebar late', 'blocked item carries reason');
+assert.equal(att.lateDeliveries.length, 1, 'one late delivery flagged');
+assert.equal(att.lateDeliveries[0].item, 'Concrete', 'late delivery carries item');
+assert.ok(att.total >= 2, 'total counts attention items');
+assert.ok(!att.blocked.some((b) => att.overdue.includes(b)), 'blocked not double-counted as overdue');
 
 console.log('portfolio.test.mjs — all assertions passed');

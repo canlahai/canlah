@@ -6,9 +6,11 @@ import { join } from 'node:path';
 delete process.env.SUPABASE_URL;
 delete process.env.SUPABASE_SERVICE_KEY;
 process.env.DEV_PROGRAMMES_DIR = mkdtempSync(join(tmpdir(), 'canlah-inv-'));
+process.env.DEV_USERS_DIR = mkdtempSync(join(tmpdir(), 'canlah-inv-users-'));
 
 const { createProgramme, getProgramme } = await import('../../lib/programmes.js');
 const { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } = await import('../../lib/invites.js');
+const { createUser } = await import('../../lib/users.js');
 
 const OWNER = 'u-owner';
 const SUBCON = 'u-subcon';
@@ -53,5 +55,15 @@ assert.equal((await listInvites(prog.id, 'admin')).invites.length, 1, 'new pendi
 assert.equal((await revokeInvite(m2.invite.token, 'viewer')).reason, 'forbidden', 'non-admin cannot revoke');
 assert.equal((await revokeInvite(m2.invite.token, 'admin')).ok, true, 'admin revokes');
 assert.equal((await listInvites(prog.id, 'admin')).invites.length, 0, 'revoked invite gone from pending');
+
+// --- self-onboard: a brand-new invitee creates their own account from the link --
+const inv3 = await createInvite({ programmeId: prog.id, actorAccess: 'admin', email: 'NewSub@Acme.SG', accessLevel: 'editor', tradeRole: 'subcon', invitedBy: OWNER });
+const invEmail = (await getInvite(inv3.invite.token)).email; // normalised to lowercase
+const newUser = await createUser({ email: invEmail, password: 'supersecret', name: 'New Sub', role: 'user' });
+const acc3 = await acceptInvite(inv3.invite.token, { id: newUser.id, email: newUser.email });
+assert.equal(acc3.ok, true, 'self-onboarded user accepts their own invite');
+const asNew = await getProgramme(prog.id, newUser.id);
+assert.equal(asNew.access, 'editor', 'self-onboarded user gets the invited access level');
+assert.equal(asNew.members.find((m) => m.userId === newUser.id).tradeRole, 'subcon', 'trade role applied on self-onboard');
 
 console.log('invites.test.mjs — all assertions passed');

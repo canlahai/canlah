@@ -33,30 +33,27 @@ const ACCESS_LABEL = { admin:'Admin', editor:'Editor', viewer:'Viewer (read-only
 
 function render(html){ $('content').innerHTML = html; }
 
+const fld = "width:100%;margin:4px 0 10px;padding:9px 11px;border:1px solid var(--g7);border-radius:8px;background:var(--ink);color:var(--paper);font-family:'Inter',sans-serif";
+const lbl = "font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.08em";
+const nextUrl = () => encodeURIComponent(location.pathname + location.search);
+
 async function main(){
   if (!token){ render('<h1>Invalid invite</h1><p>This link is missing its invite code.</p><a class="link" href="/">← Home</a>'); return; }
 
-  // Are we signed in? (and is this the right account?)
   let cfg = {};
   try { cfg = await (await fetch('/api/config')).json(); } catch {}
   const signedIn = !!(cfg.session && cfg.session.id) || cfg.demoMode;
+  const usersMode = cfg.authMode === 'users';
 
-  // Fetch invite details (requires being signed in).
-  let invite = null, fetchErr = null;
-  if (signedIn){
-    const res = await fetch('/api/invites?token=' + encodeURIComponent(token));
-    if (res.ok) invite = (await res.json()).invite; else fetchErr = (await res.json().catch(()=>({}))).error || res.statusText;
-  }
+  // Public invite info — works whether or not you're signed in (token is the secret).
+  let invite = null, err = null;
+  try {
+    const r = await fetch('/api/invites?public=1&token=' + encodeURIComponent(token));
+    if (r.ok) invite = (await r.json()).invite; else err = (await r.json().catch(()=>({}))).error || r.statusText;
+  } catch(e){ err = e.message; }
 
-  if (!signedIn){
-    render(`<h1>You've been invited</h1>
-      <p>Sign in to your CanLah account to view and accept this programme invite.</p>
-      <a class="btn" href="/login?next=${encodeURIComponent(location.pathname + location.search)}">Sign in to continue</a>
-      <p style="font-size:13px;margin-top:1rem">No account yet? Ask the main contractor / your admin to create one for your email.</p>`);
-    return;
-  }
   if (!invite){
-    render(`<h1>Invite unavailable</h1><p class="err">${fetchErr || 'This invite was not found, or it has already been used or revoked.'}</p><a class="link" href="/programme">Go to Programme Planner →</a>`);
+    render(`<h1>Invite unavailable</h1><p class="err">${err || 'This invite was not found, or it has been used or revoked.'}</p><a class="link" href="/">← Home</a>`);
     return;
   }
   if (invite.status !== 'pending'){
@@ -65,23 +62,61 @@ async function main(){
   }
 
   const trade = invite.tradeRole ? ` · <span class="tag">${invite.tradeRole}</span>` : '';
-  render(`<h1>${invite.programmeName || 'A programme'}</h1>
+  const head = `<h1>${invite.programmeName || 'A programme'}</h1>
     <p>You're invited to join as:</p>
     <p><span class="tag">${ACCESS_LABEL[invite.accessLevel] || invite.accessLevel}</span>${trade}</p>
-    <p style="font-size:13px">Invite for <strong style="color:var(--paper)">${invite.email}</strong></p>
-    <button class="btn" id="accept">Accept &amp; join</button>
-    <a class="ghost" href="/programme">Not now</a>
-    <p id="msg" class="err" style="margin-top:1rem"></p>`);
+    <p style="font-size:13px">Invite for <strong style="color:var(--paper)">${invite.email}</strong></p>`;
 
-  $('accept').onclick = async () => {
-    $('accept').disabled = true; $('msg').textContent = '';
-    try {
-      const res = await fetch('/api/invites', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'accept', token }) });
-      const data = await res.json().catch(()=>({}));
-      if (!res.ok){ $('msg').textContent = data.error || 'Could not accept the invite.'; $('accept').disabled = false; return; }
-      render(`<h1>You're in 🎉</h1><p>You've joined <strong style="color:var(--paper)">${invite.programmeName||'the programme'}</strong> as ${ACCESS_LABEL[invite.accessLevel]||invite.accessLevel}.</p><a class="btn" href="/programme">Open Programme Planner →</a>`);
-    } catch(e){ $('msg').textContent = e.message; $('accept').disabled = false; }
-  };
+  // Already signed in → one-click accept (server verifies the email matches).
+  if (signedIn){
+    render(head + `<button class="btn" id="accept">Accept &amp; join</button>
+      <a class="ghost" href="/programme">Not now</a>
+      <p id="msg" class="err" style="margin-top:1rem"></p>`);
+    $('accept').onclick = async () => {
+      $('accept').disabled = true; $('msg').textContent = '';
+      try {
+        const res = await fetch('/api/invites', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'accept', token }) });
+        const data = await res.json().catch(()=>({}));
+        if (!res.ok){ $('msg').textContent = data.error || 'Could not accept the invite.'; $('accept').disabled = false; return; }
+        render(`<h1>You're in 🎉</h1><p>You've joined <strong style="color:var(--paper)">${invite.programmeName||'the programme'}</strong> as ${ACCESS_LABEL[invite.accessLevel]||invite.accessLevel}.</p><a class="btn" href="/programme">Open Programme Planner →</a>`);
+      } catch(e){ $('msg').textContent = e.message; $('accept').disabled = false; }
+    };
+    return;
+  }
+
+  // Signed out, per-user mode → let them create their own account right here.
+  if (usersMode){
+    render(head + `
+      <p style="margin-top:1rem">Create your account to join — takes a few seconds.</p>
+      <div style="text-align:left;max-width:320px;margin:0 auto">
+        <label style="${lbl}">Your name (optional)</label>
+        <input id="r-name" placeholder="e.g. Ah Seng" style="${fld}">
+        <label style="${lbl}">Choose a password</label>
+        <input id="r-pw" type="password" placeholder="at least 8 characters" style="${fld}">
+      </div>
+      <button class="btn" id="register">Create account &amp; join</button>
+      <p style="font-size:13px;margin-top:10px">Already have an account? <a class="link" href="/login?next=${nextUrl()}">Sign in to accept</a></p>
+      <p id="msg" class="err" style="margin-top:1rem"></p>`);
+    $('register').onclick = async () => {
+      const password = $('r-pw').value, name = $('r-name').value;
+      if (!password || password.length < 8){ $('msg').textContent = 'Password must be at least 8 characters'; return; }
+      $('register').disabled = true; $('msg').textContent = '';
+      try {
+        const res = await fetch('/api/invites', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'registerAccept', token, name, password }) });
+        const data = await res.json().catch(()=>({}));
+        if (!res.ok){
+          $('msg').innerHTML = (data.error || 'Could not create your account.') + (data.code==='exists' ? ` <a class="link" href="/login?next=${nextUrl()}">Sign in →</a>` : '');
+          $('register').disabled = false; return;
+        }
+        render(`<h1>You're in 🎉</h1><p>Welcome${name?(', '+name.trim()):''}! You've joined <strong style="color:var(--paper)">${invite.programmeName||'the programme'}</strong> as ${ACCESS_LABEL[invite.accessLevel]||invite.accessLevel}.</p><a class="btn" href="/programme">Open Programme Planner →</a>`);
+      } catch(e){ $('msg').textContent = e.message; $('register').disabled = false; }
+    };
+    return;
+  }
+
+  // Signed out, shared/demo mode → just sign in.
+  render(head + `<p style="margin-top:1rem">Sign in to accept this invite.</p>
+    <a class="btn" href="/login?next=${nextUrl()}">Sign in to continue</a>`);
 }
 main();
 </script>

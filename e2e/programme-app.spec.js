@@ -77,6 +77,10 @@ test('collaborative activity: checklist template + blocked → readiness flags',
   const items = await page.locator('#ac-checklist .mrow').count();
   expect(items).toBeGreaterThan(3);
 
+  // Sign off the first item → records who signed it off (sign-off-by-role).
+  await page.locator('#ac-checklist .mrow').first().locator('button[data-i]').click();
+  await expect(page.locator('#ac-checklist .mrow').first()).toContainText('signed off by');
+
   // Mark blocked with a responsible party, add an update, save.
   await page.selectOption('#ac-status', 'blocked');
   await page.fill('#ac-resp', 'Procurement');
@@ -299,6 +303,43 @@ test('multi-programme: look-ahead + resources + master with a cross-project link
   }
 });
 
+test('attention inbox: a blocked activity surfaces with a badge', async ({ page }) => {
+  const tag = String(Date.now()).slice(-5);
+  await page.goto('/programme');
+  await page.fill('#np-name', `Attn ${tag}`);
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-add');
+  const row = page.locator('#act-body tr').first();
+  await row.locator('td.name input').fill('Cast slab');
+  await row.locator('.plan-btn').click();
+  await expect(page.locator('#activity-modal')).toBeVisible();
+  await page.selectOption('#ac-status', 'blocked');
+  await page.fill('#ac-resp', 'Procurement');
+  await page.fill('#ac-blocked', 'rebar late');
+  await page.click('#ac-save');
+  await page.click('#ac-close');
+  await page.click('#ed-save');
+  await page.click('#ed-back');
+
+  // Bell badge appears; inbox lists the blocked item with its reason.
+  await expect(page.locator('#attn-badge')).toBeVisible();
+  await page.click('#open-attention');
+  await expect(page.locator('#attention-modal')).toBeVisible();
+  await expect(page.locator('#attn-body')).toContainText('Cast slab');
+  await expect(page.locator('#attn-body')).toContainText('rebar late');
+  await page.click('#attn-close');
+
+  // Cleanup.
+  page.on('dialog', (d) => d.accept());
+  await page.click('#seg-dash');
+  await page.locator('#pf-body tr', { hasText: `Attn ${tag}` }).first().click();
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
 test('upload scope-of-works → AI reads works + durations → programme', async ({ page }) => {
   await page.goto('/programme');
   await page.click('#np-scope');
@@ -312,6 +353,28 @@ test('upload scope-of-works → AI reads works + durations → programme', async
   await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBeGreaterThan(5); // demo scope has 10 items
   await expect(page.locator('#gantt .bar').first()).toBeVisible();
   await expect(page.locator('#st-crit')).not.toHaveText('0');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('build from BQ → quantities → estimated-duration programme', async ({ page }) => {
+  await page.goto('/programme');
+  await page.click('#np-bq');
+  await expect(page.locator('#bq-modal')).toBeVisible();
+  await page.fill('#bq-start', '2026-07-01');
+  await page.setInputFiles('#bq-file', { name: 'bq.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 bill of quantities') });
+  await page.click('#bq-go');
+
+  // Lands in the editor populated from the (demo) BQ with computed durations.
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBeGreaterThan(8); // 13 items, 1 skipped
+  await expect(page.locator('#gantt .bar').first()).toBeVisible();
+  await expect(page.locator('#st-crit')).not.toHaveText('0');
+  // Every activity got a non-zero duration from the productivity rates.
+  const firstDur = await page.locator('#act-body tr').first().locator('td.dur input').inputValue();
+  expect(Number(firstDur)).toBeGreaterThan(0);
 
   page.on('dialog', (d) => d.accept());
   await page.click('#ed-delete');

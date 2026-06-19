@@ -19,7 +19,7 @@ import {
   updateProgramme, updateActivity, setMember, removeMember, deleteProgramme,
 } from '../lib/programmes.js';
 import { computeSchedule } from '../lib/cpm.js';
-import { lookahead, resourceLoad, masterPlan, reflow } from '../lib/portfolio.js';
+import { lookahead, resourceLoad, masterPlan, reflow, attention } from '../lib/portfolio.js';
 import { listContacts, addContact, updateContact, removeContact } from '../lib/contacts.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
@@ -103,6 +103,9 @@ export default async function handler(req, res) {
       if (view === 'master') {
         const [mp, rf] = await Promise.all([masterPlan(uid), reflow(uid)]);
         return res.status(200).json({ ...mp, ...rf });
+      }
+      if (view === 'attention') {
+        return res.status(200).json(await attention(uid));
       }
       return res.status(200).json({ programmes: await listProgrammesForUser(uid) });
     }
