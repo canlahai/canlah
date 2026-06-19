@@ -178,7 +178,10 @@
   <div class="eyebrow">// Programme Planner</div>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div><h1>Your programmes</h1><p class="muted">Collaborative schedules with a computed critical path.</p></div>
-    <button class="btn" id="open-directory" title="Your reusable subcontractor / contact directory">👥 Directory</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn" id="open-attention" title="What needs your attention across all programmes" style="position:relative">🔔 Attention<span id="attn-badge" class="hidden" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px">0</span></button>
+      <button class="btn" id="open-directory" title="Your reusable subcontractor / contact directory">👥 Directory</button>
+    </div>
   </div>
 
   <div class="new-row">
@@ -188,6 +191,7 @@
     <button class="btn pri" id="np-create">Create blank</button>
     <button class="btn" id="np-generate" title="Draft a standard SG construction programme from a few project parameters">✨ Generate from profile</button>
     <button class="btn" id="np-scope" title="Upload your contract / scope of works — we read the works + durations and build the programme">📄 Upload scope</button>
+    <button class="btn" id="np-bq" title="Upload a Bill of Quantities — we read the quantities and estimate durations from productivity rates">📊 Build from BQ</button>
   </div>
 
   <!-- portfolio roll-up + view toggle (hidden until there are programmes) -->
@@ -251,6 +255,19 @@
 
   <div id="list-cards" class="cards hidden"></div>
   <div id="list-empty" class="empty hidden">No programmes yet — create your first one above.</div>
+</div>
+
+<!-- ATTENTION MODAL (cross-programme notifications inbox) -->
+<div class="modal-bg" id="attention-modal">
+  <div class="modal" style="max-width:600px;max-height:88vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h2>🔔 Needs attention</h2>
+      <button class="btn sm" id="attn-digest">Copy weekly digest</button>
+    </div>
+    <p class="muted" style="font-size:13px;margin:6px 0 10px">Across all your programmes — blocked work, overdue items, what's due this week, and late deliveries.</p>
+    <div id="attn-body"></div>
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="attn-close">Close</button></div>
+  </div>
 </div>
 
 <!-- DIRECTORY MODAL (subcontractor / contact address book) -->
@@ -362,7 +379,7 @@
 
     <!-- invite by email -->
     <h2 style="font-size:15px;margin-top:14px">Invite by email</h2>
-    <p class="muted" style="font-size:12px;margin-bottom:6px">Generates a shareable invite link. The person needs a CanLah account (created by an admin) under the same email; they sign in and accept.</p>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Generates a shareable invite link. The invitee opens it and creates their own account (or signs in) under that email to join — no need to set up accounts for them.</p>
     <div class="new-row" id="member-add-row" style="margin:8px 0">
       <div class="field" style="flex:1"><label>Email</label><input id="m-email" type="email" placeholder="subcon@firm.sg" list="contacts-dl" autocomplete="off"><datalist id="contacts-dl"></datalist></div>
       <div class="field"><label>Access</label><select id="m-access">
@@ -375,10 +392,11 @@
       <button class="btn pri sm" id="m-invite">Create invite</button>
     </div>
     <div id="invite-link-box" class="hidden" style="margin:8px 0;padding:10px;border:1px solid var(--g7);border-radius:8px;background:var(--g9)">
-      <div class="muted mono" style="font-size:11px;margin-bottom:4px">Shareable invite link — send it to the invitee</div>
+      <div class="muted mono" style="font-size:11px;margin-bottom:4px">Shareable invite link — the invitee opens it and creates their own account to join</div>
       <div style="display:flex;gap:6px">
         <input id="invite-link" readonly style="flex:1;font-family:'Inter',sans-serif;font-size:11px">
-        <button class="btn sm" id="invite-copy">Copy</button>
+        <button class="btn sm" id="invite-copy">Copy link</button>
+        <button class="btn sm pri" id="invite-copy-msg" title="Copy a ready-to-send message with the link">Copy message</button>
       </div>
     </div>
     <div id="invite-list"></div>
@@ -429,6 +447,7 @@
       <div class="field"><label>Apply a template</label><select id="ck-tmpl" style="min-width:170px"></select></div>
       <button class="btn sm" id="ck-tmpl-add">Add template</button>
       <button class="btn sm" id="ck-suggest" title="Pick a template from the activity name/trade">Suggest from activity</button>
+      <button class="btn sm" id="ck-save-tmpl" title="Save this activity's checklist as a reusable template for this project">💾 Save as template</button>
     </div>
     <div id="ac-checklist"></div>
     <div class="new-row" id="ac-check-add" style="margin:8px 0">
@@ -500,6 +519,26 @@
   </div>
 </div>
 
+<!-- BUILD FROM BQ -->
+<div class="modal-bg" id="bq-modal">
+  <div class="modal" style="max-width:520px">
+    <h2>📊 Build from a Bill of Quantities</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:10px">Upload your BQ (PDF or image). We read the measured quantities, <strong>estimate durations from productivity rates</strong>, and draft a sequenced programme. We also read the project profile to pre-fill the generator.</p>
+    <div class="new-row" style="margin:0 0 10px;flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:200px"><label>Project name <span style="text-transform:none;opacity:.7">(optional — we'll read it)</span></label><input id="bq-name" placeholder="auto from document"></div>
+      <div class="field"><label>Start date</label><input id="bq-start" type="date"></div>
+    </div>
+    <div class="field" style="margin-bottom:8px"><label>BQ document (PDF / JPG / PNG)</label><input id="bq-file" type="file" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px"></div>
+    <div id="bq-status" class="muted" style="font-size:12px;min-height:16px"></div>
+    <div id="bq-warn" class="warn hidden"></div>
+    <p class="muted" style="font-size:11px;margin-top:6px">⚠ Durations are productivity-rate estimates — a planner must verify before any submission.</p>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      <button class="btn" id="bq-close">Cancel</button>
+      <button class="btn pri" id="bq-go">Read &amp; build</button>
+    </div>
+  </div>
+</div>
+
 <!-- GENERATE FROM PROFILE -->
 <div class="modal-bg" id="gen-modal">
   <div class="modal" style="max-width:520px">
@@ -533,6 +572,9 @@ let CKT = null; // checklist-templates module (loaded lazily)
 import('/lib/checklist-templates.js').then(m => { CKT = m; }).catch(() => {});
 let GEN = null; // programme-generator module (loaded lazily)
 import('/lib/programme-generator.js').then(m => { GEN = m; }).catch(() => {});
+let PROD = null; // productivity (BQ→durations) module (loaded lazily)
+import('/lib/productivity.js').then(m => { PROD = m; }).catch(() => {});
+let bqProfile = null; // last profile read from a BQ (pre-fills the generator)
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
 // Disable a button + show a label while an async action runs (loading feedback).
@@ -561,6 +603,7 @@ async function boot(){
   try { cfg = await (await fetch('/api/config')).json(); } catch {}
   if (window.CanLah && CanLah.init) { try { await CanLah.init(); } catch {} }  // for the scope-upload pipeline
   state.myId = (cfg.session && cfg.session.id) || (cfg.demoMode ? 'demo-user' : null);
+  state.myName = (cfg.session && cfg.session.name) || (cfg.demoMode ? 'Demo user' : (state.myId || 'You'));
   // Anyone signed in can use the planner (to see programmes they're invited to).
   // Pro is only needed to CREATE a programme.
   const authed = cfg.demoMode || cfg.authMode === 'shared' || !!(cfg.session && cfg.session.id);
@@ -659,6 +702,7 @@ async function loadList(){
   renderDashboard(programmes);
   renderCards(programmes);
   applyListMode();
+  refreshAttnBadge();
 }
 const dayDiffC = (a,b) => Math.round((Date.parse(a)-Date.parse(b))/86400000);
 
@@ -813,6 +857,46 @@ $('dir-add').onclick=async()=>{
     $('dir-email').value='';$('dir-name').value='';$('dir-company').value='';$('dir-trade').value=''; toast('Saved'); loadDirectory();
   }catch(e){toast(e.message,true);}
 };
+
+// ── attention inbox (cross-programme notifications) ─────────────────────────
+let attnData=null;
+async function fetchAttention(){ try{ attnData=await api('GET',null,'?view=attention'); }catch{ attnData=null; } return attnData; }
+async function refreshAttnBadge(){
+  const d=await fetchAttention(); const n=d?d.total:0;
+  const badge=$('attn-badge'); badge.textContent=n; badge.classList.toggle('hidden', !n);
+}
+function attnRow(it, right){
+  return `<div class="la-row"><span style="flex:1"><span class="tag-prog">${esc(it.programmeName)}</span> ${esc(it.name)}${it.responsibleParty?` <span class="muted">· ${esc(it.responsibleParty)}</span>`:''}</span><span style="white-space:nowrap">${right||''}</span></div>`;
+}
+function renderAttention(d){
+  const el=$('attn-body'); el.innerHTML='';
+  if(!d || !d.total){ el.innerHTML='<div class="empty">All clear — nothing needs attention right now. ✓</div>'; return; }
+  const sect=(title,items,html)=>{ if(!items.length) return ''; return `<div class="la-week">${title} (${items.length})</div>`+items.map(html).join(''); };
+  el.innerHTML =
+    sect('🔴 Blocked', d.blocked, it=>attnRow(it, it.reason?`<span class="flag-over">${esc(it.reason)}</span>`:'<span class="flag-over">blocked</span>')) +
+    sect('⏰ Overdue', d.overdue, it=>attnRow(it, `<span class="flag-over mono" style="font-size:11px">due ${it.end||'—'}</span>`)) +
+    sect('🚚 Late deliveries', d.lateDeliveries, it=>attnRow({...it,name:`${it.name} — ${it.item}`}, `<span class="flag-over mono" style="font-size:11px">${it.neededBy?('by '+it.neededBy):'late'}</span>`)) +
+    sect('📅 Due this week', d.dueSoon, it=>attnRow(it, `<span class="flag-late mono" style="font-size:11px">starts ${it.start||'—'}</span>`));
+}
+$('open-attention').onclick=async()=>{
+  $('attention-modal').classList.add('show');
+  $('attn-body').innerHTML='<p class="muted" style="font-size:13px">Loading…</p>';
+  renderAttention(await fetchAttention());
+};
+$('attn-close').onclick=()=>$('attention-modal').classList.remove('show');
+$('attn-digest').onclick=()=>{
+  const d=attnData; if(!d) return;
+  const date=new Date().toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'});
+  const L=[`CanLah — weekly update (${date})`,''];
+  const line=it=>`  • ${it.programmeName}: ${it.name}${it.responsibleParty?` (${it.responsibleParty})`:''}`;
+  if(d.blocked.length){ L.push(`🔴 Blocked (${d.blocked.length}):`); d.blocked.forEach(it=>L.push(line(it)+(it.reason?` — ${it.reason}`:''))); L.push(''); }
+  if(d.overdue.length){ L.push(`⏰ Overdue (${d.overdue.length}):`); d.overdue.forEach(it=>L.push(line(it)+` — was due ${it.end||'?'}`)); L.push(''); }
+  if(d.lateDeliveries.length){ L.push(`🚚 Late deliveries (${d.lateDeliveries.length}):`); d.lateDeliveries.forEach(it=>L.push(`  • ${it.programmeName}: ${it.item} for ${it.name}${it.neededBy?` (needed ${it.neededBy})`:''}`)); L.push(''); }
+  if(d.dueSoon.length){ L.push(`📅 Due this week (${d.dueSoon.length}):`); d.dueSoon.forEach(it=>L.push(line(it)+` — starts ${it.start||'?'}`)); L.push(''); }
+  if(!d.total) L.push('All clear — nothing flagged. ✓');
+  copyText(L.join('\n').trim(),'Weekly digest');
+};
+
 $('np-create').onclick = async () => {
   const name = $('np-name').value.trim(); const startDate = $('np-start').value; const endDate = $('np-end').value || undefined;
   if (!name) return toast('Enter a project name', true);
@@ -914,6 +998,54 @@ $('scope-go').onclick = async () => {
   } catch(e){ $('scope-status').textContent=''; toast(e.message, true); }
 };
 
+// ── build from a Bill of Quantities (quantities → estimated durations) ───────
+$('np-bq').onclick = () => {
+  if (!state.canCreate) return toast('Building a programme needs a Pro account', true);
+  if (!$('bq-start').value) $('bq-start').value = $('np-start').value || new Date().toISOString().slice(0,10);
+  $('bq-warn').classList.add('hidden'); $('bq-status').textContent='';
+  $('bq-modal').classList.add('show');
+};
+$('bq-close').onclick = () => $('bq-modal').classList.remove('show');
+function applyBqProfileToGenerator(p){
+  if (!p) return;
+  bqProfile = p;
+  if (p.storeys && $('gen-storeys')) $('gen-storeys').value = p.storeys;
+  if (p.structuralSystem && $('gen-system')){
+    const sys = /precast/i.test(p.structuralSystem) ? 'precast' : (/steel/i.test(p.structuralSystem) ? 'steel' : 'rc');
+    if ([...$('gen-system').options].some(o=>o.value===sys)) $('gen-system').value = sys;
+  }
+  if (p.contractForm && $('gen-contract')){
+    const opt=[...$('gen-contract').options].find(o=>o.text.toLowerCase()===String(p.contractForm).toLowerCase());
+    if (opt) $('gen-contract').value = opt.value;
+  }
+}
+$('bq-go').onclick = async () => {
+  const startDate = $('bq-start').value;
+  const file = $('bq-file').files[0];
+  if (!startDate) return toast('Pick a start date', true);
+  if (!file) return toast('Choose your BQ document', true);
+  if (!PROD) return toast('Estimator still loading — try again in a moment', true);
+  try {
+    CanLah.state.uploadedFile = file;
+    const data = await busy($('bq-go'), 'Reading…', () => CanLah.uploadAndAnalyse({
+      reportType: 'bq',
+      onProgress: (p) => { $('bq-status').textContent = `Uploading… ${Math.round(p)}%`; },
+    }));
+    $('bq-status').textContent = 'Estimating durations…';
+    const { activities, skipped } = PROD.bqToActivities((data && data.items) || []);
+    if (!activities.length){ $('bq-warn').classList.remove('hidden'); $('bq-warn').textContent='⚠ No measurable items could be estimated from that BQ. Try a clearer BQ, or use Generate from profile.'; $('bq-status').textContent=''; return; }
+    applyBqProfileToGenerator(data && data.profile);
+    const notes=[]; if (skipped) notes.push(`${skipped} non-measurable item${skipped>1?'s':''} skipped`); if (data && data.notes) notes.push(...data.notes);
+    const acts = activities.map(a=>({ ...a, assignee:'', status:'todo', parties:[], checklist:[], deliveries:[], updates:[] }));
+    const name = ($('bq-name').value.trim()) || (data && data.projectName) || file.name.replace(/\.[^.]+$/, '');
+    const { programme } = await api('POST', { name, startDate, activities: acts });
+    $('bq-modal').classList.remove('show');
+    toast(`Estimated ${acts.length} activities from the BQ`);
+    if (notes.length) setTimeout(()=>toast('⚠ '+notes.join(' · '), true), 900);
+    openProgramme(programme.id);
+  } catch(e){ $('bq-status').textContent=''; toast(e.message, true); }
+};
+
 // ── editor ───────────────────────────────────────────────────────────────
 async function openProgramme(id){
   const { programme } = await api('GET', null, '?id='+encodeURIComponent(id));
@@ -922,6 +1054,9 @@ async function openProgramme(id){
   const access = programme.access || programme.role;
   state.canEdit = access==='editor' || access==='admin';
   state.canManage = access==='admin';
+  // My role on this programme for checklist sign-off attribution.
+  const mine = (programme.members||[]).find(m=>m.userId===state.myId);
+  state.myRole = (programme.ownerId===state.myId) ? 'owner' : ((mine && mine.tradeRole) || access || 'member');
   $('ed-name').textContent = programme.name;
   $('ed-sub').textContent = `Owner ${programme.ownerId} · ${programme.members.length} member(s)`;
   $('ed-role').textContent = access;
@@ -1217,10 +1352,17 @@ async function renderInvites(){
     el.appendChild(row);
   });
 }
+async function copyText(text, label){
+  try{ await navigator.clipboard.writeText(text); toast(label+' copied'); }
+  catch{ const t=document.createElement('textarea'); t.value=text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast(label+' copied'); }
+}
 function showInviteLink(token){
   const link=`${location.origin}/invite?t=${token}`;
+  const pname=(state.current&&state.current.name)||'a programme';
+  const msg=`Hi! You've been invited to collaborate on "${pname}" in CanLah — our construction programme planner.\n\nOpen this link to join (you can create your account right from the link):\n${link}`;
   $('invite-link').value=link; $('invite-link-box').classList.remove('hidden');
-  $('invite-copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(link); toast('Link copied'); }catch{ $('invite-link').select(); document.execCommand('copy'); toast('Link copied'); } };
+  $('invite-copy').onclick=()=>copyText(link,'Link');
+  $('invite-copy-msg').onclick=()=>copyText(msg,'Message');
 }
 async function refreshMembers(){ const {programme}=await api('GET',null,'?id='+encodeURIComponent(state.current.id)); state.current.members=programme.members; $('ed-sub').textContent=`Owner ${programme.ownerId} · ${programme.members.length} member(s)`; renderMembers(); }
 $('m-invite').onclick = async () => {
@@ -1272,10 +1414,7 @@ function openActivity(id){
   $('ac-deliv-add').classList.toggle('hidden', ro);
   $('ac-note-row').classList.toggle('hidden', ro);
   $('ac-save').classList.toggle('hidden', ro);
-  if (CKT && !$('ck-tmpl').dataset.filled){
-    $('ck-tmpl').innerHTML = CKT.listTemplates().map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
-    $('ck-tmpl').dataset.filled='1';
-  }
+  fillCkTmpl();
   $('ac-dep-add').classList.toggle('hidden', ro);
   renderParties(a); renderChecklist(a); renderDeliveries(a); renderDeps(a); renderUpdates(a); renderReady(a);
   fillDepProgrammes();
@@ -1337,6 +1476,18 @@ function renderParties(a){
 $('ap-add').onclick=()=>{ const a=curAct(); if(!a) return; const who=$('ap-who').value.trim();
   a.parties=a.parties||[]; a.parties.push({ role:$('ap-role').value, who, responsibility:$('ap-resp').value.trim() });
   $('ap-who').value=''; $('ap-resp').value=''; renderParties(a); };
+// Stamp who signed off an item (and their role) when it's marked complied.
+function stampSignoff(c){
+  if (c.status==='complied'){ c.signedBy=state.myName||'You'; c.signedRole=state.myRole||null; c.signedAt=new Date().toISOString(); }
+  else { delete c.signedBy; delete c.signedRole; delete c.signedAt; }
+}
+function ckSignoff(c){
+  if (c.status==='complied' && c.signedBy){
+    const when=c.signedAt?new Date(c.signedAt).toLocaleDateString('en-SG',{day:'2-digit',month:'short'}):'';
+    return `<div class="muted" style="font-size:10.5px;margin-top:2px;color:#15803d">✓ signed off by ${esc(c.signedBy)}${c.signedRole?` · ${esc(c.signedRole)}`:''}${when?` · ${when}`:''}</div>`;
+  }
+  return '';
+}
 function renderChecklist(a){
   const ro=!state.canEdit; const el=$('ac-checklist'); el.innerHTML='';
   if (!(a.checklist||[]).length) el.innerHTML='<div class="muted" style="font-size:12px">No checklist items yet.</div>';
@@ -1345,9 +1496,9 @@ function renderChecklist(a){
     const row=document.createElement('div'); row.className='mrow';
     const cycle = ro?'':`<button class="btn sm" data-i="${i}" style="color:${CK_COLOR[st]}">${CK_LABEL[st]}</button>`;
     const msg = ro?`<span style="color:${CK_COLOR[st]};font-family:'Inter',sans-serif;font-size:11px">${CK_LABEL[st]}</span>`:'';
-    row.innerHTML=`<span>${c.item||''}</span><span style="display:flex;gap:6px;align-items:center">${cycle}${msg}${ro?'':`<button class="row-x" data-del="${i}" title="Remove">×</button>`}</span>`;
+    row.innerHTML=`<span style="flex:1"><div>${c.item||''}</div>${ckSignoff(c)}</span><span style="display:flex;gap:6px;align-items:center">${cycle}${msg}${ro?'':`<button class="row-x" data-del="${i}" title="Remove">×</button>`}</span>`;
     if(!ro){
-      row.querySelector('[data-i]').onclick=()=>{ const cur=CK_STATES.indexOf(c.status||'pending'); c.status=CK_STATES[(cur+1)%CK_STATES.length]; renderChecklist(a); renderReady(a); };
+      row.querySelector('[data-i]').onclick=()=>{ const cur=CK_STATES.indexOf(c.status||'pending'); c.status=CK_STATES[(cur+1)%CK_STATES.length]; stampSignoff(c); renderChecklist(a); renderReady(a); };
       row.querySelector('[data-del]').onclick=()=>{ a.checklist.splice(i,1); renderChecklist(a); renderReady(a); };
     }
     el.appendChild(row);
@@ -1363,8 +1514,26 @@ function appendChecklistItems(a, items){
   for(const it of items){ if(have.has(it.toLowerCase())) continue; a.checklist.push({ id:'c'+Date.now().toString(36)+(added++), item:it, status:'pending' }); }
   renderChecklist(a); renderReady(a); return added;
 }
-$('ck-tmpl-add').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const n=appendChecklistItems(a, CKT.templateItems($('ck-tmpl').value)); toast(n?`Added ${n} item${n>1?'s':''}`:'Already on the list'); };
-$('ck-suggest').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const s=CKT.suggestChecklist(a.name,a.trade); $('ck-tmpl').value=s.key; const n=appendChecklistItems(a, s.items); toast(`${s.label}: added ${n} item${n===1?'':'s'}`); };
+// Per-project checklist library (saved templates, stored locally per programme).
+function ckLibKey(){ return 'canlah-ckt-lib:'+((state.current&&state.current.id)||'x'); }
+function ckLibGet(){ try{ return JSON.parse(localStorage.getItem(ckLibKey())||'[]'); }catch{ return []; } }
+function ckLibSet(arr){ try{ localStorage.setItem(ckLibKey(), JSON.stringify(arr)); }catch{} }
+function fillCkTmpl(){
+  const sel=$('ck-tmpl'); let html='';
+  if (CKT) html += '<optgroup label="Trade templates">'+CKT.listTemplates().map(t=>`<option value="g:${t.key}">${esc(t.label)}</option>`).join('')+'</optgroup>';
+  const lib=ckLibGet();
+  if (lib.length) html += '<optgroup label="★ This project">'+lib.map((t,i)=>`<option value="l:${i}">${esc(t.name)}</option>`).join('')+'</optgroup>';
+  sel.innerHTML = html || '<option value="">(no templates)</option>';
+}
+$('ck-tmpl-add').onclick=()=>{ const a=curAct(); if(!a) return; const v=$('ck-tmpl').value||''; let items=[];
+  if(v.startsWith('g:')&&CKT) items=CKT.templateItems(v.slice(2));
+  else if(v.startsWith('l:')){ const t=ckLibGet()[+v.slice(2)]; items=t?t.items:[]; }
+  const n=appendChecklistItems(a, items); toast(n?`Added ${n} item${n>1?'s':''}`:'Already on the list'); };
+$('ck-suggest').onclick=()=>{ const a=curAct(); if(!a||!CKT) return; const s=CKT.suggestChecklist(a.name,a.trade); fillCkTmpl(); $('ck-tmpl').value='g:'+s.key; const n=appendChecklistItems(a, s.items); toast(`${s.label}: added ${n} item${n===1?'':'s'}`); };
+$('ck-save-tmpl').onclick=()=>{ const a=curAct(); if(!a) return; const items=(a.checklist||[]).map(c=>c.item).filter(Boolean);
+  if(!items.length) return toast('No checklist items to save',true);
+  const name=prompt('Name this checklist template (reusable across this project):'); if(!name||!name.trim()) return;
+  const lib=ckLibGet(); lib.push({ name:name.trim(), items }); ckLibSet(lib); fillCkTmpl(); toast('Template saved for this project'); };
 
 const DV_STATES=['needed','ordered','delivered','delayed'];
 const DV_LABEL={ needed:'Needed', ordered:'Ordered', delivered:'Delivered', delayed:'Delayed' };

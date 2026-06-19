@@ -136,6 +136,35 @@ RULES:
 
 Return ONLY the JSON object. No preamble, no explanation.`;
 
+const BQ_EXTRACTION_PROMPT = `You are a Singapore construction planner reading a BILL OF QUANTITIES (BQ). Your job is to (1) infer the project profile and (2) extract the measurable work items with their quantities, so a programme with estimated durations can be built. Do NOT invent durations — durations are computed separately from the quantities.
+
+Return ONLY valid JSON in this exact structure:
+
+\`\`\`json
+{
+  "projectName": "project / contract name (or null)",
+  "profile": {
+    "storeys": 8,
+    "gfaSqm": 12000,
+    "structuralSystem": "RC frame | precast | steel | null",
+    "contractForm": "Lump Sum | Design & Build | PSSCOC | SIA | null"
+  },
+  "items": [
+    { "description": "Reinforced concrete to columns", "trade": "concrete", "quantity": 320, "unit": "m3" },
+    { "description": "Formwork to slabs", "trade": "formwork", "quantity": 4200, "unit": "m2" },
+    { "description": "High tensile reinforcement", "trade": "rebar", "quantity": 85, "unit": "tonne" }
+  ],
+  "notes": ["anything ambiguous or assumed, e.g. storeys inferred from floor count"]
+}
+\`\`\`
+
+RULES:
+- "trade" must be a lowercase keyword chosen from: excavation, piling, concrete, formwork, rebar, blockwork, brickwork, plaster, screed, tiling, painting, waterproofing, roofing, doors, windows, ceiling, mechanical, electrical, plumbing, external, other. Pick the closest.
+- "quantity" = the measured quantity as a number (no commas). "unit" = the BQ unit (m, m2, m3, tonne, kg, no, sum, item, etc.).
+- Extract the SIGNIFICANT measurable items (those with a quantity & unit). Skip preliminaries, provisional sums, and pure rate-only lines. Merge obvious duplicates of the same trade+unit if helpful, else keep separate.
+- profile: infer storeys/GFA/system from the BQ if stated or implied; use null when genuinely unknown. Add a note for anything inferred.
+- Use null for any field genuinely absent. Return ONLY the JSON object. No preamble.`;
+
 // Server-held extraction prompts keyed by document type (the client sends a
 // reportType, never a raw prompt — keeps big prompts server-side + limits abuse).
 export const PROMPTS = {
@@ -143,6 +172,7 @@ export const PROMPTS = {
   'tree-felling': TREE_EXTRACTION_PROMPT,
   traffic: TRAFFIC_EXTRACTION_PROMPT,
   scope: SCOPE_EXTRACTION_PROMPT,
+  bq: BQ_EXTRACTION_PROMPT,
 };
 
 const createSafeBlobKey = filename => {

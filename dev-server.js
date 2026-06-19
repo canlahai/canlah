@@ -10,7 +10,7 @@ import { PROMPTS } from './api/process.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
 import { listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
-import { lookahead, resourceLoad, masterPlan, reflow } from './lib/portfolio.js';
+import { lookahead, resourceLoad, masterPlan, reflow, attention } from './lib/portfolio.js';
 import { createInvite, getInvite, listInvites, revokeInvite, acceptInvite } from './lib/invites.js';
 import { listContacts, addContact, updateContact, removeContact } from './lib/contacts.js';
 import { computeSchedule } from './lib/cpm.js';
@@ -396,6 +396,30 @@ async function handleApi(req, res) {
             notes: ['Demo sample — durations illustrative.'],
           };
           return send(res, 200, JSON.stringify({ data: demoScope }), { 'Content-Type': 'application/json' });
+        }
+        if (reportType === 'bq') {
+          // Sample Bill of Quantities extraction (demo) — items + inferred profile.
+          const demoBq = {
+            projectName: '8-Storey Commercial Development — Jurong',
+            profile: { storeys: 8, gfaSqm: 12000, structuralSystem: 'RC frame', contractForm: 'Lump Sum' },
+            items: [
+              { description: 'Excavation for basement', trade: 'excavation', quantity: 9000, unit: 'm3' },
+              { description: 'Bored piles 600mm dia', trade: 'piling', quantity: 48, unit: 'no' },
+              { description: 'Reinforced concrete to frame', trade: 'concrete', quantity: 3200, unit: 'm3' },
+              { description: 'Formwork to slabs & beams', trade: 'formwork', quantity: 18000, unit: 'm2' },
+              { description: 'High tensile reinforcement', trade: 'rebar', quantity: 480, unit: 'tonne' },
+              { description: 'Blockwork to internal walls', trade: 'blockwork', quantity: 6500, unit: 'm2' },
+              { description: 'Cement & sand plaster', trade: 'plaster', quantity: 13000, unit: 'm2' },
+              { description: 'Floor & wall tiling', trade: 'tiling', quantity: 4200, unit: 'm2' },
+              { description: 'Emulsion paint to walls/ceiling', trade: 'painting', quantity: 16000, unit: 'm2' },
+              { description: 'Electrical points & wiring', trade: 'electrical', quantity: 1800, unit: 'no' },
+              { description: 'Sanitary & plumbing points', trade: 'plumbing', quantity: 640, unit: 'no' },
+              { description: 'External hardscape & drainage', trade: 'external', quantity: 3500, unit: 'm2' },
+              { description: 'Provisional sum — soft landscaping', trade: 'other', quantity: 1, unit: 'sum' },
+            ],
+            notes: ['Demo sample — quantities illustrative; durations are computed from productivity rates.'],
+          };
+          return send(res, 200, JSON.stringify({ data: demoBq }), { 'Content-Type': 'application/json' });
         }
         if (reportType === 'programme-plan') {
           const demoProg = {
@@ -796,6 +820,9 @@ const server = http.createServer((req, res) => {
             const [mp, rf] = await Promise.all([masterPlan(uid), reflow(uid)]);
             return send(res, 200, JSON.stringify({ ...mp, ...rf }), { 'Content-Type': 'application/json' });
           }
+          if (view === 'attention') {
+            return send(res, 200, JSON.stringify(await attention(uid)), { 'Content-Type': 'application/json' });
+          }
           return send(res, 200, JSON.stringify({ programmes: await listProgrammesForUser(uid) }), { 'Content-Type': 'application/json' });
         }
         if (req.method === 'POST') {
@@ -853,6 +880,33 @@ const server = http.createServer((req, res) => {
       const reasonStatus = { not_found: 404, forbidden: 403, invalid: 400 };
       try {
         if (!rateLimitCheck(req, res)) return;
+
+        // PUBLIC (no auth): see + self-accept an invite by creating an account.
+        if (req.method === 'GET' && parsedUrl.searchParams.get('public')) {
+          const inv = await getInvite(parsedUrl.searchParams.get('token'));
+          if (!inv) return send(res, 404, JSON.stringify({ error: 'Invite not found' }), { 'Content-Type': 'application/json' });
+          return send(res, 200, JSON.stringify({ invite: { programmeName: inv.programmeName, email: inv.email, accessLevel: inv.accessLevel, tradeRole: inv.tradeRole, status: inv.status } }), { 'Content-Type': 'application/json' });
+        }
+        if (req.method === 'POST') {
+          const pbody = await parseBody(req) || {};
+          if (pbody.action === 'registerAccept') {
+            if (!usersAuthEnabled()) return send(res, 400, JSON.stringify({ error: 'Self sign-up is not enabled here' }), { 'Content-Type': 'application/json' });
+            const inv = await getInvite(pbody.token);
+            if (!inv || inv.status !== 'pending') return send(res, 400, JSON.stringify({ error: 'This invite is not valid, or it has already been used.' }), { 'Content-Type': 'application/json' });
+            if (!pbody.password || String(pbody.password).length < 8) return send(res, 400, JSON.stringify({ error: 'Password must be at least 8 characters' }), { 'Content-Type': 'application/json' });
+            let user;
+            try { user = await createUser({ email: inv.email, password: pbody.password, name: (pbody.name || '').trim() || null, role: 'user' }); }
+            catch (e) { if (/already registered/i.test(e.message || '')) return send(res, 409, JSON.stringify({ error: `An account already exists for ${inv.email}. Please sign in to accept.`, code: 'exists' }), { 'Content-Type': 'application/json' }); throw e; }
+            const r = await acceptInvite(pbody.token, { id: user.id, email: user.email });
+            if (!r.ok) return send(res, reasonStatus[r.reason] || 400, JSON.stringify({ error: r.message || r.reason }), { 'Content-Type': 'application/json' });
+            const payload = { role: 'user', id: user.id, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 };
+            if (user.name) payload.name = user.name;
+            return send(res, 200, JSON.stringify({ ok: true, programmeId: r.programmeId, accessLevel: r.accessLevel }), { 'Content-Type': 'application/json', 'Set-Cookie': setSessionCookie(payload) });
+          }
+          // fall through to authenticated POST handling below with this body
+          req._parsedBody = pbody;
+        }
+
         if (!requireAuthDev(req, res)) return;
         const caller = authCheck(req);
         const uid = caller.id;
@@ -877,7 +931,7 @@ const server = http.createServer((req, res) => {
           return send(res, 400, JSON.stringify({ error: 'token or programmeId required' }), { 'Content-Type': 'application/json' });
         }
         if (req.method === 'POST') {
-          const body = await parseBody(req) || {};
+          const body = req._parsedBody || await parseBody(req) || {};
           if (body.action === 'accept') {
             const u = await getUserById(uid).catch(() => null);
             const r = await acceptInvite(body.token, { id: uid, email: u?.email });
