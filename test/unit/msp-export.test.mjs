@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { generateProgramme } from '../../lib/programme-generator.js';
-import { toMSProjectXML, exportFilename } from '../../lib/msp-export.js';
+import { toMSProjectXML, exportFilename, activitiesToMSProjectXML } from '../../lib/msp-export.js';
+import { parseMSProjectXML } from '../../lib/msp-import.js';
 
 const p = generateProgramme({ name: 'Test & Co Tower', storeys: 3, startDate: '2026-01-02' });
 const xml = toMSProjectXML(p);
@@ -36,5 +37,28 @@ assert.ok(xml.includes('<Manual>1</Manual>'), 'tasks manually scheduled');
 
 // Filename slug
 assert.equal(exportFilename(p), 'test-co-tower.xml', 'filename slug');
+
+// ── collaborative activity-shape export + round-trip (export → import) ───────
+const acts = [
+  { id: 'a1', name: 'Cast slab L3', section: 'Superstructure', durationDays: 8, predecessors: [] },
+  { id: 'a2', name: 'Strip & cure', section: 'Superstructure', durationDays: 3, predecessors: ['a1'] },
+  { id: 'a3', name: 'TOP inspection', section: 'Handover', durationDays: 0, predecessors: ['a2'] },
+];
+const dates = { a1: { start: '2026-07-01', end: '2026-07-10' }, a2: { start: '2026-07-11', end: '2026-07-15' }, a3: { start: '2026-07-16', end: '2026-07-16' } };
+const cx = activitiesToMSProjectXML({ name: 'Collab & Co', startDate: '2026-07-01', activities: acts, dates });
+assert.ok(cx.startsWith('<?xml') && cx.includes('schemas.microsoft.com/project'), 'activity export is MSPDI');
+assert.equal((cx.match(/<Task>/g) || []).length, (cx.match(/<\/Task>/g) || []).length, 'balanced task tags');
+assert.equal((cx.match(/<Summary>1<\/Summary>/g) || []).length, 2, 'two section summaries');
+assert.ok(cx.includes('<Milestone>1</Milestone>'), 'zero-duration → milestone');
+assert.ok(cx.includes('<Name>Collab &amp; Co</Name>'), 'name escaped');
+
+// Round-trip: the XML we emit must parse back to the same tasks + a dependency.
+const back = parseMSProjectXML(cx);
+assert.equal(back.taskCount, 3, 'round-trip preserves the 3 leaf tasks (summaries dropped)');
+assert.deepEqual(back.activities.map((a) => a.name), ['Cast slab L3', 'Strip & cure', 'TOP inspection'], 'names survive round-trip');
+assert.ok(back.linkCount >= 2, 'dependencies survive round-trip');
+const a2 = back.activities.find((a) => a.name === 'Strip & cure');
+assert.equal(a2.predecessors.length, 1, 'a2 keeps one predecessor');
+assert.equal(back.activities.find((a) => a.name === 'TOP inspection').durationDays, 0, 'milestone duration 0');
 
 console.log('msp-export.test.mjs — all assertions passed');
