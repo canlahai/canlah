@@ -358,6 +358,7 @@
     <button class="btn sm" id="ed-members">Members</button>
     <button class="btn sm" id="ed-feed">Activity log</button>
     <button class="btn sm" id="ed-msp" title="Download as MS Project XML — opens in MS Project & Primavera P6">⤓ MS Project</button>
+    <button class="btn sm" id="ed-p6" title="Download as Primavera P6 XER (beta — verify in P6)">⤓ Primavera P6</button>
     <button class="btn sm" id="ed-csv">Export CSV</button>
     <button class="btn sm" id="ed-print">Print / PDF</button>
     <button class="btn sm danger" id="ed-delete">Delete</button>
@@ -586,12 +587,12 @@
 <div class="modal-bg" id="import-modal">
   <div class="modal" style="max-width:560px">
     <h2>📥 Import a plan</h2>
-    <p class="muted" style="font-size:13px;margin-bottom:10px">Bring an existing schedule into CanLah. We support <strong>MS Project XML</strong> (.xml), <strong>CSV</strong>, and <strong>PDF / image</strong> (AI reads it). MS Project's .mpp is proprietary — in MS Project use <strong>File ▸ Save As ▸ XML</strong> and upload that.</p>
+    <p class="muted" style="font-size:13px;margin-bottom:10px">Bring an existing schedule into CanLah. We support <strong>MS Project XML</strong> (.xml), <strong>Primavera P6</strong> (.xer), <strong>CSV</strong>, and <strong>PDF / image</strong> (AI reads it). MS Project's .mpp is proprietary — in MS Project use <strong>File ▸ Save As ▸ XML</strong> and upload that.</p>
     <div class="new-row" style="margin:0 0 10px;flex-wrap:wrap">
       <div class="field" style="flex:1;min-width:200px"><label>Project name <span style="text-transform:none;opacity:.7">(optional)</span></label><input id="imp-name" placeholder="auto from file"></div>
       <div class="field"><label>Start date</label><input id="imp-start" type="date"></div>
     </div>
-    <div class="field" style="margin-bottom:8px"><label>Plan file</label><input id="imp-file" type="file" accept=".xml,.csv,.pdf,.jpg,.jpeg,.png,.mpp,.mpx" style="padding:8px"></div>
+    <div class="field" style="margin-bottom:8px"><label>Plan file</label><input id="imp-file" type="file" accept=".xml,.xer,.csv,.pdf,.jpg,.jpeg,.png,.mpp,.mpx" style="padding:8px"></div>
     <div id="imp-status" class="muted" style="font-size:12px;min-height:16px"></div>
     <div id="imp-preview" class="hidden" style="margin:8px 0;padding:12px;border:1px solid var(--g8);border-radius:var(--radius);background:var(--g9)"></div>
     <div id="imp-warn" class="warn hidden"></div>
@@ -643,6 +644,8 @@ let MSP = null;  // MS Project export (loaded lazily)
 import('/lib/msp-export.js').then(m => { MSP = m; }).catch(() => {});
 let IMP = null;  // MS Project / CSV import (loaded lazily)
 import('/lib/msp-import.js').then(m => { IMP = m; }).catch(() => {});
+let XER = null;  // Primavera P6 (XER) import/export (loaded lazily)
+import('/lib/p6-xer.js').then(m => { XER = m; }).catch(() => {});
 let bqProfile = null; // last profile read from a BQ (pre-fills the generator)
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
@@ -1139,6 +1142,7 @@ $('imp-read').onclick = async () => {
       return;
     }
     if (ext==='xml'){ if(!IMP) return toast('Importer still loading',true); impParsed = IMP.parseMSProjectXML(await file.text()); }
+    else if (ext==='xer'){ if(!XER) return toast('Importer still loading',true); impParsed = XER.parseXER(await file.text()); }
     else if (ext==='csv'){ if(!IMP) return toast('Importer still loading',true); impParsed = IMP.parseScheduleCSV(await file.text()); }
     else if (['pdf','png','jpg','jpeg'].includes(ext)){
       CanLah.state.uploadedFile = file;
@@ -1146,7 +1150,7 @@ $('imp-read').onclick = async () => {
       impParsed = { name:(data&&data.projectName)||null, startDate:null, activities: scopeToActivities(data||{}), warnings:(data&&data.notes)||[] };
       impParsed.taskCount = impParsed.activities.length;
       impParsed.linkCount = impParsed.activities.reduce((n,a)=>n+(a.predecessors||[]).length,0);
-    } else { return toast('Unsupported file — use .xml, .csv, or PDF/image', true); }
+    } else { return toast('Unsupported file — use .xml, .xer, .csv, or PDF/image', true); }
 
     const p = impParsed;
     if (!p || !p.activities || !p.activities.length){
@@ -1174,6 +1178,7 @@ $('imp-create').onclick = async () => {
     durationDays:Math.max(0,Math.round(Number(a.durationDays)||0)),
     predecessors:(a.predecessors||[]).slice(),
     assignee:'', status:'todo', parties:[], checklist:[], deliveries:[], updates:[], externalDeps:[],
+    ...(a.mspUid?{mspUid:a.mspUid}:{}), ...(a.code?{code:a.code}:{}),  // preserve source identity for round-trip
   }));
   try {
     const { programme } = await busy($('imp-create'),'Creating…',()=>api('POST',{ name, startDate, activities }));
@@ -1223,7 +1228,8 @@ function normalise(a){
     deliveries:Array.isArray(a.deliveries)?a.deliveries:[],
     updates:Array.isArray(a.updates)?a.updates:[],
     externalDeps:Array.isArray(a.externalDeps)?a.externalDeps:[],
-    blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'' };
+    blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'',
+    ...(a.mspUid?{mspUid:a.mspUid}:{}), ...(a.code?{code:a.code}:{}) };
 }
 const todayStr = () => new Date().toISOString().slice(0,10);
 // A delivery is a problem if marked delayed, or it's past its needed-by date and not delivered.
@@ -1510,6 +1516,14 @@ $('ed-msp').onclick = () => {
   const blob=new Blob([xml],{type:'application/xml'}); const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.xml'; a.click(); URL.revokeObjectURL(url);
   toast('Exported — opens in MS Project & P6');
+};
+$('ed-p6').onclick = () => {
+  if (!XER) return toast('Exporter still loading — try again in a moment', true);
+  const s=state.schedule; const dates={}; if(s) for(const t of s.tasks) dates[t.id]={start:t.start,end:t.end};
+  const xer = XER.toXER({ name:state.current.name, startDate:$('ed-start').value||state.current.startDate, activities:state.activities, dates });
+  const blob=new Blob([xer],{type:'text/plain'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.xer'; a.click(); URL.revokeObjectURL(url);
+  toast('Exported Primavera P6 XER (beta — verify in P6)');
 };
 
 // ── members ──────────────────────────────────────────────────────────────
