@@ -61,4 +61,20 @@ const a2 = back.activities.find((a) => a.name === 'Strip & cure');
 assert.equal(a2.predecessors.length, 1, 'a2 keeps one predecessor');
 assert.equal(back.activities.find((a) => a.name === 'TOP inspection').durationDays, 0, 'milestone duration 0');
 
+// UID-preserving round-trip: imported MSP UIDs survive re-export (stable identity).
+const withUids = [
+  { id: 'a1', name: 'Piling', section: '', durationDays: 10, predecessors: [], mspUid: '42' },
+  { id: 'a2', name: 'Caps', section: '', durationDays: 5, predecessors: ['a1'], mspUid: '57' },
+  { id: 'a3', name: 'New CanLah task', section: '', durationDays: 3, predecessors: ['a2'] }, // no mspUid
+];
+const ux = activitiesToMSProjectXML({ name: 'UID', startDate: '2026-07-01', activities: withUids, dates: {} });
+assert.ok(ux.includes('<UID>42</UID>') && ux.includes('<UID>57</UID>'), 'preserved UIDs re-emitted');
+// Task UIDs (inside <Tasks>, excluding the calendar UID) must be unique.
+const tasksBlock = ux.slice(ux.indexOf('<Tasks>'));
+const uids = (tasksBlock.match(/<UID>(\d+)<\/UID>/g) || []).map((m) => m.replace(/\D/g, ''));
+assert.equal(uids.length, 3, 'three task UIDs emitted');
+assert.equal(new Set(uids).size, uids.length, 'task UIDs unique (new task got a non-colliding UID)');
+const uback = parseMSProjectXML(ux);
+assert.deepEqual(uback.activities.find((a) => a.name === 'Caps').predecessors, ['a1'], 'dep survives UID round-trip');
+
 console.log('msp-export.test.mjs — all assertions passed');

@@ -452,6 +452,53 @@ test('import a CSV plan → preview → create programme', async ({ page }) => {
   await expect(page.locator('#view-list')).toBeVisible();
 });
 
+test('export to Primavera P6 (XER) → downloads valid XER', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'P6 export test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-add');
+  await page.locator('#act-body tr').first().locator('td.dur input').fill('8');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#ed-p6')]);
+  expect(download.suggestedFilename()).toMatch(/\.xer$/);
+  const xer = readFileSync(await download.path(), 'utf8');
+  expect(xer).toMatch(/^ERMHDR/);
+  expect(xer).toContain('%T\tTASK');
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('import a Primavera P6 XER → preview → create programme', async ({ page }) => {
+  const xer = [
+    'ERMHDR\t19.12\t2026-06-20\tProject\tCanLah\tCanLah\tCanLah\tUSD',
+    '%T\tTASK',
+    '%F\ttask_id\tproj_id\ttask_code\ttask_name\ttarget_drtn_hr_cnt',
+    '%R\t1001\t1\tA1010\tExcavation\t80',
+    '%R\t1002\t1\tA1020\tFoundations\t120',
+    '%T\tTASKPRED',
+    '%F\ttask_pred_id\ttask_id\tpred_task_id\tproj_id\tpred_proj_id\tpred_type\tlag_hr_cnt',
+    '%R\t5001\t1002\t1001\t1\t1\tPR_FS\t0',
+    '%E', '',
+  ].join('\n');
+  await page.goto('/programme');
+  await page.click('#np-import');
+  await expect(page.locator('#import-modal')).toBeVisible();
+  await page.fill('#imp-start', '2026-07-01');
+  await page.setInputFiles('#imp-file', { name: 'plan.xer', mimeType: 'text/plain', buffer: Buffer.from(xer) });
+  await page.click('#imp-read');
+  await expect(page.locator('#imp-preview')).toContainText('Read 2 tasks');
+  await expect(page.locator('#imp-preview')).toContainText('Excavation');
+  await page.click('#imp-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBe(2);
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
 test('build from BQ → quantities → estimated-duration programme', async ({ page }) => {
   await page.goto('/programme');
   await page.click('#np-bq');
