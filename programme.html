@@ -223,6 +223,7 @@
     <button class="btn" id="np-generate" title="Draft a standard SG construction programme from a few project parameters">✨ Generate from profile</button>
     <button class="btn" id="np-scope" title="Upload your contract / scope of works — we read the works + durations and build the programme">📄 Upload scope</button>
     <button class="btn" id="np-bq" title="Upload a Bill of Quantities — we read the quantities and estimate durations from productivity rates">📊 Build from BQ</button>
+    <button class="btn" id="np-import" title="Import an existing plan — MS Project XML, CSV, or a PDF/image">📥 Import plan</button>
   </div>
 
   <!-- portfolio roll-up + view toggle (hidden until there are programmes) -->
@@ -356,6 +357,7 @@
     <div class="sep"></div>
     <button class="btn sm" id="ed-members">Members</button>
     <button class="btn sm" id="ed-feed">Activity log</button>
+    <button class="btn sm" id="ed-msp" title="Download as MS Project XML — opens in MS Project & Primavera P6">⤓ MS Project</button>
     <button class="btn sm" id="ed-csv">Export CSV</button>
     <button class="btn sm" id="ed-print">Print / PDF</button>
     <button class="btn sm danger" id="ed-delete">Delete</button>
@@ -580,6 +582,28 @@
   </div>
 </div>
 
+<!-- IMPORT A PLAN (MS Project XML / CSV / PDF) -->
+<div class="modal-bg" id="import-modal">
+  <div class="modal" style="max-width:560px">
+    <h2>📥 Import a plan</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:10px">Bring an existing schedule into CanLah. We support <strong>MS Project XML</strong> (.xml), <strong>CSV</strong>, and <strong>PDF / image</strong> (AI reads it). MS Project's .mpp is proprietary — in MS Project use <strong>File ▸ Save As ▸ XML</strong> and upload that.</p>
+    <div class="new-row" style="margin:0 0 10px;flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:200px"><label>Project name <span style="text-transform:none;opacity:.7">(optional)</span></label><input id="imp-name" placeholder="auto from file"></div>
+      <div class="field"><label>Start date</label><input id="imp-start" type="date"></div>
+    </div>
+    <div class="field" style="margin-bottom:8px"><label>Plan file</label><input id="imp-file" type="file" accept=".xml,.csv,.pdf,.jpg,.jpeg,.png,.mpp,.mpx" style="padding:8px"></div>
+    <div id="imp-status" class="muted" style="font-size:12px;min-height:16px"></div>
+    <div id="imp-preview" class="hidden" style="margin:8px 0;padding:12px;border:1px solid var(--g8);border-radius:var(--radius);background:var(--g9)"></div>
+    <div id="imp-warn" class="warn hidden"></div>
+    <p class="muted" style="font-size:11px;margin-top:6px">⚠ Imported dates/durations are read as-is; the critical path is recomputed on the SG working calendar — verify before any submission.</p>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      <button class="btn" id="imp-close">Cancel</button>
+      <button class="btn" id="imp-read">Read file</button>
+      <button class="btn pri hidden" id="imp-create">Create programme</button>
+    </div>
+  </div>
+</div>
+
 <!-- GENERATE FROM PROFILE -->
 <div class="modal-bg" id="gen-modal">
   <div class="modal" style="max-width:520px">
@@ -615,6 +639,10 @@ let GEN = null; // programme-generator module (loaded lazily)
 import('/lib/programme-generator.js').then(m => { GEN = m; }).catch(() => {});
 let PROD = null; // productivity (BQ→durations) module (loaded lazily)
 import('/lib/productivity.js').then(m => { PROD = m; }).catch(() => {});
+let MSP = null;  // MS Project export (loaded lazily)
+import('/lib/msp-export.js').then(m => { MSP = m; }).catch(() => {});
+let IMP = null;  // MS Project / CSV import (loaded lazily)
+import('/lib/msp-import.js').then(m => { IMP = m; }).catch(() => {});
 let bqProfile = null; // last profile read from a BQ (pre-fills the generator)
 
 function toast(msg, err){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2800); }
@@ -1087,6 +1115,74 @@ $('bq-go').onclick = async () => {
   } catch(e){ $('bq-status').textContent=''; toast(e.message, true); }
 };
 
+// ── import an existing plan (MS Project XML / CSV / PDF) ─────────────────────
+let impParsed = null;
+$('np-import').onclick = () => {
+  if (!state.canCreate) return toast('Importing a programme needs a Pro account', true);
+  if (!$('imp-start').value) $('imp-start').value = $('np-start').value || new Date().toISOString().slice(0,10);
+  impParsed = null;
+  $('imp-preview').classList.add('hidden'); $('imp-warn').classList.add('hidden'); $('imp-status').textContent='';
+  $('imp-create').classList.add('hidden');
+  $('import-modal').classList.add('show');
+};
+$('imp-close').onclick = () => $('import-modal').classList.remove('show');
+$('imp-read').onclick = async () => {
+  const file = $('imp-file').files[0];
+  if (!file) return toast('Choose a file', true);
+  const ext = (file.name.split('.').pop()||'').toLowerCase();
+  $('imp-warn').classList.add('hidden'); $('imp-preview').classList.add('hidden'); $('imp-create').classList.add('hidden'); impParsed=null;
+  try {
+    if (ext==='mpp'||ext==='mpx'){
+      $('imp-status').textContent='';
+      $('imp-warn').classList.remove('hidden');
+      $('imp-warn').innerHTML='MS Project .mpp is proprietary and can’t be read directly. In MS Project: <strong>File ▸ Save As ▸ XML</strong> and upload that — or upload a PDF/image of the schedule and we’ll read it.';
+      return;
+    }
+    if (ext==='xml'){ if(!IMP) return toast('Importer still loading',true); impParsed = IMP.parseMSProjectXML(await file.text()); }
+    else if (ext==='csv'){ if(!IMP) return toast('Importer still loading',true); impParsed = IMP.parseScheduleCSV(await file.text()); }
+    else if (['pdf','png','jpg','jpeg'].includes(ext)){
+      CanLah.state.uploadedFile = file;
+      const data = await busy($('imp-read'),'Reading…',()=>CanLah.uploadAndAnalyse({ reportType:'scope', onProgress:(p)=>{ $('imp-status').textContent=`Uploading… ${Math.round(p)}%`; } }));
+      impParsed = { name:(data&&data.projectName)||null, startDate:null, activities: scopeToActivities(data||{}), warnings:(data&&data.notes)||[] };
+      impParsed.taskCount = impParsed.activities.length;
+      impParsed.linkCount = impParsed.activities.reduce((n,a)=>n+(a.predecessors||[]).length,0);
+    } else { return toast('Unsupported file — use .xml, .csv, or PDF/image', true); }
+
+    const p = impParsed;
+    if (!p || !p.activities || !p.activities.length){
+      $('imp-status').textContent='';
+      $('imp-warn').classList.remove('hidden'); $('imp-warn').textContent = '⚠ '+((p&&p.warnings&&p.warnings.join(' · '))||'No tasks could be read from that file.');
+      return;
+    }
+    if (p.name && !$('imp-name').value) $('imp-name').value = p.name;
+    if (p.startDate && !$('imp-start').value) $('imp-start').value = p.startDate;
+    $('imp-status').textContent='';
+    const sample = p.activities.slice(0,5).map(a=>'• '+esc(a.name)).join('<br>');
+    $('imp-preview').classList.remove('hidden');
+    $('imp-preview').innerHTML = `<div style="font-weight:700;margin-bottom:4px">Read ${p.taskCount} task${p.taskCount===1?'':'s'} · ${p.linkCount} dependenc${p.linkCount===1?'y':'ies'}</div><div class="muted" style="font-size:12px">${sample}${p.activities.length>5?`<br>… +${p.activities.length-5} more`:''}</div>`;
+    if (p.warnings && p.warnings.length){ $('imp-warn').classList.remove('hidden'); $('imp-warn').textContent='⚠ '+p.warnings.join(' · '); }
+    $('imp-create').classList.remove('hidden');
+  } catch(e){ $('imp-status').textContent=''; toast(e.message, true); }
+};
+$('imp-create').onclick = async () => {
+  const p = impParsed; if (!p || !p.activities.length) return;
+  const startDate = $('imp-start').value;
+  if (!startDate) return toast('Pick a start date', true);
+  const name = ($('imp-name').value.trim()) || p.name || 'Imported programme';
+  const activities = p.activities.map(a=>({
+    id:a.id, name:a.name, trade:a.trade||'', section:a.section||'',
+    durationDays:Math.max(0,Math.round(Number(a.durationDays)||0)),
+    predecessors:(a.predecessors||[]).slice(),
+    assignee:'', status:'todo', parties:[], checklist:[], deliveries:[], updates:[], externalDeps:[],
+  }));
+  try {
+    const { programme } = await busy($('imp-create'),'Creating…',()=>api('POST',{ name, startDate, activities }));
+    $('import-modal').classList.remove('show');
+    toast(`Imported ${activities.length} tasks → programme created`);
+    openProgramme(programme.id);
+  } catch(e){ toast(e.message, true); }
+};
+
 // ── editor ───────────────────────────────────────────────────────────────
 async function openProgramme(id){
   const { programme } = await api('GET', null, '?id='+encodeURIComponent(id));
@@ -1406,6 +1502,14 @@ $('ed-csv').onclick = () => {
   const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.csv'; a.click(); URL.revokeObjectURL(url);
+};
+$('ed-msp').onclick = () => {
+  if (!MSP) return toast('Exporter still loading — try again in a moment', true);
+  const s=state.schedule; const dates={}; if(s) for(const t of s.tasks) dates[t.id]={start:t.start,end:t.end};
+  const xml = MSP.activitiesToMSProjectXML({ name:state.current.name, startDate:$('ed-start').value||state.current.startDate, activities:state.activities, dates });
+  const blob=new Blob([xml],{type:'application/xml'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.xml'; a.click(); URL.revokeObjectURL(url);
+  toast('Exported — opens in MS Project & P6');
 };
 
 // ── members ──────────────────────────────────────────────────────────────

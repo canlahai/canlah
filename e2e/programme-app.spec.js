@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 // STEP 6b — the /programme app, driven in the browser against the demo dev-server
 // (pro-gate bypassed in DEMO_MODE). Creates a programme, edits the activity tree,
@@ -386,6 +387,65 @@ test('programme overview: read-friendly status summary + toggle', async ({ page 
   await page.click('#ed-seg-schedule');
   await expect(page.locator('#act-body')).toBeVisible();
   await expect(page.locator('#ed-overview')).toBeHidden();
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('export to MS Project XML → downloads valid MSPDI', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'MSP export test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-add');
+  await page.click('#ed-add');
+  const rows = page.locator('#act-body tr');
+  await expect(rows).toHaveCount(2);
+  await rows.nth(0).locator('td.dur input').fill('10');
+  await rows.nth(1).locator('td.dur input').fill('5');
+  await rows.nth(1).locator('td').nth(5).locator('input').fill('a1');
+  await rows.nth(1).locator('td').nth(5).locator('input').blur();
+  // Wait for the dependency to commit to state (input is debounced) before export.
+  await expect.poll(() => page.evaluate(() => state.activities[1].predecessors.length)).toBeGreaterThan(0);
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.click('#ed-msp'),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/\.xml$/);
+  const xml = readFileSync(await download.path(), 'utf8');
+  expect(xml).toContain('<Project');
+  expect(xml).toContain('schemas.microsoft.com/project');
+  expect(xml).toContain('<PredecessorLink>'); // the a2→a1 dependency exported
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('import a CSV plan → preview → create programme', async ({ page }) => {
+  const tag = String(Date.now()).slice(-5);
+  const name = `Imported ${tag}`;
+  await page.goto('/programme');
+  await page.click('#np-import');
+  await expect(page.locator('#import-modal')).toBeVisible();
+  await page.fill('#imp-name', name);
+  await page.fill('#imp-start', '2026-07-01');
+  await page.setInputFiles('#imp-file', {
+    name: 'plan.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('Name,Duration (days),Predecessors\nExcavation,10,\nFoundations,15,1\nColumns,12,2'),
+  });
+  await page.click('#imp-read');
+  await expect(page.locator('#imp-preview')).toBeVisible();
+  await expect(page.locator('#imp-preview')).toContainText('Read 3 tasks');
+  await expect(page.locator('#imp-preview')).toContainText('Excavation');
+  await page.click('#imp-create');
+
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBe(3);
+  await expect(page.locator('#gantt .bar').first()).toBeVisible();
 
   page.on('dialog', (d) => d.accept());
   await page.click('#ed-delete');
