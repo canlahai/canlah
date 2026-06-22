@@ -14,6 +14,11 @@ assert.ok(/do NOT invent/i.test(p), 'instructs not to invent facts');
 assert.ok(p.includes('"Incident summary"'), 'lists the incident sections');
 assert.ok(/JSON/.test(p), 'asks for JSON output');
 
+// output language instruction
+const pl = buildSafetyPrompt({ reportType: 'incident', input: 'x', lang: '中文 (Chinese)' });
+assert.ok(/in 中文 \(Chinese\)/.test(pl), 'non-English output language adds a write-in instruction');
+assert.ok(!/Write the ENTIRE report/.test(buildSafetyPrompt({ reportType: 'incident', input: 'x', lang: 'English' })), 'no language line for English (default)');
+
 // template overrides the section set + title
 const tmpl = { title: 'ACME Incident Form', sections: [{ heading: 'Site' }, { heading: 'What happened' }, { heading: 'Sign-off' }] };
 const pt = buildSafetyPrompt({ reportType: 'incident', input: 'x', template: tmpl });
