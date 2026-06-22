@@ -405,6 +405,8 @@ test('export to MS Project XML → downloads valid MSPDI', async ({ page }) => {
   await expect(rows).toHaveCount(2);
   await rows.nth(0).locator('td.dur input').fill('10');
   await rows.nth(1).locator('td.dur input').fill('5');
+  // Let the debounced recompute settle so it can't re-render mid-fill below.
+  await expect(page.locator('#st-end')).not.toHaveText('—');
   await rows.nth(1).locator('td').nth(5).locator('input').fill('a1');
   await rows.nth(1).locator('td').nth(5).locator('input').blur();
   // Wait for the dependency to commit to state (input is debounced) before export.
@@ -495,6 +497,48 @@ test('import a Primavera P6 XER → preview → create programme', async ({ page
   await expect.poll(() => page.locator('#act-body tr').count(), { timeout: 8000 }).toBe(2);
 
   page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
+test('field update: progress + site photo, then baseline S-curve + report', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'Field test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-add');
+  const row = page.locator('#act-body tr').first();
+  await row.locator('td.name input').fill('Cast slab');
+  await row.locator('td.dur input').fill('10');
+
+  // Open the activity → set progress + upload a site photo.
+  await row.locator('.plan-btn').click();
+  await expect(page.locator('#activity-modal')).toBeVisible();
+  await page.locator('#ac-progress').fill('60');
+  await expect(page.locator('#ac-progress-val')).toHaveText('60%');
+  await page.setInputFiles('#ac-photo-file', { name: 'site.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fakejpegbytes') });
+  await page.click('#ac-photo-up');
+  await expect(page.locator('#ac-photos img')).toHaveCount(1);
+  await page.click('#ac-save');
+  await expect(page.locator('#toast')).toContainText('updated');
+  await page.click('#ac-close');
+
+  // Baseline tab → set baseline → S-curve renders.
+  await page.click('#ed-seg-baseline');
+  await expect(page.locator('#ed-baseline')).toBeVisible();
+  await page.click('#bl-set');
+  await expect(page.locator('#ed-baseline')).toContainText('Progress S-curve');
+  await expect(page.locator('#ed-baseline svg')).toBeVisible();
+  await expect(page.locator('#ed-baseline')).toContainText('Actual % today');
+
+  // Weekly report builds the print pack.
+  await page.click('#ed-report');
+  await expect(page.locator('#print-report')).toContainText('Field test');
+  await expect(page.locator('#print-report')).toContainText('3-week look-ahead');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-seg-schedule');
   await page.click('#ed-delete');
   await expect(page.locator('#view-list')).toBeVisible();
 });

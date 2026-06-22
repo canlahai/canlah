@@ -96,6 +96,9 @@ alter table canlah_programme_members add column if not exists trade_role text;
 -- Optional target/contract end date on a programme (powers the dashboard slip flag).
 alter table canlah_programmes add column if not exists end_date text;
 
+-- Saved baseline snapshot (powers the Baseline tab S-curve + variance).
+alter table canlah_programmes add column if not exists baseline jsonb;
+
 -- Subcontractor / contact directory (lib/contacts.js) — an owner's reusable
 -- address book, so subs can be invited onto any programme in one click.
 create table if not exists canlah_contacts (

@@ -136,6 +136,16 @@ assert.equal((await updateActivity(created.id, STRANGER, 'a1', { status: 'done' 
 assert.equal((await updateActivity(created.id, OWNER, 'ghost', { status: 'done' })).reason, 'invalid', 'unknown activity -> invalid');
 assert.equal((await updateActivity(created.id, OWNER, 'a1', { status: 'banana' })).reason, 'invalid', 'bad status rejected');
 assert.equal((await updateActivity(created.id, OWNER, 'a1', { checklist: 'x' })).reason, 'invalid', 'checklist must be array');
+// field-update fields: progress (0–100) + photos (array)
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { progress: 150 })).reason, 'invalid', 'progress > 100 rejected');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { photos: 'x' })).reason, 'invalid', 'photos must be array');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { progress: 60, photos: [{ url: 'https://x/p.jpg', by: 'Sub' }] })).ok, true, 'progress + photo update ok');
+assert.equal((await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1').progress, 60, 'progress persisted');
+assert.equal((await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1').photos.length, 1, 'photo persisted');
+
+// baseline snapshot persists on the programme
+assert.equal((await updateProgramme(created.id, OWNER, { baseline: { savedAt: 'now', projectEnd: '2026-09-01', tasks: { a1: { end: '2026-08-01', durationDays: 5 } } } })).ok, true, 'baseline saved');
+assert.equal((await getProgramme(created.id, OWNER)).baseline.projectEnd, '2026-09-01', 'baseline persisted + returned');
 
 // --- remove member; cannot remove owner -------------------------------------
 assert.equal((await removeMember(created.id, OWNER, OWNER)).reason, 'invalid', 'cannot remove the owner');
