@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CanLah.ai — Safety Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/canlah.css">
+<style>
+  .wrap{max-width:760px;margin:0 auto;padding:30px 22px 60px}
+  .eyebrow{font-family:'Inter',sans-serif;font-size:11px;color:var(--orange);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--g4);font-size:14px;margin-bottom:22px}
+  .card{background:var(--surface);border:1px solid var(--g8);border-radius:var(--rl);padding:18px;box-shadow:var(--shadow-sm);margin-bottom:16px}
+  label{display:block;font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px}
+  select,input[type=file],textarea{width:100%;font-family:'Inter',sans-serif;background:var(--surface);color:var(--paper);border:1px solid var(--g7);border-radius:var(--r);padding:11px;font-size:15px}
+  select:focus,textarea:focus{outline:none;border-color:var(--yellow);box-shadow:var(--ring)}
+  textarea{min-height:130px;resize:vertical;line-height:1.5}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{font-size:12px;color:var(--g3);background:var(--g9);border:1px solid var(--g7);border-radius:999px;padding:5px 11px;cursor:pointer}
+  .chip:hover{border-color:var(--yellow)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+  .row>div{flex:1;min-width:180px}
+  .btn{background:var(--g8);color:var(--paper);border:1px solid var(--g7);border-radius:var(--r);padding:10px 16px;font-weight:600;font-size:14px;box-shadow:var(--shadow-sm)}
+  .btn:hover{background:var(--g7)}
+  .btn.pri{background:var(--yellow);color:#241a00;border-color:var(--yellow)}
+  .btn.pri:hover{background:var(--yellow-dk)}
+  .tmpl-chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--green);background:var(--gbg);border:1px solid var(--green);border-radius:999px;padding:5px 12px}
+  .muted{color:var(--g4);font-size:13px}
+  .status{font-size:13px;color:var(--g4);min-height:18px;margin-top:8px}
+  /* generated report */
+  #report{display:none}
+  #report .rp-title{font-size:22px;font-weight:800;margin-bottom:2px}
+  #report .rp-meta{color:var(--g4);font-size:12.5px;margin-bottom:16px;font-family:'Inter',sans-serif}
+  #report .rp-sec{margin-bottom:14px}
+  #report .rp-h{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--g3);border-bottom:1px solid var(--g8);padding-bottom:3px;margin-bottom:5px}
+  #report .rp-b{font-size:14.5px;line-height:1.55;white-space:pre-wrap}
+  .hidden{display:none!important}
+  @media print{
+    .topbar,.no-print{display:none!important}
+    .wrap{padding:0;max-width:100%}
+    #report{display:block!important;box-shadow:none;border:none}
+    .card:not(#report){display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="brand-name" style="text-decoration:none;cursor:pointer" title="Back to home"><span>Can</span><em>Lah</em>.ai</a>
+  <a href="/" class="topbar-tag" style="text-decoration:none;cursor:pointer">← Home</a>
+  <div class="topbar-spacer" style="flex:1"></div>
+  <div class="topbar-tag">Safety Report</div>
+</div>
+
+<div class="wrap">
+  <div class="eyebrow">// Workplace Safety &amp; Health</div>
+  <h1>Safety report — from a few words</h1>
+  <p class="sub">Type what happened in short words or broken English — any language (Malay, 中文, Tamil, Singlish). We turn it into a professional WSH report, in your company's format.</p>
+
+  <div class="card no-print">
+    <div class="row" style="margin-bottom:14px">
+      <div>
+        <label>Report type</label>
+        <select id="rtype"></select>
+      </div>
+      <div>
+        <label>Match my company template <span style="text-transform:none;opacity:.7">(optional)</span></label>
+        <input id="tmpl-file" type="file" accept=".pdf,.jpg,.jpeg,.png">
+      </div>
+      <div style="flex:0 0 auto"><button class="btn" id="tmpl-read">Read template</button></div>
+    </div>
+    <div id="tmpl-state" class="muted"></div>
+
+    <label style="margin-top:14px">Your notes</label>
+    <textarea id="notes" placeholder="e.g. worker fall from scaffold level 3, helmet on, small cut hand, stop work, supervisor come, first aid done, no need ambulance"></textarea>
+    <div class="chips" id="examples"></div>
+
+    <div class="status" id="status"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn pri" id="go">✨ Generate report</button>
+      <button class="btn hidden" id="regen">Regenerate</button>
+    </div>
+  </div>
+
+  <div class="card" id="report"></div>
+  <div class="no-print hidden" id="report-actions" style="display:flex;gap:10px;margin-top:-6px">
+    <button class="btn" id="copy">Copy text</button>
+    <button class="btn pri" id="pdf">Download PDF</button>
+    <button class="btn" id="edit-toggle">Edit</button>
+  </div>
+</div>
+
+<script src="/canlah.js"></script>
+<script type="module">
+import { safetyTypeList } from '/lib/safety.js';
+const $ = (id) => document.getElementById(id);
+const TMPL_KEY = 'canlah-safety-template';
+let template = null;
+try { template = JSON.parse(localStorage.getItem(TMPL_KEY) || 'null'); } catch {}
+
+// Report type options
+$('rtype').innerHTML = safetyTypeList().map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+
+// Example chips
+const EXAMPLES = [
+  'worker fall scaffold L3, helmet on, small cut, stop work, first aid done',
+  'near miss, brick drop from level 5, no one hurt, area barricade now',
+  'toolbox today 8am, talk about working at height + hot work permit, 12 worker attend',
+  'crane wire look worn, report to supervisor, stop use until check',
+];
+$('examples').innerHTML = EXAMPLES.map(e => `<span class="chip">${e}</span>`).join('');
+$('examples').querySelectorAll('.chip').forEach(c => c.onclick = () => { $('notes').value = c.textContent; });
+
+function renderTmplState(){
+  if (template && template.sections && template.sections.length){
+    $('tmpl-state').innerHTML = `<span class="tmpl-chip">✓ Template loaded · ${template.sections.length} sections</span> <a href="#" id="tmpl-clear" style="color:var(--g4);font-size:12px;margin-left:8px">clear</a>`;
+    $('tmpl-clear').onclick = (e) => { e.preventDefault(); template=null; localStorage.removeItem(TMPL_KEY); renderTmplState(); };
+  } else {
+    $('tmpl-state').innerHTML = '<span class="muted">No template — we\'ll use a standard WSH format.</span>';
+  }
+}
+renderTmplState();
+
+$('tmpl-read').onclick = async () => {
+  const f = $('tmpl-file').files[0];
+  if (!f) return CanLah.showToast('Choose your template file', 'err');
+  $('status').textContent = 'Reading template…';
+  try {
+    CanLah.state.uploadedFile = f;
+    const data = await CanLah.uploadAndAnalyse({ reportType: 'safety-template' });
+    template = { title: data.title || null, sections: data.sections || [], name: f.name };
+    localStorage.setItem(TMPL_KEY, JSON.stringify(template));
+    $('status').textContent = '';
+    renderTmplState();
+    CanLah.showToast('Template format saved', 'info');
+  } catch (e) { $('status').textContent = ''; CanLah.showToast(e.message, 'err'); }
+};
+
+let last = null;
+async function generate(){
+  const input = $('notes').value.trim();
+  if (!input) return CanLah.showToast('Type a few words first', 'err');
+  $('status').textContent = 'Writing your professional report…';
+  $('go').disabled = true; $('regen').disabled = true;
+  try {
+    const { data } = await CanLah.apiProcess({ action:'generate', kind:'safety', reportType: $('rtype').value, input, template });
+    last = data;
+    renderReport(data);
+    $('status').textContent = '';
+    $('regen').classList.remove('hidden');
+    $('report-actions').classList.remove('hidden');
+    $('report').scrollIntoView({ behavior:'smooth' });
+  } catch (e) { $('status').textContent=''; CanLah.showToast(e.message, 'err'); }
+  finally { $('go').disabled = false; $('regen').disabled = false; }
+}
+$('go').onclick = generate;
+$('regen').onclick = generate;
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function renderReport(d){
+  const meta = [d.meta?.date, d.meta?.location, d.meta?.reportedBy].filter(x=>x&&x!=='[to be confirmed]').join(' · ');
+  $('report').style.display = 'block';
+  $('report').innerHTML =
+    `<div class="rp-title">${esc(d.title||'Safety report')}</div>`+
+    `<div class="rp-meta">${meta?esc(meta)+' · ':''}Generated ${new Date().toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'})} · CanLah.ai</div>`+
+    (d.sections||[]).map(s=>`<div class="rp-sec"><div class="rp-h">${esc(s.heading)}</div><div class="rp-b">${esc(s.body)}</div></div>`).join('')+
+    `<div class="muted" style="margin-top:16px;font-size:11px">⚠ AI-assisted draft from a worker's notes — a competent person must verify before submission. Items marked [to be confirmed] need completing.</div>`;
+}
+$('copy').onclick = async () => {
+  if (!last) return;
+  const text = `${last.title}\n\n`+ (last.sections||[]).map(s=>`${s.heading}\n${s.body}`).join('\n\n');
+  try { await navigator.clipboard.writeText(text); CanLah.showToast('Copied', 'info'); }
+  catch { CanLah.showToast('Copy failed', 'err'); }
+};
+$('pdf').onclick = () => window.print();
+$('edit-toggle').onclick = () => {
+  const r = $('report'); const on = r.getAttribute('contenteditable') === 'true';
+  r.setAttribute('contenteditable', on ? 'false' : 'true');
+  r.style.outline = on ? 'none' : '2px dashed var(--yellow)';
+  $('edit-toggle').textContent = on ? 'Edit' : 'Done editing';
+};
+
+CanLah.init().catch(()=>{});
+</script>
+</body>
+</html>

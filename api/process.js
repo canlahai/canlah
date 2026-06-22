@@ -18,6 +18,7 @@ import { requireAuth, authCheck } from '../lib/auth.js';
 import { enforceRateLimit } from '../lib/rate-limit.js';
 import { isAllowedBlobUrl } from '../lib/blob-url.js';
 import { usersAuthEnabled, consumeRead } from '../lib/users.js';
+import { buildSafetyPrompt, SAFETY_TEMPLATE_PROMPT } from '../lib/safety.js';
 import { initSentry, captureException } from '../lib/sentry.js';
 import * as log from '../lib/log.js';
 
@@ -173,7 +174,24 @@ export const PROMPTS = {
   traffic: TRAFFIC_EXTRACTION_PROMPT,
   scope: SCOPE_EXTRACTION_PROMPT,
   bq: BQ_EXTRACTION_PROMPT,
+  'safety-template': SAFETY_TEMPLATE_PROMPT,
 };
+
+// Shared free-tier read-quota gate (per-user auth only). Returns a 402-ish object
+// to send, or null to proceed.
+async function checkReadQuota(req) {
+  if (!usersAuthEnabled()) return null;
+  const caller = authCheck(req);
+  if (!(caller.ok && caller.id)) return null;
+  const limit = Number(process.env.READS_FREE_LIMIT) || 10;
+  let quota;
+  try { quota = await consumeRead(caller.id, { limit }); }
+  catch (e) { captureException(e); log.error('[api/process] consumeRead failed', e?.message || e); quota = { ok: true }; }
+  if (!quota.ok && quota.reason === 'limit') {
+    return { status: 402, body: { error: `Free plan limit reached (${quota.limit} reads this month). Upgrade to Pro for unlimited reads.`, code: 'read_limit', limit: quota.limit } };
+  }
+  return null;
+}
 
 const createSafeBlobKey = filename => {
   const safeName = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -465,6 +483,32 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json(msgData);
+    } catch (err) {
+      captureException(err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // Text-only generation (no document). Used by the Safety Report generator:
+  // worker's keywords/broken English → professional report following a template.
+  if (action === 'generate') {
+    const { kind, reportType, input, template } = body;
+    if (kind !== 'safety') return res.status(400).json({ error: 'Unknown generation kind' });
+    if (!input || !String(input).trim()) return res.status(400).json({ error: 'Enter some notes to generate from' });
+    const gate = await checkReadQuota(req);
+    if (gate) return res.status(gate.status).json(gate.body);
+    try {
+      const prompt = buildSafetyPrompt({ reportType, input, template });
+      const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] }),
+      });
+      if (!msgRes.ok) return res.status(500).json({ error: await msgRes.text() });
+      const msgData = await msgRes.json();
+      const text = msgData.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      return res.status(200).json({ data: parsed });
     } catch (err) {
       captureException(err);
       return res.status(500).json({ error: err.message });
