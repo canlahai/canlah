@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createMultipartUpload, uploadPart, completeMultipartUpload } from '@vercel/blob';
 import { handleUpload } from '@vercel/blob/client';
 import { PROMPTS } from './api/process.js';
+import { buildSafetyPrompt, demoSafetyReport } from './lib/safety.js';
 import { authCheck, getSession, setSessionCookie, clearSessionCookie } from './lib/auth.js';
 import { usersAuthEnabled, verifyCredentials, createUser, listUsers, setUserDisabled, setUserTier, getUserById, consumeRead, hasProAccess } from './lib/users.js';
 import { listProgrammesForUser, listPortfolioForUser, getProgramme, createProgramme, updateProgramme, updateActivity, setMember, removeMember, deleteProgramme } from './lib/programmes.js';
@@ -531,6 +532,21 @@ async function handleApi(req, res) {
           };
           return send(res, 200, JSON.stringify({ data: demoTraffic }), { 'Content-Type': 'application/json' });
         }
+        if (reportType === 'safety-template') {
+          return send(res, 200, JSON.stringify({ data: {
+            title: 'Incident Report (Company Template)',
+            sections: [
+              { heading: 'Project / Site', hint: 'site name + ref' },
+              { heading: 'Incident details', hint: 'date, time, exact location' },
+              { heading: 'Description', hint: 'what happened' },
+              { heading: 'Persons involved', hint: null },
+              { heading: 'Immediate action', hint: null },
+              { heading: 'Corrective action', hint: null },
+              { heading: 'Prepared by', hint: 'name + designation' },
+            ],
+            notes: ['Demo template — your uploaded template structure is read here in live mode.'],
+          } }), { 'Content-Type': 'application/json' });
+        }
         const demoData = {
           projectName: 'Construction of Road Viaduct Along Pioneer Road',
           drawingRef: 'L/RC216/RR/WSCL/0014–0017',
@@ -617,6 +633,24 @@ async function handleApi(req, res) {
         return send(res, 200, JSON.stringify({ data: parsed }), { 'Content-Type': 'application/json' });
       }
       return send(res, 200, JSON.stringify(msgData), { 'Content-Type': 'application/json' });
+    }
+
+    if (action === 'generate') {
+      const { kind, reportType, input, template } = body;
+      if (kind !== 'safety') return send(res, 400, JSON.stringify({ error: 'Unknown generation kind' }), { 'Content-Type': 'application/json' });
+      if (!input || !String(input).trim()) return send(res, 400, JSON.stringify({ error: 'Enter some notes to generate from' }), { 'Content-Type': 'application/json' });
+      if (DEMO_MODE) return send(res, 200, JSON.stringify({ data: demoSafetyReport({ reportType, input, template }) }), { 'Content-Type': 'application/json' });
+      const prompt = buildSafetyPrompt({ reportType, input, template });
+      const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] }),
+      });
+      if (!msgRes.ok) throw new Error(await msgRes.text());
+      const msgData = await msgRes.json();
+      const text = msgData.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      return send(res, 200, JSON.stringify({ data: parsed }), { 'Content-Type': 'application/json' });
     }
 
     return send(res, 400, JSON.stringify({ error: `Unknown action: ${action}` }), { 'Content-Type': 'application/json' });
