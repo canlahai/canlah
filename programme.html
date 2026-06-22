@@ -157,6 +157,14 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.err{border-color:var(--red)}
   .hidden{display:none!important}
+  /* weekly report (print pack) */
+  #print-report{display:none}
+  #print-report h1{font-size:22px;margin-bottom:2px}
+  #print-report .rp-sub{color:#475569;font-size:12px;margin-bottom:14px}
+  #print-report h3{font-size:14px;margin:16px 0 6px;border-bottom:1px solid #d7dbe1;padding-bottom:3px}
+  #print-report .rp-row{display:flex;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:1px solid #eef1f4;font-size:12.5px}
+  #print-report .rp-stats{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;margin-bottom:6px}
+  #print-report .rp-stats b{font-size:17px;display:block}
   /* ── responsive (phones / site tablets) ── */
   @media(max-width:720px){
     .wrap{padding:14px}
@@ -165,6 +173,11 @@
     .new-row{flex-direction:column;align-items:stretch}
     .new-row .field{width:100%}
     .new-row .field input,.new-row .field select{width:100%}
+    .seg{width:100%;overflow-x:auto}
+    .modal-bg{padding:0;align-items:flex-end}
+    .modal{max-width:100%;max-height:92vh;border-radius:16px 16px 0 0}
+    .btn,.btn.sm{padding:11px 14px;font-size:14px}
+    td input,td select{font-size:16px}
     .ed-head{flex-direction:column}
     .ed-stats{gap:14px 18px}
     .toolbar{gap:6px}
@@ -176,7 +189,13 @@
     .cards{grid-template-columns:1fr}
     .modal{max-width:100%;padding:18px}
   }
-  @media print{.topbar,.toolbar,.filters,.new-row,.row-x,.disclaimer .none{display:none}.btn{display:none}}
+  @media print{
+    .topbar,.toolbar,.filters,.new-row,.row-x,.disclaimer .none{display:none}.btn{display:none}
+    /* Weekly-report mode: show only the report pack. */
+    body.report-print *{visibility:hidden}
+    body.report-print #print-report,body.report-print #print-report *{visibility:visible}
+    body.report-print #print-report{display:block;position:absolute;left:0;top:0;width:100%;padding:24px}
+  }
 </style>
 </head>
 <body>
@@ -344,12 +363,6 @@
     <div class="stat"><div class="k">At risk</div><div class="v" id="st-risk" style="color:#c2410c">—</div></div>
   </div>
 
-  <div class="seg" role="tablist" style="margin-bottom:14px">
-    <button id="ed-seg-overview" class="seg-btn on" role="tab">📋 Overview</button>
-    <button id="ed-seg-schedule" class="seg-btn" role="tab">🗂 Schedule &amp; Gantt</button>
-  </div>
-
-  <div id="ed-schedule" class="hidden">
   <div class="toolbar">
     <button class="btn pri" id="ed-add">+ Activity</button>
     <button class="btn" id="ed-save">Save</button>
@@ -359,11 +372,19 @@
     <button class="btn sm" id="ed-feed">Activity log</button>
     <button class="btn sm" id="ed-msp" title="Download as MS Project XML — opens in MS Project & Primavera P6">⤓ MS Project</button>
     <button class="btn sm" id="ed-p6" title="Download as Primavera P6 XER (beta — verify in P6)">⤓ Primavera P6</button>
+    <button class="btn sm" id="ed-report">📄 Weekly report</button>
     <button class="btn sm" id="ed-csv">Export CSV</button>
     <button class="btn sm" id="ed-print">Print / PDF</button>
     <button class="btn sm danger" id="ed-delete">Delete</button>
   </div>
 
+  <div class="seg" role="tablist" style="margin-bottom:14px">
+    <button id="ed-seg-overview" class="seg-btn on" role="tab">📋 Overview</button>
+    <button id="ed-seg-schedule" class="seg-btn" role="tab">🗂 Schedule &amp; Gantt</button>
+    <button id="ed-seg-baseline" class="seg-btn" role="tab">📈 Baseline</button>
+  </div>
+
+  <div id="ed-schedule" class="hidden">
   <div class="filters">
     <span class="mono">Filter:</span>
     <select id="f-assignee"><option value="">All people</option></select>
@@ -411,8 +432,14 @@
   <!-- OVERVIEW: read-friendly status summary everyone can take in at a glance -->
   <div id="ed-overview"></div>
 
+  <!-- BASELINE: snapshot the plan, then track current vs baseline (S-curve) -->
+  <div id="ed-baseline" class="hidden"></div>
+
   <p class="disclaimer">⚠ AI-assisted draft — durations and the critical path are estimates; a qualified planner must verify before any submission or decision. <a href="/legal">Legal &amp; data →</a></p>
 </div>
+
+<!-- WEEKLY REPORT (print-only pack) -->
+<div id="print-report"></div>
 
 <!-- MEMBERS / INVITES MODAL -->
 <div class="modal-bg" id="member-modal">
@@ -466,8 +493,18 @@
         <option value="todo">To do</option><option value="in_progress">In progress</option>
         <option value="done">Done</option><option value="blocked">Blocked</option>
       </select></div>
-      <div class="field"><label>Responsible party</label><input id="ac-resp" placeholder="e.g. Procurement" style="min-width:160px"></div>
+      <div class="field"><label>Progress</label><div style="display:flex;align-items:center;gap:8px"><input id="ac-progress" type="range" min="0" max="100" step="5" style="width:120px"><span id="ac-progress-val" class="mono" style="font-size:12px;min-width:38px">0%</span></div></div>
+      <div class="field"><label>Responsible party</label><input id="ac-resp" placeholder="e.g. Procurement" style="min-width:150px"></div>
       <div class="field" style="flex:1"><label>Blocked reason (if any)</label><input id="ac-blocked" placeholder="e.g. concrete delivery delayed"></div>
+    </div>
+
+    <!-- site progress photos -->
+    <h2 style="font-size:15px;margin-top:14px">📸 Site photos</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:6px">Snap progress from site — visible to the whole team. (On a phone, this opens the camera.)</p>
+    <div id="ac-photos" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px"></div>
+    <div class="new-row" id="ac-photo-add" style="margin:6px 0">
+      <input id="ac-photo-file" type="file" accept="image/*" capture="environment" style="padding:7px;flex:1;min-width:160px">
+      <button class="btn sm" id="ac-photo-up">Add photo</button>
     </div>
 
     <!-- parties -->
@@ -1228,6 +1265,7 @@ function normalise(a){
     deliveries:Array.isArray(a.deliveries)?a.deliveries:[],
     updates:Array.isArray(a.updates)?a.updates:[],
     externalDeps:Array.isArray(a.externalDeps)?a.externalDeps:[],
+    photos:Array.isArray(a.photos)?a.photos:[], progress:Number(a.progress)||0,
     blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'',
     ...(a.mspUid?{mspUid:a.mspUid}:{}), ...(a.code?{code:a.code}:{}) };
 }
@@ -1366,21 +1404,23 @@ async function recompute(){
     state.schedule = null;
     $('ed-warn').classList.remove('hidden'); $('ed-warn').textContent = '⚠ '+e.message;
   }
-  updateStats(); refreshAssigneeFilter(); renderTable(); renderGantt(); renderOverview();
+  updateStats(); refreshAssigneeFilter(); renderTable(); renderGantt(); renderOverview(); if(edView==='baseline') renderBaseline();
 }
 
 // ── programme overview (read-friendly status summary for everyone) ──────────
 let edView = 'overview';
+const ED_VIEWS = { overview:'ed-overview', schedule:'ed-schedule', baseline:'ed-baseline' };
 function applyEdView(){
-  const ov = edView==='overview';
-  $('ed-seg-overview').classList.toggle('on', ov);
-  $('ed-seg-schedule').classList.toggle('on', !ov);
-  $('ed-overview').classList.toggle('hidden', !ov);
-  $('ed-schedule').classList.toggle('hidden', ov);
-  if (ov) renderOverview();
+  Object.entries(ED_VIEWS).forEach(([v,panel])=>{
+    $('ed-seg-'+v).classList.toggle('on', v===edView);
+    $(panel).classList.toggle('hidden', v!==edView);
+  });
+  if (edView==='overview') renderOverview();
+  else if (edView==='baseline') renderBaseline();
 }
 $('ed-seg-overview').onclick=()=>{ edView='overview'; applyEdView(); };
 $('ed-seg-schedule').onclick=()=>{ edView='schedule'; applyEdView(); };
+$('ed-seg-baseline').onclick=()=>{ edView='baseline'; applyEdView(); };
 function renderOverview(){
   const el=$('ed-overview'); if(!el) return;
   const acts=state.activities||[]; const s=state.schedule;
@@ -1423,6 +1463,64 @@ function renderOverview(){
     <div class="ov-sec"><h3>📅 Up next (starting ≤ 2 weeks)</h3>${upNext.length?upNext.map(a=>row(a,dates(a))).join(''):'<div class="ov-empty">Nothing starting in the next two weeks.</div>'}</div>
     <div class="ov-sec"><h3>🔴 Blockers (${blockers.length})</h3>${blockers.length?blockers.map(a=>row(a,a.blockedReason?`<span class="flag-over">${esc(a.blockedReason)}</span>`:'<span class="flag-over">blocked</span>')).join(''):'<div class="ov-empty">No blockers. ✓</div>'}</div>
   `;
+}
+
+// ── baseline + progress S-curve ─────────────────────────────────────────────
+function setBaseline(){
+  const s=state.schedule; if(!s||!s.tasks.length) return toast('Add activities first',true);
+  const tasks={}; for(const a of state.activities){ const t=s.tasks.find(x=>x.id===a.id)||{}; tasks[a.id]={ end:t.end||null, durationDays:Math.max(0,Math.round(Number(a.durationDays)||0)) }; }
+  const baseline={ savedAt:new Date().toISOString(), projectEnd:s.projectEnd, startDate:$('ed-start').value||state.current.startDate, tasks };
+  state.current.baseline=baseline;
+  busy($('bl-set'),'Saving…',()=>api('PATCH',{id:state.current.id, baseline})).then(()=>{ toast('Baseline saved'); renderBaseline(); }).catch(e=>toast(e.message,true));
+}
+function renderBaseline(){
+  const el=$('ed-baseline'); if(!el) return;
+  const canEdit=state.canEdit; const bl=state.current&&state.current.baseline;
+  const s=state.schedule; const cur=new Map(((s&&s.tasks)||[]).map(t=>[t.id,t]));
+  const setBtn = canEdit?`<button class="btn pri sm" id="bl-set">${bl?'Re-baseline (snapshot current)':'Set baseline'}</button>`:'';
+  if(!bl){ el.innerHTML=`<div class="ov-sec"><h3>Baseline</h3><p class="muted" style="font-size:13px;margin-bottom:10px">A baseline freezes today's planned dates so you can track slippage and progress against it (S-curve). ${canEdit?'Set one to begin.':'No baseline set yet.'}</p>${setBtn}</div>`; if(canEdit&&$('bl-set'))$('bl-set').onclick=setBaseline; return; }
+  const acts=state.activities; const w=a=>Math.max(1,Math.round(Number(a.durationDays)||0));
+  const W=acts.reduce((n,a)=>n+w(a),0)||1;
+  const blItems=acts.map(a=>({end:(bl.tasks[a.id]||{}).end,w:w(a)})).filter(x=>x.end);
+  const curItems=acts.map(a=>({end:(cur.get(a.id)||{}).end,w:w(a)})).filter(x=>x.end);
+  const start=bl.startDate||state.current.startDate;
+  const maxEnd=[bl.projectEnd, s&&s.projectEnd].filter(Boolean).sort().slice(-1)[0]||start;
+  const wk=[]; let d=mondayOf(new Date(start+'T00:00:00')); const endD=new Date(maxEnd+'T00:00:00');
+  for(let i=0;i<260&&d<=endD;i++){ wk.push(new Date(d)); d=new Date(d); d.setDate(d.getDate()+7); }
+  if(!wk.length) wk.push(new Date(start+'T00:00:00'));
+  const cumAt=(items,ms)=>items.reduce((n,it)=>n+(Date.parse(it.end)<=ms?it.w:0),0)/W*100;
+  const eow=dt=>dt.getTime()+6*86400000;
+  const blPts=wk.map(dt=>cumAt(blItems,eow(dt))), curPts=wk.map(dt=>cumAt(curItems,eow(dt)));
+  const frac=a=>a.status==='done'?1:(Number(a.progress)||0)/100;
+  const actualPct=acts.reduce((n,a)=>n+w(a)*frac(a),0)/W*100;
+  let todayIdx=wk.findIndex(dt=>eow(dt)>=Date.now()); if(todayIdx<0) todayIdx=wk.length-1;
+  const plannedNow=curPts[todayIdx]||0;
+  const Wd=680,Hd=220,pl=40,pr=14,ptp=14,pb=26,iw=Wd-pl-pr,ih=Hd-ptp-pb;
+  const X=i=>pl+(wk.length<=1?0:i/(wk.length-1)*iw), Y=v=>ptp+(1-v/100)*ih;
+  const path=pts=>pts.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const grid=[0,25,50,75,100].map(v=>`<line x1="${pl}" y1="${Y(v)}" x2="${Wd-pr}" y2="${Y(v)}" stroke="#e8eaee"/><text x="${pl-6}" y="${Y(v)+3}" text-anchor="end" font-size="9" fill="#616b76">${v}%</text>`).join('');
+  const svg=`<svg viewBox="0 0 ${Wd} ${Hd}" width="100%" style="max-width:${Wd}px">${grid}`+
+    `<line x1="${X(todayIdx)}" y1="${ptp}" x2="${X(todayIdx)}" y2="${ptp+ih}" stroke="#c2410c" stroke-dasharray="3 3"/><text x="${X(todayIdx)+3}" y="${ptp+9}" font-size="9" fill="#c2410c">today</text>`+
+    `<path d="${path(blPts)}" fill="none" stroke="#8a939c" stroke-width="2" stroke-dasharray="5 4"/>`+
+    `<path d="${path(curPts)}" fill="none" stroke="#2563eb" stroke-width="2"/>`+
+    `<circle cx="${X(todayIdx)}" cy="${Y(actualPct)}" r="4" fill="#15803d"/>`+
+    `<text x="${pl}" y="${Hd-8}" font-size="9" fill="#616b76">${start}</text><text x="${Wd-pr}" y="${Hd-8}" text-anchor="end" font-size="9" fill="#616b76">${maxEnd}</text></svg>`;
+  const slip=(bl.projectEnd&&s&&s.projectEnd)?Math.round((Date.parse(s.projectEnd)-Date.parse(bl.projectEnd))/86400000):null;
+  const variance=acts.map(a=>{const be=(bl.tasks[a.id]||{}).end,ce=(cur.get(a.id)||{}).end;const dd=(be&&ce)?Math.round((Date.parse(ce)-Date.parse(be))/86400000):null;return {a,be,ce,d:dd};}).filter(x=>x.d).sort((x,y)=>y.d-x.d).slice(0,8);
+  el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="muted" style="font-size:12px">Baseline set ${new Date(bl.savedAt).toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'})}</div>${setBtn}
+    </div>
+    <div class="ov-grid">
+      <div class="ov-card"><div class="k">Actual % today</div><div class="v">${Math.round(actualPct)}%</div></div>
+      <div class="ov-card"><div class="k">Planned % today</div><div class="v sm">${Math.round(plannedNow)}%</div><div style="font-size:11px;margin-top:4px">${actualPct+0.5<plannedNow?'<span class="flag-over">behind plan</span>':'<span class="sched-ok">on/ahead</span>'}</div></div>
+      <div class="ov-card"><div class="k">Baseline end</div><div class="v sm mono">${bl.projectEnd||'—'}</div></div>
+      <div class="ov-card"><div class="k">Forecast end</div><div class="v sm mono">${(s&&s.projectEnd)||'—'}</div><div style="font-size:11px;margin-top:4px">${slip!=null?(slip>0?`<span class="flag-over">⚠ ${slip}d behind</span>`:slip<0?`<span class="sched-ok">${-slip}d ahead</span>`:'<span class="sched-ok">on baseline</span>'):''}</div></div>
+    </div>
+    <div class="ov-sec"><h3>Progress S-curve</h3>${svg}
+      <div class="legend" style="margin-top:6px"><span><i style="background:#8a939c"></i>Baseline plan</span><span><i style="background:#2563eb"></i>Current plan</span><span><i style="background:#15803d"></i>Actual today</span></div></div>
+    <div class="ov-sec"><h3>Biggest movements vs baseline</h3>${variance.length?variance.map(v=>`<div class="la-row"><span style="flex:1">${esc(v.a.name||v.a.id)}</span><span class="mono" style="font-size:11px">${v.be} → ${v.ce} <span class="${v.d>0?'flag-over':'sched-ok'}">${v.d>0?'+':''}${v.d}d</span></span></div>`).join(''):'<div class="ov-empty">No movement vs baseline.</div>'}</div>`;
+  if(canEdit&&$('bl-set')) $('bl-set').onclick=setBaseline;
 }
 function updateStats(){
   const s=state.schedule;
@@ -1498,6 +1596,42 @@ $('ed-delete').onclick = async () => {
   catch(e){ toast(e.message, true); }
 };
 $('ed-print').onclick = () => window.print();
+function buildReport(){
+  const acts=state.activities||[]; const s=state.schedule;
+  const byId=new Map(((s&&s.tasks)||[]).map(t=>[t.id,t]));
+  const total=acts.length, done=acts.filter(a=>a.status==='done').length;
+  const pct=total?Math.round(done/total*100):0;
+  const blocked=acts.filter(a=>a.status==='blocked');
+  const t=new Date().toISOString().slice(0,10);
+  const horizon=(()=>{const d=new Date();d.setDate(d.getDate()+21);return d.toISOString().slice(0,10);})();
+  const dOf=a=>byId.get(a.id)||{};
+  const ahead=acts.filter(a=>a.status!=='done'&&dOf(a).start&&dOf(a).start<=horizon&&dOf(a).end>=t)
+    .sort((x,y)=>(dOf(x).start||'').localeCompare(dOf(y).start||''));
+  const inprog=acts.filter(a=>a.status==='in_progress');
+  const target=(state.current&&state.current.endDate)||'';
+  const rowHtml=a=>`<div class="rp-row"><span>${esc(a.name||a.id)}${a.assignee?' · '+esc(a.assignee):''}</span><span class="mono">${dOf(a).start||''} → ${dOf(a).end||''}</span></div>`;
+  $('print-report').innerHTML=`
+    <h1>${esc(state.current.name||'Programme')}</h1>
+    <div class="rp-sub">Weekly programme report · generated ${new Date().toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'})} · CanLah.ai</div>
+    <div class="rp-stats">
+      <span><b>${pct}%</b>complete (${done}/${total})</span>
+      <span><b>${inprog.length}</b>in progress</span>
+      <span><b>${blocked.length}</b>blocked</span>
+      <span><b>${(s&&s.projectEnd)||'—'}</b>computed end</span>
+      ${target?`<span><b>${target}</b>target end</span>`:''}
+    </div>
+    <h3>In progress now (${inprog.length})</h3>${inprog.length?inprog.map(rowHtml).join(''):'<div class="rp-row">Nothing in progress.</div>'}
+    <h3>3-week look-ahead (${ahead.length})</h3>${ahead.length?ahead.map(rowHtml).join(''):'<div class="rp-row">Nothing starting in the next three weeks.</div>'}
+    <h3>Blockers (${blocked.length})</h3>${blocked.length?blocked.map(a=>`<div class="rp-row"><span>${esc(a.name||a.id)}</span><span>${esc(a.blockedReason||'blocked')}</span></div>`).join(''):'<div class="rp-row">No blockers.</div>'}
+    <div style="margin-top:18px;font-size:10.5px;color:#64748b">⚠ AI-assisted draft — durations and the critical path are estimates; verify before any submission. CanLah.ai</div>`;
+}
+$('ed-report').onclick = () => {
+  buildReport();
+  document.body.classList.add('report-print');
+  window.print();
+  setTimeout(()=>document.body.classList.remove('report-print'), 800);
+};
+window.addEventListener('afterprint', ()=>document.body.classList.remove('report-print'));
 $('ed-csv').onclick = () => {
   const s=state.schedule; const byId=s?new Map(s.tasks.map(t=>[t.id,t])):new Map();
   const head=['ID','Activity','Trade','Section','Days','Predecessors','Assignee','Status','Start','Finish','Float','Critical','Responsible','Checklist','Ready','Blocked reason','Parties'];
@@ -1625,19 +1759,44 @@ function openActivity(id){
   $('ac-status').value = a.status || 'todo';
   $('ac-resp').value = a.responsibleParty || '';
   $('ac-blocked').value = a.blockedReason || '';
-  ['ac-status','ac-resp','ac-blocked','ac-note'].forEach(i=>$(i).disabled=ro);
+  $('ac-progress').value = Number(a.progress) || 0; $('ac-progress-val').textContent = (Number(a.progress)||0)+'%';
+  ['ac-status','ac-resp','ac-blocked','ac-note','ac-progress'].forEach(i=>$(i).disabled=ro);
   $('ac-party-add').classList.toggle('hidden', ro);
   $('ac-check-add').classList.toggle('hidden', ro);
   $('ac-template-row').classList.toggle('hidden', ro);
   $('ac-deliv-add').classList.toggle('hidden', ro);
+  $('ac-photo-add').classList.toggle('hidden', ro);
   $('ac-note-row').classList.toggle('hidden', ro);
   $('ac-save').classList.toggle('hidden', ro);
   fillCkTmpl();
   $('ac-dep-add').classList.toggle('hidden', ro);
-  renderParties(a); renderChecklist(a); renderDeliveries(a); renderDeps(a); renderUpdates(a); renderReady(a);
+  renderParties(a); renderChecklist(a); renderDeliveries(a); renderDeps(a); renderPhotos(a); renderUpdates(a); renderReady(a);
   fillDepProgrammes();
   $('activity-modal').classList.add('show');
 }
+$('ac-progress').oninput = () => { const a=curAct(); const v=Number($('ac-progress').value)||0; $('ac-progress-val').textContent=v+'%'; if(a) a.progress=v; };
+function renderPhotos(a){
+  const ro=!state.canEdit; const el=$('ac-photos'); el.innerHTML='';
+  const photos=a.photos||[];
+  if(!photos.length){ el.innerHTML='<div class="muted" style="font-size:12px">No photos yet.</div>'; return; }
+  photos.forEach((p,i)=>{
+    const wrap=document.createElement('div'); wrap.style.cssText='position:relative';
+    wrap.innerHTML=`<a href="${esc(p.url)}" target="_blank" rel="noopener"><img src="${esc(p.url)}" alt="site photo" style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--g7)"></a>${ro?'':`<button class="row-x" title="Remove" style="position:absolute;top:-6px;right:-6px;background:var(--surface);border:1px solid var(--g7);border-radius:999px;width:20px;height:20px;line-height:1">×</button>`}`;
+    if(!ro) wrap.querySelector('.row-x').onclick=async()=>{ a.photos.splice(i,1); renderPhotos(a); try{ await api('PATCH',{id:state.current.id,activityId:a.id,patch:{photos:a.photos}}); }catch(e){toast(e.message,true);} };
+    el.appendChild(wrap);
+  });
+}
+$('ac-photo-up').onclick=async()=>{
+  const a=curAct(); if(!a) return; const file=$('ac-photo-file').files[0];
+  if(!file) return toast('Choose a photo first',true);
+  try{
+    const { url } = await busy($('ac-photo-up'),'Uploading…',()=>CanLah.uploadImage(file));
+    a.photos=a.photos||[]; a.photos.push({ url, by:state.myName||'You', at:new Date().toISOString() });
+    $('ac-photo-file').value=''; renderPhotos(a);
+    await api('PATCH',{id:state.current.id,activityId:a.id,patch:{photos:a.photos},note:'added a site photo'});
+    toast('Photo added');
+  }catch(e){ toast(e.message,true); }
+};
 // cross-project dependencies (Master view links)
 function fillDepProgrammes(){
   const sel=$('dep-prog'); const cur=state.current?state.current.id:null;
@@ -1789,8 +1948,9 @@ $('ac-close').onclick=()=>$('activity-modal').classList.remove('show');
 $('ac-save').onclick=async()=>{
   const a=curAct(); if(!a) return;
   a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
+  a.progress=Number($('ac-progress').value)||0;
   const note=$('ac-note').value.trim();
-  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[], externalDeps:a.externalDeps||[] };
+  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, progress:a.progress, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[], externalDeps:a.externalDeps||[], photos:a.photos||[] };
   const doUpdate = () => api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
   try {
     let r;

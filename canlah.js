@@ -249,6 +249,23 @@ const CanLah = {
     return analyse.data;
   },
 
+  // Upload an image to Vercel Blob and return its public URL (no AI ingest).
+  // Used for site progress photos on programme activities. Demo mode returns a
+  // local object URL so the UI works without a blob token.
+  async uploadImage(file, onProgress) {
+    if (!file) throw new Error('No file');
+    if (this.state.demoMode) return { url: URL.createObjectURL(file), demo: true };
+    const H = this._h || await import('/lib/frontend-helpers.js');
+    const { upload } = await import('https://esm.sh/@vercel/blob@0.27.3/client');
+    const blob = await upload(file.name, file, {
+      access: 'public',
+      handleUploadUrl: '/api/upload-token',
+      contentType: file.type || H.extToMime(file.name),
+      onUploadProgress: onProgress ? (p) => onProgress(p.percentage || 0) : undefined,
+    });
+    return { url: blob.url };
+  },
+
   async saveReport(report, reportType) {
     const payload = { report: Object.assign({ reportType }, report) };
     const res = await fetch('/api/save-report', {

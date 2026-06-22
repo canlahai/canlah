@@ -19,6 +19,8 @@ create table if not exists canlah_programmes (
 create index if not exists idx_canlah_programmes_owner on canlah_programmes (owner_id);
 -- Existing deployments: add the target end-date column if upgrading.
 alter table canlah_programmes add column if not exists end_date text;
+-- Saved baseline snapshot (Baseline tab S-curve + variance).
+alter table canlah_programmes add column if not exists baseline jsonb;
 
 create table if not exists canlah_programme_members (
   programme_id text not null references canlah_programmes (id) on delete cascade,
