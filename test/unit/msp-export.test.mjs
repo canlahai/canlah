@@ -75,6 +75,14 @@ const uids = (tasksBlock.match(/<UID>(\d+)<\/UID>/g) || []).map((m) => m.replace
 assert.equal(uids.length, 3, 'three task UIDs emitted');
 assert.equal(new Set(uids).size, uids.length, 'task UIDs unique (new task got a non-colliding UID)');
 const uback = parseMSProjectXML(ux);
-assert.deepEqual(uback.activities.find((a) => a.name === 'Caps').predecessors, ['a1'], 'dep survives UID round-trip');
+assert.equal(uback.activities.find((a) => a.name === 'Caps').predecessors[0].id, 'a1', 'dep survives UID round-trip');
+
+// Lead/lag survives export → import.
+const lagx = activitiesToMSProjectXML({ name: 'Lag', startDate: '2026-07-01', activities: [
+  { id: 'a1', name: 'First', section: '', durationDays: 5, predecessors: [] },
+  { id: 'a2', name: 'Second', section: '', durationDays: 5, predecessors: [{ id: 'a1', lagDays: 3 }] },
+], dates: {} });
+const lback = parseMSProjectXML(lagx);
+assert.equal(lback.activities.find((a) => a.name === 'Second').predecessors[0].lagDays, 3, 'predecessor lag (3d) survives MSP round-trip');
 
 console.log('msp-export.test.mjs — all assertions passed');

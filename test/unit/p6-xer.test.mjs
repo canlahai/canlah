@@ -28,8 +28,8 @@ assert.equal(r.activities[1].durationDays, 15, '120hr → 15 days');
 assert.equal(r.activities[2].durationDays, 0, '0hr → milestone');
 assert.equal(r.activities[2].milestone, true, 'milestone flag');
 assert.equal(r.activities[0].code, 'A1010', 'P6 task_code preserved');
-assert.deepEqual(r.activities[1].predecessors, ['a1'], 'Foundations depends on Excavation');
-assert.deepEqual(r.activities[2].predecessors, ['a2'], 'TOP depends on Foundations');
+assert.equal(r.activities[1].predecessors[0].id, 'a1', 'Foundations depends on Excavation');
+assert.equal(r.activities[2].predecessors[0].id, 'a2', 'TOP depends on Foundations');
 assert.equal(r.linkCount, 2, 'two links');
 
 // non-XER input → graceful
@@ -38,8 +38,8 @@ assert.ok(parseXER('hello world').warnings.length, 'non-XER flagged');
 // ── round-trip: toXER → parseXER preserves tasks + deps + codes ──────────────
 const acts = [
   { id: 'a1', name: 'Excavation', durationDays: 10, predecessors: [], code: 'A1010' },
-  { id: 'a2', name: 'Foundations', durationDays: 15, predecessors: ['a1'], code: 'A1020' },
-  { id: 'a3', name: 'TOP', durationDays: 0, predecessors: ['a2'], code: 'MS01' },
+  { id: 'a2', name: 'Foundations', durationDays: 15, predecessors: [{ id: 'a1', lagDays: 3 }], code: 'A1020' },
+  { id: 'a3', name: 'TOP', durationDays: 0, predecessors: [{ id: 'a2', lagDays: 0 }], code: 'MS01' },
 ];
 const out = toXER({ name: 'Round Trip', startDate: '2026-07-01', activities: acts, dates: {} });
 assert.ok(out.startsWith('ERMHDR'), 'XER header');
@@ -50,5 +50,6 @@ assert.deepEqual(back.activities.map((a) => a.name), ['Excavation', 'Foundations
 assert.equal(back.linkCount, 2, 'round-trip links');
 assert.equal(back.activities[2].durationDays, 0, 'round-trip milestone');
 assert.equal(back.activities[0].code, 'A1010', 'round-trip task code');
+assert.equal(back.activities[1].predecessors[0].lagDays, 3, 'round-trip predecessor lag (3d)');
 
 console.log('p6-xer.test.mjs — all assertions passed');

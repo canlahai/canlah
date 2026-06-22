@@ -1256,10 +1256,15 @@ async function openProgramme(id){
   applyEdView();
   await recompute();
 }
+// Predecessors carry optional lead/lag: token "a1", "a1+3" (3-day lag), "a1-2"
+// (2-day lead/overlap). Stored as {id, lagDays}. (Any link-type letters like SS
+// are tolerated on input + dropped — the CPM schedules finish-to-start + lag.)
+function parsePred(tok){ const s=String(tok||''); const id=(s.match(/[A-Za-z]+\d+/)||[''])[0]; if(!id) return null; const lag=(s.match(/[+-]\s*\d+/)||[''])[0].replace(/\s/g,''); return { id, lagDays: lag?Number(lag):0 }; }
+function fmtPred(p){ if(typeof p==='string') p=parsePred(p)||{id:p}; return `${p.id}${p.lagDays?(p.lagDays>0?'+':'')+p.lagDays:''}`; }
 function normalise(a){
   return { id:a.id, name:a.name||'', trade:a.trade||'', section:a.section||'',
     durationDays:Number(a.durationDays)||0,
-    predecessors:(a.predecessors||[]).map(p=>typeof p==='string'?p:p.id),
+    predecessors:(a.predecessors||[]).map(p=>typeof p==='string'?parsePred(p):{id:p.id,lagDays:Number(p.lagDays)||0}).filter(p=>p&&p.id),
     assignee:a.assignee||'', status:a.status||'todo',
     parties:Array.isArray(a.parties)?a.parties:[],
     checklist:Array.isArray(a.checklist)?a.checklist:[],
@@ -1361,7 +1366,7 @@ function renderTable(){
       <td><input value="" ${ro?'disabled':''} placeholder="trade"></td>
       <td><input value="" ${ro?'disabled':''} placeholder="section"></td>
       <td class="dur"><input type="number" min="0" value="${a.durationDays}" ${ro?'disabled':''}></td>
-      <td><input value="${a.predecessors.join(', ')}" ${ro?'disabled':''} placeholder="a1, a2"></td>
+      <td><input value="${a.predecessors.map(fmtPred).join(', ')}" ${ro?'disabled':''} placeholder="a1, a2+3"></td>
       <td><input value="" ${ro?'disabled':''} placeholder="name"></td>
       <td><select ${ro?'disabled':''}>${Object.keys(STATUS).map(s=>`<option value="${s}" ${a.status===s?'selected':''}>${STATUS[s].label}</option>`).join('')}</select></td>
       <td class="mono ${t.onCriticalPath?'crit':''}" style="font-size:11px">${t.start||'—'}</td>
@@ -1379,7 +1384,7 @@ function renderTable(){
       tr.querySelectorAll('td')[2].querySelector('input').oninput = e => { a.trade=e.target.value; };
       tr.querySelectorAll('td')[3].querySelector('input').oninput = e => { a.section=e.target.value; };
       tr.querySelector('.dur input').oninput = e => { a.durationDays=Number(e.target.value)||0; debounceRecompute(); };
-      tr.querySelectorAll('td')[5].querySelector('input').oninput = e => { a.predecessors=e.target.value.split(',').map(s=>s.trim()).filter(Boolean); debounceRecompute(); };
+      tr.querySelectorAll('td')[5].querySelector('input').oninput = e => { a.predecessors=e.target.value.split(',').map(s=>parsePred(s.trim())).filter(p=>p&&p.id); debounceRecompute(); };
       tr.querySelectorAll('td')[6].querySelector('input').oninput = e => { a.assignee=e.target.value; };
       tr.querySelector('select').onchange = e => { a.status=e.target.value; updateStats(); renderTable(); renderGantt(); };
       tr.querySelector('.row-x').onclick = () => { state.activities.splice(idx,1); refreshAssigneeFilter(); renderTable(); recompute(); };
@@ -1650,7 +1655,7 @@ $('ed-csv').onclick = () => {
   const rows=state.activities.map(a=>{ const t=byId.get(a.id)||{};
     const cs=checklistSummary(a); const ck=cs?`${cs.done}/${cs.total}`:'';
     const parties=(a.parties||[]).map(p=>`${p.role||''}:${p.who||''}`).filter(x=>x!==':').join('; ');
-    return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':'',a.responsibleParty||'',ck,activityReady(a)?'YES':'NO',a.blockedReason||'',parties];});
+    return [a.id,a.name,a.trade,a.section,a.durationDays,a.predecessors.map(fmtPred).join(' '),a.assignee,a.status,t.start||'',t.end||'',t.totalFloat??'',t.onCriticalPath?'YES':'',a.responsibleParty||'',ck,activityReady(a)?'YES':'NO',a.blockedReason||'',parties];});
   const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=(state.current.name||'programme').replace(/[^\w]+/g,'_')+'.csv'; a.click(); URL.revokeObjectURL(url);

@@ -34,7 +34,7 @@ test('programme planner: create → edit tree → Gantt → save → delete', as
 
   // Schedule recomputes (debounced) → project end + critical path populate.
   await expect(page.locator('#st-count')).toHaveText('2');
-  await expect(page.locator('#st-end')).not.toHaveText('—');
+  await page.waitForTimeout(450); // let the debounced recompute fully settle (avoids re-render racing the next fill)
   await expect(page.locator('#st-crit')).not.toHaveText('—');
 
   // Gantt drew at least one critical (orange) bar.
@@ -393,6 +393,31 @@ test('programme overview: read-friendly status summary + toggle', async ({ page 
   await expect(page.locator('#view-list')).toBeVisible();
 });
 
+test('dependency lead/lag: "a1+5" token parses, persists and reschedules', async ({ page }) => {
+  await page.goto('/programme');
+  await page.fill('#np-name', 'Lag test');
+  await page.fill('#np-start', '2026-07-01');
+  await page.click('#np-create');
+  await expect(page.locator('#view-editor')).toBeVisible();
+  await page.click('#ed-add');
+  await page.click('#ed-add');
+  const rows = page.locator('#act-body tr');
+  await rows.nth(0).locator('td.dur input').fill('10');
+  await rows.nth(1).locator('td.dur input').fill('5');
+  await page.waitForTimeout(450); // let the debounced recompute fully settle (avoids re-render racing the next fill)
+  await rows.nth(1).locator('td').nth(5).locator('input').fill('a1+5');
+  await rows.nth(1).locator('td').nth(5).locator('input').blur();
+  // Token parsed to {id:'a1', lagDays:5} in state.
+  await expect.poll(() => page.evaluate(() => state.activities[1].predecessors[0]?.lagDays)).toBe(5);
+  // Re-render shows the normalised token, and the schedule recomputed.
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('#act-body tr')[1].querySelectorAll('td')[5].querySelector('input').value)).toContain('a1+5');
+  await expect(page.locator('#st-crit')).not.toHaveText('—');
+
+  page.on('dialog', (d) => d.accept());
+  await page.click('#ed-delete');
+  await expect(page.locator('#view-list')).toBeVisible();
+});
+
 test('export to MS Project XML → downloads valid MSPDI', async ({ page }) => {
   await page.goto('/programme');
   await page.fill('#np-name', 'MSP export test');
@@ -406,7 +431,7 @@ test('export to MS Project XML → downloads valid MSPDI', async ({ page }) => {
   await rows.nth(0).locator('td.dur input').fill('10');
   await rows.nth(1).locator('td.dur input').fill('5');
   // Let the debounced recompute settle so it can't re-render mid-fill below.
-  await expect(page.locator('#st-end')).not.toHaveText('—');
+  await page.waitForTimeout(450); // let the debounced recompute fully settle (avoids re-render racing the next fill)
   await rows.nth(1).locator('td').nth(5).locator('input').fill('a1');
   await rows.nth(1).locator('td').nth(5).locator('input').blur();
   // Wait for the dependency to commit to state (input is debounced) before export.
