@@ -62,6 +62,21 @@ assert.throws(
   /unknown predecessor/i, 'unknown predecessor rejected',
 );
 
+// Lead/lag on a finish-to-start link shifts the successor.
+const lag = computeSchedule(
+  [{ id: 'A', durationDays: 3 }, { id: 'B', durationDays: 2, predecessors: [{ id: 'A', lagDays: 5 }] }],
+  { startDate: '2026-01-01', calendar: open },
+);
+const lbi = Object.fromEntries(lag.tasks.map((t) => [t.id, t]));
+assert.equal(lbi.A.end, '2026-01-03', 'A (3d) ends day 3');
+assert.equal(lbi.B.start, '2026-01-09', 'B starts 5 working days after A finishes (3 + 5 + 1)');
+const lead = computeSchedule(
+  [{ id: 'A', durationDays: 5 }, { id: 'B', durationDays: 3, predecessors: [{ id: 'A', lagDays: -2 }] }],
+  { startDate: '2026-01-01', calendar: open },
+);
+const ldi = Object.fromEntries(lead.tasks.map((t) => [t.id, t]));
+assert.equal(ldi.B.start, '2026-01-04', 'negative lag (lead) overlaps the successor by 2 days');
+
 // Non-FS link type is accepted but flagged.
 const ss = computeSchedule(
   [{ id: 'A', durationDays: 2 }, { id: 'B', durationDays: 2, predecessors: [{ id: 'A', type: 'SS' }] }],

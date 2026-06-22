@@ -11,7 +11,7 @@ const xml = `<?xml version="1.0"?>
     <Task><UID>1</UID><Name>Substructure</Name><Summary>1</Summary></Task>
     <Task><UID>2</UID><Name>Bored piling</Name><Duration>PT200H0M0S</Duration><Start>2026-07-01T08:00:00</Start><Finish>2026-07-25T17:00:00</Finish></Task>
     <Task><UID>3</UID><Name>Pile caps</Name><Duration>PT80H0M0S</Duration><Milestone>0</Milestone>
-      <PredecessorLink><PredecessorUID>2</PredecessorUID><Type>1</Type></PredecessorLink></Task>
+      <PredecessorLink><PredecessorUID>2</PredecessorUID><Type>1</Type><LinkLag>9600</LinkLag></PredecessorLink></Task>
     <Task><UID>4</UID><Name>TOP</Name><Duration>PT0H0M0S</Duration><Milestone>1</Milestone>
       <PredecessorLink><PredecessorUID>3</PredecessorUID><Type>1</Type></PredecessorLink></Task>
   </Tasks>
@@ -27,7 +27,9 @@ assert.equal(r.activities[2].durationDays, 0, 'PT0H → 0 (milestone)');
 assert.equal(r.activities[2].milestone, true, 'milestone flag parsed');
 // predecessor UID 2 (Bored piling) → first activity id a1; Pile caps depends on it
 const caps = r.activities.find((a) => a.name === 'Pile caps');
-assert.deepEqual(caps.predecessors, ['a1'], 'predecessor remapped to our id');
+assert.equal(caps.predecessors.length, 1, 'one predecessor');
+assert.equal(caps.predecessors[0].id, 'a1', 'predecessor remapped to our id');
+assert.equal(caps.predecessors[0].lagDays, 2, 'LinkLag 9600 tenths-min → 2 working days');
 assert.equal(r.linkCount, 2, 'two dependency links');
 
 // non-MSP input → graceful
@@ -43,8 +45,8 @@ const c = parseScheduleCSV(csv);
 assert.equal(c.taskCount, 3, 'three CSV rows');
 assert.deepEqual(c.activities.map((a) => a.name), ['Excavation', 'Foundations', 'Columns, RC'], 'quoted comma handled');
 assert.equal(c.activities[1].durationDays, 15, 'duration parsed');
-assert.deepEqual(c.activities[1].predecessors, ['a1'], 'predecessor id 1 → a1');
-assert.deepEqual(c.activities[2].predecessors, ['a2'], 'predecessor id 2 → a2');
+assert.equal(c.activities[1].predecessors[0].id, 'a1', 'predecessor id 1 → a1');
+assert.equal(c.activities[2].predecessors[0].id, 'a2', 'predecessor id 2 → a2');
 
 // CSV without duration column → default 1 day + warning
 const c2 = parseScheduleCSV('Activity\nMobilise\nDemolish');
