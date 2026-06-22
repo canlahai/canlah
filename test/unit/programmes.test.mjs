@@ -139,8 +139,10 @@ assert.equal((await updateActivity(created.id, OWNER, 'a1', { checklist: 'x' }))
 // field-update fields: progress (0–100) + photos (array)
 assert.equal((await updateActivity(created.id, OWNER, 'a1', { progress: 150 })).reason, 'invalid', 'progress > 100 rejected');
 assert.equal((await updateActivity(created.id, OWNER, 'a1', { photos: 'x' })).reason, 'invalid', 'photos must be array');
-assert.equal((await updateActivity(created.id, OWNER, 'a1', { progress: 60, photos: [{ url: 'https://x/p.jpg', by: 'Sub' }] })).ok, true, 'progress + photo update ok');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { cost: -5 })).reason, 'invalid', 'negative cost rejected');
+assert.equal((await updateActivity(created.id, OWNER, 'a1', { progress: 60, cost: 25000, photos: [{ url: 'https://x/p.jpg', by: 'Sub' }] })).ok, true, 'progress + cost + photo update ok');
 assert.equal((await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1').progress, 60, 'progress persisted');
+assert.equal((await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1').cost, 25000, 'cost persisted');
 assert.equal((await getProgramme(created.id, OWNER)).activities.find((a) => a.id === 'a1').photos.length, 1, 'photo persisted');
 
 // baseline snapshot persists on the programme

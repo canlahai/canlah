@@ -494,6 +494,7 @@
         <option value="done">Done</option><option value="blocked">Blocked</option>
       </select></div>
       <div class="field"><label>Progress</label><div style="display:flex;align-items:center;gap:8px"><input id="ac-progress" type="range" min="0" max="100" step="5" style="width:120px"><span id="ac-progress-val" class="mono" style="font-size:12px;min-width:38px">0%</span></div></div>
+      <div class="field"><label>Value / cost ($)</label><input id="ac-cost" type="number" min="0" step="1000" placeholder="0" style="width:120px"></div>
       <div class="field"><label>Responsible party</label><input id="ac-resp" placeholder="e.g. Procurement" style="min-width:150px"></div>
       <div class="field" style="flex:1"><label>Blocked reason (if any)</label><input id="ac-blocked" placeholder="e.g. concrete delivery delayed"></div>
     </div>
@@ -1265,7 +1266,7 @@ function normalise(a){
     deliveries:Array.isArray(a.deliveries)?a.deliveries:[],
     updates:Array.isArray(a.updates)?a.updates:[],
     externalDeps:Array.isArray(a.externalDeps)?a.externalDeps:[],
-    photos:Array.isArray(a.photos)?a.photos:[], progress:Number(a.progress)||0,
+    photos:Array.isArray(a.photos)?a.photos:[], progress:Number(a.progress)||0, cost:Number(a.cost)||0,
     blockedReason:a.blockedReason||'', responsibleParty:a.responsibleParty||'',
     ...(a.mspUid?{mspUid:a.mspUid}:{}), ...(a.code?{code:a.code}:{}) };
 }
@@ -1443,6 +1444,11 @@ function renderOverview(){
   const inProgList=acts.filter(a=>a.status==='in_progress');
   const upNext=acts.filter(a=>a.status==='todo'&&dateOf(a)&&dateOf(a)<=horizon).sort((x,y)=>(dateOf(x)||'').localeCompare(dateOf(y)||'')).slice(0,8);
   const blockers=acts.filter(a=>a.status==='blocked');
+  // Earned-value (EVM-lite): budget = Σ cost; earned = Σ cost × completion fraction.
+  const cfrac=a=>a.status==='done'?1:(Number(a.progress)||0)/100;
+  const budget=acts.reduce((n,a)=>n+(Number(a.cost)||0),0);
+  const earned=acts.reduce((n,a)=>n+(Number(a.cost)||0)*cfrac(a),0);
+  const money=v=>'$'+Math.round(v).toLocaleString('en-SG');
   const dates=a=>{const t=byId.get(a.id);return t?`<span class="mono" style="font-size:11px;color:var(--g4)">${t.start} → ${t.end}</span>`:'';};
   const row=(a,right)=>`<div class="la-row"><span style="flex:1">${esc(a.name||a.id)}${a.assignee?` <span class="muted">· ${esc(a.assignee)}</span>`:''}</span><span style="white-space:nowrap">${right||''}</span></div>`;
   el.innerHTML = `
@@ -1458,6 +1464,12 @@ function renderOverview(){
       <div class="ov-card"><div class="k">Computed end</div><div class="v sm mono">${cend}</div></div>
       <div class="ov-card"><div class="k">Target end</div><div class="v sm mono">${target||'—'}</div>${schedNote?`<div style="font-size:11px;margin-top:4px">${schedNote}</div>`:''}</div>
     </div>
+    ${budget>0?`<div class="ov-grid">
+      <div class="ov-card"><div class="k">Budget value</div><div class="v sm">${money(budget)}</div></div>
+      <div class="ov-card"><div class="k">Earned value</div><div class="v sm">${money(earned)}</div><span class="pbar" style="margin-top:6px;width:100%"><span style="width:${budget?Math.round(earned/budget*100):0}%"></span></span></div>
+      <div class="ov-card"><div class="k">% value earned</div><div class="v">${budget?Math.round(earned/budget*100):0}%</div></div>
+      <div class="ov-card"><div class="k">Value remaining</div><div class="v sm">${money(budget-earned)}</div></div>
+    </div>`:''}
     <div class="ov-sec"><h3>By phase</h3>${Object.keys(phases).length?Object.keys(phases).map(k=>{const p=phases[k];const pc=p.t?Math.round(p.d/p.t*100):0;return `<div class="ov-phase"><span class="nm">${esc(k)}</span><span class="pbar" style="flex:1;max-width:260px"><span style="width:${pc}%"></span></span><span class="mono" style="font-size:11px;color:var(--g4)">${pc}% · ${p.d}/${p.t}</span></div>`;}).join(''):'<div class="ov-empty">No activities yet.</div>'}</div>
     <div class="ov-sec"><h3>🔧 In progress now (${inProgList.length})</h3>${inProgList.length?inProgList.map(a=>row(a,dates(a))).join(''):'<div class="ov-empty">Nothing marked in progress.</div>'}</div>
     <div class="ov-sec"><h3>📅 Up next (starting ≤ 2 weeks)</h3>${upNext.length?upNext.map(a=>row(a,dates(a))).join(''):'<div class="ov-empty">Nothing starting in the next two weeks.</div>'}</div>
@@ -1760,7 +1772,8 @@ function openActivity(id){
   $('ac-resp').value = a.responsibleParty || '';
   $('ac-blocked').value = a.blockedReason || '';
   $('ac-progress').value = Number(a.progress) || 0; $('ac-progress-val').textContent = (Number(a.progress)||0)+'%';
-  ['ac-status','ac-resp','ac-blocked','ac-note','ac-progress'].forEach(i=>$(i).disabled=ro);
+  $('ac-cost').value = a.cost ? Number(a.cost) : '';
+  ['ac-status','ac-resp','ac-blocked','ac-note','ac-progress','ac-cost'].forEach(i=>$(i).disabled=ro);
   $('ac-party-add').classList.toggle('hidden', ro);
   $('ac-check-add').classList.toggle('hidden', ro);
   $('ac-template-row').classList.toggle('hidden', ro);
@@ -1948,9 +1961,9 @@ $('ac-close').onclick=()=>$('activity-modal').classList.remove('show');
 $('ac-save').onclick=async()=>{
   const a=curAct(); if(!a) return;
   a.status=$('ac-status').value; a.responsibleParty=$('ac-resp').value.trim(); a.blockedReason=$('ac-blocked').value.trim();
-  a.progress=Number($('ac-progress').value)||0;
+  a.progress=Number($('ac-progress').value)||0; a.cost=Number($('ac-cost').value)||0;
   const note=$('ac-note').value.trim();
-  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, progress:a.progress, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[], externalDeps:a.externalDeps||[], photos:a.photos||[] };
+  const patch={ status:a.status, responsibleParty:a.responsibleParty, blockedReason:a.blockedReason, progress:a.progress, cost:a.cost, parties:a.parties||[], checklist:a.checklist||[], deliveries:a.deliveries||[], externalDeps:a.externalDeps||[], photos:a.photos||[] };
   const doUpdate = () => api('PATCH', { id:state.current.id, activityId:a.id, patch, note });
   try {
     let r;

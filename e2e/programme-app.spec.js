@@ -517,12 +517,18 @@ test('field update: progress + site photo, then baseline S-curve + report', asyn
   await expect(page.locator('#activity-modal')).toBeVisible();
   await page.locator('#ac-progress').fill('60');
   await expect(page.locator('#ac-progress-val')).toHaveText('60%');
+  await page.fill('#ac-cost', '50000'); // value/cost for earned-value
   await page.setInputFiles('#ac-photo-file', { name: 'site.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('fakejpegbytes') });
   await page.click('#ac-photo-up');
   await expect(page.locator('#ac-photos img')).toHaveCount(1);
   await page.click('#ac-save');
   await expect(page.locator('#toast')).toContainText('updated');
   await page.click('#ac-close');
+
+  // Overview shows earned-value (budget) once an activity has a cost.
+  await page.click('#ed-seg-overview');
+  await expect(page.locator('#ed-overview')).toContainText('Budget value');
+  await expect(page.locator('#ed-overview')).toContainText('Earned value');
 
   // Baseline tab → set baseline → S-curve renders.
   await page.click('#ed-seg-baseline');
