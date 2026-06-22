@@ -65,6 +65,10 @@
         <select id="rtype"></select>
       </div>
       <div>
+        <label>Report language</label>
+        <select id="olang"></select>
+      </div>
+      <div>
         <label>Match my company template <span style="text-transform:none;opacity:.7">(optional)</span></label>
         <input id="tmpl-file" type="file" accept=".pdf,.jpg,.jpeg,.png">
       </div>
@@ -73,8 +77,20 @@
     <div id="tmpl-state" class="muted"></div>
 
     <label style="margin-top:14px">Your notes</label>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <button class="btn" id="mic" type="button">🎤 Speak</button>
+      <select id="diallang" style="width:auto;flex:0 0 auto;padding:9px"></select>
+      <span class="muted" id="mic-state"></span>
+    </div>
     <textarea id="notes" placeholder="e.g. worker fall from scaffold level 3, helmet on, small cut hand, stop work, supervisor come, first aid done, no need ambulance"></textarea>
     <div class="chips" id="examples"></div>
+
+    <label style="margin-top:14px">Site photo <span style="text-transform:none;opacity:.7">(optional — included in the report)</span></label>
+    <div style="display:flex;gap:10px;align-items:center">
+      <input id="photo-file" type="file" accept="image/*" capture="environment" style="flex:1">
+      <button class="btn" id="photo-add" type="button">Attach</button>
+    </div>
+    <div id="photo-prev" style="margin-top:8px"></div>
 
     <div class="status" id="status"></div>
     <div style="display:flex;gap:10px;margin-top:12px">
@@ -93,14 +109,52 @@
 
 <script src="/canlah.js"></script>
 <script type="module">
-import { safetyTypeList } from '/lib/safety.js';
+import { safetyTypeList, OUTPUT_LANGS } from '/lib/safety.js';
 const $ = (id) => document.getElementById(id);
 const TMPL_KEY = 'canlah-safety-template';
 let template = null;
 try { template = JSON.parse(localStorage.getItem(TMPL_KEY) || 'null'); } catch {}
 
-// Report type options
+// Report type + output-language options
 $('rtype').innerHTML = safetyTypeList().map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+$('olang').innerHTML = OUTPUT_LANGS.map(l => `<option value="${l}">${l}</option>`).join('');
+
+// Dictation languages (Web Speech API).
+const DIAL = [['en-SG','English'],['zh-CN','中文'],['ms-MY','Bahasa Melayu'],['ta-IN','தமிழ்']];
+$('diallang').innerHTML = DIAL.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+
+// ── voice input ──
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+if (!SR) { $('mic').disabled = true; $('mic-state').textContent = 'Voice not supported on this browser — type instead.'; }
+$('mic').onclick = () => {
+  if (!SR) return;
+  if (listening) { rec && rec.stop(); return; }
+  rec = new SR(); rec.lang = $('diallang').value; rec.interimResults = false; rec.continuous = true;
+  rec.onstart = () => { listening = true; $('mic').textContent = '⏺ Stop'; $('mic-state').textContent = 'Listening… speak now'; };
+  rec.onerror = (e) => { $('mic-state').textContent = 'Mic error: ' + (e.error || 'unknown'); };
+  rec.onend = () => { listening = false; $('mic').textContent = '🎤 Speak'; $('mic-state').textContent = ''; };
+  rec.onresult = (e) => {
+    let txt = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    if (txt.trim()) $('notes').value = ($('notes').value ? $('notes').value.trim() + ' ' : '') + txt.trim();
+  };
+  try { rec.start(); } catch { /* already started */ }
+};
+
+// ── site photo ──
+let photoUrl = null;
+$('photo-add').onclick = async () => {
+  const f = $('photo-file').files[0];
+  if (!f) return CanLah.showToast('Choose a photo first', 'err');
+  try {
+    const { url } = await CanLah.uploadImage(f);
+    photoUrl = url;
+    $('photo-prev').innerHTML = `<img src="${url}" alt="site photo" style="max-width:160px;border-radius:8px;border:1px solid var(--g7)"> <a href="#" id="photo-clear" style="color:var(--g4);font-size:12px">remove</a>`;
+    $('photo-clear').onclick = (e) => { e.preventDefault(); photoUrl = null; $('photo-prev').innerHTML = ''; $('photo-file').value = ''; };
+    CanLah.showToast('Photo attached', 'info');
+  } catch (e) { CanLah.showToast(e.message, 'err'); }
+};
 
 // Example chips
 const EXAMPLES = [
@@ -144,7 +198,7 @@ async function generate(){
   $('status').textContent = 'Writing your professional report…';
   $('go').disabled = true; $('regen').disabled = true;
   try {
-    const { data } = await CanLah.apiProcess({ action:'generate', kind:'safety', reportType: $('rtype').value, input, template });
+    const { data } = await CanLah.apiProcess({ action:'generate', kind:'safety', reportType: $('rtype').value, input, template, lang: $('olang').value });
     last = data;
     renderReport(data);
     $('status').textContent = '';
@@ -164,6 +218,7 @@ function renderReport(d){
   $('report').innerHTML =
     `<div class="rp-title">${esc(d.title||'Safety report')}</div>`+
     `<div class="rp-meta">${meta?esc(meta)+' · ':''}Generated ${new Date().toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'})} · CanLah.ai</div>`+
+    (photoUrl?`<div class="rp-sec"><div class="rp-h">Site photo</div><img src="${esc(photoUrl)}" alt="site photo" style="max-width:100%;border-radius:8px;border:1px solid var(--g8)"></div>`:'')+
     (d.sections||[]).map(s=>`<div class="rp-sec"><div class="rp-h">${esc(s.heading)}</div><div class="rp-b">${esc(s.body)}</div></div>`).join('')+
     `<div class="muted" style="margin-top:16px;font-size:11px">⚠ AI-assisted draft from a worker's notes — a competent person must verify before submission. Items marked [to be confirmed] need completing.</div>`;
 }

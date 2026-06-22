@@ -636,11 +636,11 @@ async function handleApi(req, res) {
     }
 
     if (action === 'generate') {
-      const { kind, reportType, input, template } = body;
+      const { kind, reportType, input, template, lang } = body;
       if (kind !== 'safety') return send(res, 400, JSON.stringify({ error: 'Unknown generation kind' }), { 'Content-Type': 'application/json' });
       if (!input || !String(input).trim()) return send(res, 400, JSON.stringify({ error: 'Enter some notes to generate from' }), { 'Content-Type': 'application/json' });
       if (DEMO_MODE) return send(res, 200, JSON.stringify({ data: demoSafetyReport({ reportType, input, template }) }), { 'Content-Type': 'application/json' });
-      const prompt = buildSafetyPrompt({ reportType, input, template });
+      const prompt = buildSafetyPrompt({ reportType, input, template, lang });
       const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
