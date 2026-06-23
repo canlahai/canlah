@@ -177,22 +177,6 @@ export const PROMPTS = {
   'safety-template': SAFETY_TEMPLATE_PROMPT,
 };
 
-// Shared free-tier read-quota gate (per-user auth only). Returns a 402-ish object
-// to send, or null to proceed.
-async function checkReadQuota(req) {
-  if (!usersAuthEnabled()) return null;
-  const caller = authCheck(req);
-  if (!(caller.ok && caller.id)) return null;
-  const limit = Number(process.env.READS_FREE_LIMIT) || 10;
-  let quota;
-  try { quota = await consumeRead(caller.id, { limit }); }
-  catch (e) { captureException(e); log.error('[api/process] consumeRead failed', e?.message || e); quota = { ok: true }; }
-  if (!quota.ok && quota.reason === 'limit') {
-    return { status: 402, body: { error: `Free plan limit reached (${quota.limit} reads this month). Upgrade to Pro for unlimited reads.`, code: 'read_limit', limit: quota.limit } };
-  }
-  return null;
-}
-
 const createSafeBlobKey = filename => {
   const safeName = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
   return `uploads/${Date.now()}-${safeName}`;
@@ -495,8 +479,8 @@ export default async function handler(req, res) {
     const { kind, reportType, input, template, lang } = body;
     if (kind !== 'safety') return res.status(400).json({ error: 'Unknown generation kind' });
     if (!input || !String(input).trim()) return res.status(400).json({ error: 'Enter some notes to generate from' });
-    const gate = await checkReadQuota(req);
-    if (gate) return res.status(gate.status).json(gate.body);
+    // Not read-quota-gated on purpose: this is the frontline-worker tool — a
+    // safety report must never hit a paywall mid-incident.
     try {
       const prompt = buildSafetyPrompt({ reportType, input, template, lang });
       const msgRes = await fetch('https://api.anthropic.com/v1/messages', {
