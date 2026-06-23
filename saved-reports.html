@@ -107,7 +107,7 @@ function loadReport(id) {
   const r = findReport(id);
   if (!r) { CanLah.showToast('Report not found', 'err'); return; }
   const t = r.reportType || '';
-  const mapping = { bq: '/bq-reader.html', reports: '/site-report.html', hr: '/hr-compliance.html', planning: '/programme-planner.html' };
+  const mapping = { bq: '/bq-reader.html', reports: '/site-report.html', hr: '/hr-compliance.html', planning: '/programme-planner.html', safety: '/safety-report.html' };
   const target = mapping[t] || '/';
   try { sessionStorage.setItem('canlah_load_report', JSON.stringify(r)); } catch {}
   location.href = target;

@@ -100,10 +100,16 @@
   </div>
 
   <div class="card" id="report"></div>
-  <div class="no-print hidden" id="report-actions" style="display:flex;gap:10px;margin-top:-6px">
+  <div class="no-print hidden" id="report-actions" style="display:flex;gap:10px;margin-top:-6px;flex-wrap:wrap">
+    <button class="btn" id="save">💾 Save</button>
     <button class="btn" id="copy">Copy text</button>
     <button class="btn pri" id="pdf">Download PDF</button>
     <button class="btn" id="edit-toggle">Edit</button>
+  </div>
+
+  <div class="card no-print" id="saved-card" style="display:none">
+    <label>My saved safety reports</label>
+    <div id="saved-list"></div>
   </div>
 </div>
 
@@ -229,6 +235,28 @@ $('copy').onclick = async () => {
   catch { CanLah.showToast('Copy failed', 'err'); }
 };
 $('pdf').onclick = () => window.print();
+$('save').onclick = async () => {
+  if (!last) return;
+  try {
+    await CanLah.saveReport({ reportTitle: last.title, title: last.title, meta: last.meta, sections: last.sections, photoUrl: photoUrl || null }, 'safety');
+    CanLah.showToast('Report saved', 'info');
+    loadSaved();
+  } catch (e) { CanLah.showToast(e.message, 'err'); }
+};
+async function loadSaved(){
+  let reports = [];
+  try { reports = await CanLah.listSavedReports('safety'); } catch { $('saved-card').style.display='none'; return; }
+  if (!reports.length) { $('saved-card').style.display='none'; return; }
+  $('saved-card').style.display='block';
+  $('saved-list').innerHTML = reports.map(r => `<div class="rp-saved" data-id="${r.id}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--g8)">
+    <span style="flex:1;cursor:pointer" data-open><strong>${esc(r.reportTitle||r.title||'Safety report')}</strong> <span class="muted" style="font-size:12px">· ${new Date(r.savedAt).toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'})}</span></span>
+    <button class="btn" data-del style="padding:5px 9px;font-size:12px">Delete</button></div>`).join('');
+  $('saved-list').querySelectorAll('.rp-saved').forEach(row => {
+    const r = reports.find(x => x.id === row.dataset.id);
+    row.querySelector('[data-open]').onclick = () => { last = r; photoUrl = r.photoUrl || null; renderReport(r); $('report-actions').classList.remove('hidden'); $('report').scrollIntoView({behavior:'smooth'}); };
+    row.querySelector('[data-del]').onclick = async () => { try { await CanLah.deleteReport(r.id); CanLah.showToast('Deleted','info'); loadSaved(); } catch(e){ CanLah.showToast(e.message,'err'); } };
+  });
+}
 $('edit-toggle').onclick = () => {
   const r = $('report'); const on = r.getAttribute('contenteditable') === 'true';
   r.setAttribute('contenteditable', on ? 'false' : 'true');
@@ -236,7 +264,15 @@ $('edit-toggle').onclick = () => {
   $('edit-toggle').textContent = on ? 'Edit' : 'Done editing';
 };
 
-CanLah.init().catch(()=>{});
+function boot(){
+  // Opened from the Saved Reports page?
+  try {
+    const pre = JSON.parse(sessionStorage.getItem('canlah_load_report') || 'null');
+    if (pre && pre.reportType === 'safety') { sessionStorage.removeItem('canlah_load_report'); last = pre; photoUrl = pre.photoUrl || null; renderReport(pre); $('report-actions').classList.remove('hidden'); }
+  } catch {}
+  loadSaved();
+}
+CanLah.init().then(boot).catch(boot);
 </script>
 </body>
 </html>
