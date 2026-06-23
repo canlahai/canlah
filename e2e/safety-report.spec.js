@@ -37,6 +37,31 @@ test('safety report: rough notes → generated professional report', async ({ pa
   await expect(page.locator('#report-actions')).toBeVisible();
 });
 
+test('safety report: save → persists across reload → reopen', async ({ page }) => {
+  await page.goto('/safety-report');
+  await page.selectOption('#rtype', 'observation');
+  await page.fill('#notes', 'crane wire worn, reported to supervisor, stop use until checked');
+  await page.click('#go');
+  await expect(page.locator('#report')).toBeVisible();
+
+  const rows = page.locator('#saved-list .rp-saved');
+  await page.click('#save');
+  await expect(page.locator('#saved-card')).toBeVisible();
+  expect(await rows.count()).toBeGreaterThan(0);
+
+  // Persists across a reload (stored server-side, not just in memory).
+  await page.reload();
+  await expect(page.locator('#saved-card')).toBeVisible();
+  expect(await rows.count()).toBeGreaterThan(0);
+
+  // Reopen a saved report renders it.
+  await rows.first().locator('[data-open]').click();
+  await expect(page.locator('#report')).toBeVisible();
+
+  // Cleanup (best-effort).
+  await rows.first().locator('[data-del]').click();
+});
+
 test('safety report: empty notes is rejected', async ({ page }) => {
   await page.goto('/safety-report');
   await page.click('#go');
